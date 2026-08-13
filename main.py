@@ -6,8 +6,18 @@ GitHub: https://github.com/MINORURAKUEN/Rikka-Bot
 """
 
 import os
+import asyncio
 import logging
 from pathlib import Path
+
+# Parche de compatibilidad: Python 3.12+ (incluido Termux) ya no crea
+# automáticamente un event loop en el hilo principal. Pyrogram lo necesita
+# antes de importarse, así que lo creamos aquí manualmente.
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 from pyrogram import Client
 
 # Configuración de logging
