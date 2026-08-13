@@ -158,6 +158,25 @@ async def _get(url: str, **kwargs) -> requests.Response:
     return await asyncio.to_thread(requests.get, url, **kwargs)
 
 
+async def _es_video(video_path: Path) -> bool:
+    """Detecta si el archivo tiene una pista de video real, sin fiarse solo
+    de la extensión (un .mp4 mal nombrado, o un archivo sin extensión que
+    igual es video, no debe caer en send_document sin duración/miniatura)."""
+    if video_path.suffix.lower() in {'.mp4', '.mkv', '.avi', '.mov', '.webm'}:
+        return True
+    try:
+        import subprocess as _sp
+        r = await asyncio.to_thread(
+            _sp.run,
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(video_path)],
+            capture_output=True, text=True, timeout=10
+        )
+        return r.returncode == 0 and 'video' in r.stdout
+    except Exception:
+        return False
+
+
 async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
     """Duración (seg), thumbnail (jpg) y resolución del video, para que
     Telegram muestre miniatura + duración reales en vez de 0:00.
@@ -534,20 +553,30 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 
         logger.info(f"[tioanime-notify] Buscando servidores para \"{titulo}\" ep {ep_num}...")
         srvs = (await scrape_servidores_latanime(ep_url)) if fuente == 'latanime' else (await scrape_servidores(ep_url))
+        logger.info(f"[tioanime-notify] {len(srvs)} servidor(es) detectados en {ep_url}: "
+                    f"{[s['nombre'] for s in srvs]}")
         if not srvs:
-            raise RuntimeError('No se encontraron servidores')
+            raise RuntimeError(
+                f"No se encontraron servidores en la página del episodio "
+                f"(posible bloqueo/cambio de estructura de {fuente})."
+            )
 
         await asyncio.sleep(15)
         orden = ordenar_servidores(srvs, fuente)[:5]
+        soportados = [s for s in orden if s['nombre'] in ('mega', 'mediafire')]
         video_path = None
+        errores = []
 
-        for srv in orden:
+        if not soportados:
+            raise RuntimeError(
+                f"Ningún servidor soportado (mega/mediafire) para este episodio. "
+                f"Disponibles: {[s['nombre'] for s in orden]}"
+            )
+
+        for srv in soportados:
             nombre_servidor = (srv.get('nombre') or 'servidor').upper()
-            # Igual que el JS: solo mega y mediafire tienen soporte de descarga.
-            if srv['nombre'] not in ('mega', 'mediafire'):
-                continue
             try:
-                logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ]...")
+                logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ] → {srv['url'][:80]}")
                 if srv['nombre'] == 'mega':
                     ok, fpath, err = await MEGADownloader.download(srv['url'], tmp_dir)
                 else:
@@ -558,8 +587,10 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                     break
                 else:
                     logger.info(f"[tioanime-notify] [ {nombre_servidor} ] falló: {err}")
+                    errores.append(f"{nombre_servidor}: {err}")
             except Exception as e:
                 logger.info(f"[tioanime-notify] [ {nombre_servidor} ] falló: {e}")
+                errores.append(f"{nombre_servidor}: {e}")
 
             for f in tmp_dir.glob('*'):
                 if f.name != 'cover.jpg':
@@ -569,17 +600,23 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                         pass
 
         if not video_path:
-            raise RuntimeError('Todos los servidores fallaron')
+            detalle = ' | '.join(errores) if errores else 'sin detalle'
+            raise RuntimeError(f"Todos los servidores fallaron → {detalle}")
 
         size_mb = video_path.stat().st_size / 1024 / 1024
         logger.info(f"[tioanime-notify] Descarga completa: {file_name} ({size_mb:.1f} MB) — subiendo a Telegram...")
 
         final_caption = f"✅ <b>{titulo}</b>\n📌 Episodio {zero_pad(ep_num)}\n📦 {size_mb:.1f} MB · {etiqueta}"
-        video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
-        if video_path.suffix.lower() in video_exts:
+        if await _es_video(video_path):
             # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
             # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
             duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
+            if not duration or not thumb:
+                logger.warning(
+                    f"[tioanime-notify] ffprobe/ffmpeg no devolvió metadata completa "
+                    f"para {video_path.name} (duration={duration}, thumb={thumb}) "
+                    f"— revisa que ffmpeg/ffprobe estén instalados y en PATH."
+                )
             await client.send_video(
                 chat_id, str(video_path), caption=final_caption,
                 parse_mode=enums.ParseMode.HTML, supports_streaming=True,
