@@ -86,7 +86,8 @@ from handlers import (
     url_handler,
     button_callback_handler,
     drive_handler,
-    enhance_handler
+    enhance_handler,
+    tioanime_notify_handler
 )
 
 # Registrar handlers
@@ -109,6 +110,7 @@ url_handler.register(app, DOWNLOAD_DIR)
 button_callback_handler.register(app, user_states, WORK_DIR)
 drive_handler.register(app, user_states, DOWNLOAD_DIR)
 enhance_handler.register(app, user_states, WORK_DIR)
+tioanime_notify_handler.register(app, WORK_DIR)
 
 if __name__ == '__main__':
     logger.info("=" * 60)
