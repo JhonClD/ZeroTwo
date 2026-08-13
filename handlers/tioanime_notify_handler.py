@@ -75,6 +75,7 @@ def _is_owner(user_id: int) -> bool:
 # ─── Estado global (equivalente a los global.tio* del JS) ───────────────────
 
 _client            = None                 # referencia al Client de Pyrogram (equivalente a global.tioConn)
+_loop              = None                 # event loop del bot (puede no estar corriendo aún al llamar register())
 _active_notifiers  = {}                   # chat_id -> asyncio.Task
 _notifier_interval = {}                   # chat_id -> intervalMin (para /tiostatus)
 _episode_queue     = []                   # lista de {"chat_id": int, "ep": dict}
@@ -83,6 +84,19 @@ _queue_task        = None
 
 SEEN_FILE  = None
 STATE_FILE = None
+
+
+def _create_task(coro):
+    """Crea una Task de forma segura tanto si el loop ya está corriendo
+    (dentro de un handler async) como si todavía no arrancó (register() se
+    llama en main.py antes de app.loop.run_until_complete(...))."""
+    loop = _loop
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+    return loop.create_task(coro)
 
 
 # ─── Persistencia ────────────────────────────────────────────────────────────
@@ -678,7 +692,7 @@ async def check_nuevos_episodios(chat_id: int, client) -> None:
 
     for e in nuevos:
         _episode_queue.append({'chat_id': chat_id, 'ep': e})
-    asyncio.create_task(procesar_cola())
+    _create_task(procesar_cola())
 
 
 # ─── Notificador periódico por chat (reemplaza setInterval del JS) ───────────
@@ -705,7 +719,7 @@ def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL
     prev = _active_notifiers.get(chat_id)
     if prev:
         prev.cancel()
-    _active_notifiers[chat_id] = asyncio.create_task(_notifier_loop(chat_id, interval_min))
+    _active_notifiers[chat_id] = _create_task(_notifier_loop(chat_id, interval_min))
     _notifier_interval[chat_id] = interval_min
 
     state = load_state()
@@ -739,8 +753,9 @@ def restaurar_notificadores(client) -> None:
 def register(app, work_dir: Path):
     """Registra los comandos tio*/lat* en el bot. work_dir es el mismo Path que
     usan otros handlers de Zero Two (ver main.py)."""
-    global SEEN_FILE, STATE_FILE, _client
+    global SEEN_FILE, STATE_FILE, _client, _loop
     _client = app
+    _loop = getattr(app, 'loop', None)
 
     db_dir = Path(work_dir) / 'database'
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -857,7 +872,7 @@ def register(app, work_dir: Path):
                 f"▶️ Reanudando {len(_episode_queue)} episodio(s)...",
                 parse_mode=enums.ParseMode.HTML
             )
-            asyncio.create_task(procesar_cola())
+            _create_task(procesar_cola())
         else:
             await message.reply_text(
                 f"🔓 Cola desbloqueada{' (estaba trabada)' if estaba else ''}.\nℹ️ No hay episodios pendientes.",
@@ -918,7 +933,7 @@ def register(app, work_dir: Path):
 
         for e in seleccion:
             _episode_queue.append({'chat_id': message.chat.id, 'ep': e})
-        asyncio.create_task(procesar_cola())
+        _create_task(procesar_cola())
 
     @app.on_message(filters.command('latexample'))
     async def latexample_cmd(client, message: Message):
@@ -946,6 +961,6 @@ def register(app, work_dir: Path):
 
         for e in seleccion:
             _episode_queue.append({'chat_id': message.chat.id, 'ep': e})
-        asyncio.create_task(procesar_cola())
+        _create_task(procesar_cola())
 
     logger.info("[tioanime-notify] Handler registrado (comandos tio*/latexample)")
