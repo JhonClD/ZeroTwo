@@ -86,8 +86,7 @@ from handlers import (
     url_handler,
     button_callback_handler,
     drive_handler,
-    enhance_handler,
-    notify_handler
+    enhance_handler
 )
 
 # Registrar handlers
@@ -110,7 +109,6 @@ url_handler.register(app, DOWNLOAD_DIR)
 button_callback_handler.register(app, user_states, WORK_DIR)
 drive_handler.register(app, user_states, DOWNLOAD_DIR)
 enhance_handler.register(app, user_states, WORK_DIR)
-notify_handler.register(app)
 
 if __name__ == '__main__':
     logger.info("=" * 60)
@@ -153,13 +151,6 @@ if __name__ == '__main__':
     async def main():
         await app.start()
         logger.info("🚀 Bot iniciado correctamente")
-
-        # Lanzar loop de notificaciones dentro del loop de Pyrogram
-        import asyncio
-        asyncio.get_event_loop().create_task(
-            notify_handler.background_loop(app)
-        )
-        logger.info("🔔 Loop de notificaciones lanzado")
 
         from pyrogram import idle
         await idle()
