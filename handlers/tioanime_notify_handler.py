@@ -37,6 +37,7 @@ from pyrogram import filters, enums
 from pyrogram.types import Message
 
 from downloaders import MEGADownloader, MediaFireDownloader
+from utils.video_processor import VideoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,32 @@ async def _get(url: str, **kwargs) -> requests.Response:
     kwargs.setdefault('headers', HEADERS)
     kwargs.setdefault('timeout', 15)
     return await asyncio.to_thread(requests.get, url, **kwargs)
+
+
+async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
+    """Duración (seg), thumbnail (jpg) y resolución del video, para que
+    Telegram muestre miniatura + duración reales en vez de 0:00.
+    Usa ffprobe/ffmpeg (VideoProcessor), que ya trae el proyecto."""
+    thumb_path = tmp_dir / 'thumb.jpg'
+    duration, thumb = await asyncio.to_thread(VideoProcessor.get_video_meta, str(video_path), str(thumb_path))
+
+    width = height = 0
+    try:
+        import subprocess as _sp
+        r = await asyncio.to_thread(
+            _sp.run,
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=s=x:p=0", str(video_path)],
+            capture_output=True, text=True, timeout=10
+        )
+        if r.returncode == 0 and 'x' in r.stdout:
+            w, h = r.stdout.strip().split('x')
+            width, height = int(w), int(h)
+    except Exception:
+        pass
+
+    return duration, thumb, width, height
 
 
 def detectar_serv_nombre(url: str) -> str:
@@ -536,9 +563,18 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
         final_caption = f"✅ <b>{titulo}</b>\n📌 Episodio {zero_pad(ep_num)}\n📦 {size_mb:.1f} MB · {etiqueta}"
         video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
         if video_path.suffix.lower() in video_exts:
-            await client.send_video(chat_id, str(video_path), caption=final_caption,
-                                     parse_mode=enums.ParseMode.HTML, supports_streaming=True,
-                                     file_name=file_name)
+            # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
+            # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
+            duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
+            await client.send_video(
+                chat_id, str(video_path), caption=final_caption,
+                parse_mode=enums.ParseMode.HTML, supports_streaming=True,
+                file_name=file_name,
+                duration=duration or 0,
+                thumb=thumb,
+                width=width or 0,
+                height=height or 0,
+            )
         else:
             await client.send_document(chat_id, str(video_path), caption=final_caption,
                                         parse_mode=enums.ParseMode.HTML, file_name=file_name)
