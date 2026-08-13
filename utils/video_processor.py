@@ -409,14 +409,16 @@ class VideoProcessor:
                  str(video_path)],
                 capture_output=True, text=True, timeout=10
             )
+            if probe.returncode != 0:
+                logger.warning(f"⚠️ ffprobe (duración) falló: {probe.stderr.strip()[:300]}")
             duration = int(float(probe.stdout.strip()))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo obtener duración con ffprobe: {e}")
 
         thumb = None
         try:
             mid = max(1, duration // 2)
-            subprocess.run(
+            r = subprocess.run(
                 ["ffmpeg", "-y", "-ss", str(mid),
                  "-i", str(video_path),
                  "-vframes", "1", "-q:v", "2",
@@ -425,8 +427,10 @@ class VideoProcessor:
             )
             if Path(thumb_path).exists():
                 thumb = str(thumb_path)
-        except Exception:
-            pass
+            else:
+                logger.warning(f"⚠️ ffmpeg no generó miniatura: {r.stderr.decode(errors='ignore')[:300]}")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo generar miniatura: {e}")
 
         return duration, thumb
 
