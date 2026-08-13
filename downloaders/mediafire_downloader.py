@@ -71,6 +71,17 @@ class MediaFireDownloader:
             filename = re.sub(r'\s+', ' ', filename).strip()
             filename = re.sub(r'[^\w\s\-\.]', '_', filename)
 
+            # Si el nombre quedó sin extensión reconocible (pasa cuando ninguno
+            # de los patrones de arriba matchea bien), la sacamos del propio
+            # link de descarga directa, que casi siempre trae el nombre real
+            # al final (…/xxxxx/Nombre.mp4). Si tampoco hay ahí, .mp4 por
+            # defecto: es lo que sirve TioAnime/LatAnime casi siempre y así
+            # Telegram lo reconoce como video (duración + miniatura) en vez
+            # de mandarlo como documento genérico.
+            if not re.search(r'\.\w{2,4}$', filename):
+                m_ext = re.search(r'\.([A-Za-z0-9]{2,4})(?:[?#]|$)', direct_url)
+                filename = f"{filename}.{m_ext.group(1)}" if m_ext else f"{filename}.mp4"
+
             logger.info(f"✅ Enlace y nombre obtenidos: {filename}")
             return direct_url, filename
 
