@@ -22,7 +22,6 @@ from . import (
     button_callback_handler,
     drive_handler,
     enhance_handler,
-    notify_handler,
 )
 
 __all__ = [
@@ -45,5 +44,4 @@ __all__ = [
     'button_callback_handler',
     'drive_handler',
     'enhance_handler',
-    'notify_handler',
 ]
