@@ -12,15 +12,10 @@ Cada handler debe ser un módulo separado que exporte una función `register(app
 
 - `start_handler.py` - Comando /start
 - `help_handler.py` - Comando /help
-- `compress_handler.py` - Comando /compress
-- `thumbnail_handler.py` - Comando /thumbnail
-- `subtitles_handler.py` - Comando /subtitles
 - `extract_audio_handler.py` - Comando /extract_audio
 - `download_handler.py` - Comando /download
 - `anime_handler.py` - Comando /anime
 - `video_handler.py` - Handler para videos
-- `photo_handler.py` - Handler para imágenes
-- `document_handler.py` - Handler para documentos
 - `url_handler.py` - Handler para URLs
 - `button_callback_handler.py` - Handler para botones inline
 

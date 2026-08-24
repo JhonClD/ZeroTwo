@@ -220,7 +220,7 @@ class VideoProcessor:
         Compatibilidad
         --------------
         La firma original burn_subtitles(video_path, subtitle_path, output_path)
-        sigue funcionando sin ningún cambio en document_handler.py.
+        sigue funcionando sin cambios.
         """
         logger.info("📝 Iniciando quemado de subtítulos")
         logger.info(f"📁 Video:      {video_path}")

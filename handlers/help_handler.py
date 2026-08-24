@@ -19,25 +19,7 @@ def register(app):
 🎬 <b>PROCESAMIENTO DE VIDEOS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣ Comprimir Video</b>
-├ /compress o envía un video directamente
-├ Sin límite de tamaño ✨
-├ Elige formato y resolución
-└ Se envía como archivo descargable
-
-<b>2️⃣ Añadir Portada (Thumbnail)</b>
-├ /thumbnail
-├ Envía primero la <b>foto</b>
-├ Luego envía el <b>video</b>
-└ Recibe el video con portada
-
-<b>3️⃣ Quemar Subtítulos</b>
-├ /subtitles
-├ Envía el video
-├ Envía el archivo de subtítulos (.srt, .ass, .vtt)
-└ Recibe el video con subtítulos integrados
-
-<b>4️⃣ Extraer Audio</b>
+<b>1️⃣ Extraer Audio</b>
 ├ /extract_audio
 ├ Envía el video
 └ Recibe el audio en MP3 (192kbps)

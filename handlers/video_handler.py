@@ -29,10 +29,6 @@ def register(app, user_states, work_dir):
         # Si es documento, verificar que sea video
         if message.document:
             if not message.document.mime_type or not message.document.mime_type.startswith('video'):
-                # Si es archivo de subtítulos
-                if message.document.file_name and message.document.file_name.endswith(('.srt', '.ass', '.vtt')):
-                    # Manejado por document_handler
-                    return
                 return
         
         logger.info(f"🎬 Video recibido de @{username}")
@@ -111,63 +107,6 @@ def register(app, user_states, work_dir):
                         user_states[user_id]['video_info']['size_mb']
                     ),
                     reply_markup=keyboard
-                )
-                
-            elif action == 'thumbnail':
-                # La foto ya fue recibida antes — procesar directamente
-                image_path = state.get('image_path')
-                if not image_path:
-                    logger.error("❌ No se encontró la ruta de la imagen en el estado")
-                    await status_msg.edit_text("❌ Error interno: no se encontró la foto guardada. Usa /thumbnail de nuevo.")
-                    Path(video_path).unlink(missing_ok=True)
-                    del user_states[user_id]
-                    return
-
-                logger.info(f"🖼️ Aplicando portada al video con imagen: {image_path}")
-                await status_msg.edit_text("🖼️ Añadiendo portada al video...")
-
-                output_path = work_dir / f"{user_id}_with_thumb.mp4"
-
-                if VideoProcessor.add_thumbnail_fast(video_path, image_path, str(output_path)):
-                    output_size = output_path.stat().st_size / (1024 * 1024)
-                    logger.info(f"✅ Portada añadida ({output_size:.2f} MB)")
-                    logger.info("📤 Enviando video al usuario como documento...")
-
-                    last_upload_percent = [0]
-                    async def upload_progress(current, total):
-                        percent = int((current / total) * 100)
-                        if percent - last_upload_percent[0] >= 10:
-                            mb_current = current / (1024**2)
-                            mb_total   = total   / (1024**2)
-                            logger.info(f"📤 Subida: {percent}% ({mb_current:.1f}/{mb_total:.1f} MB)")
-                            last_upload_percent[0] = percent
-
-                    await message.reply_document(
-                        document=str(output_path),
-                        caption="✅ Portada añadida exitosamente",
-                        progress=upload_progress
-                    )
-
-                    logger.info("✅ Video enviado exitosamente")
-                    output_path.unlink(missing_ok=True)
-                else:
-                    logger.error("❌ Error añadiendo portada")
-                    await message.reply_text("❌ Error añadiendo la portada al video")
-
-                # Limpiar imagen y video temporales
-                Path(image_path).unlink(missing_ok=True)
-                orig_thumb = work_dir / f"{user_id}_thumb.jpg"
-                orig_thumb.unlink(missing_ok=True)
-                Path(video_path).unlink(missing_ok=True)
-                logger.info("🗑️ Archivos temporales eliminados")
-                del user_states[user_id]
-                
-            elif action == 'subtitles':
-                logger.info("📝 Esperando archivo de subtítulos")
-                user_states[user_id]['step'] = 'waiting_subtitle'
-                await status_msg.edit_text(
-                    "✅ Video descargado\n\n"
-                    "Ahora envíame el archivo de subtítulos (.srt, .ass, .vtt)."
                 )
                 
             elif action == 'extract_audio':

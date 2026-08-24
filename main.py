@@ -113,9 +113,6 @@ user_states = {}
 from handlers import (
     start_handler,
     help_handler,
-    compress_handler,
-    thumbnail_handler,
-    subtitles_handler,
     extract_audio_handler,
     download_handler,
     anime_handler,
@@ -124,8 +121,6 @@ from handlers import (
     twitter_handler,
     tiktok_handler,
     video_handler,
-    photo_handler,
-    document_handler,
     url_handler,
     button_callback_handler,
     drive_handler,
@@ -136,9 +131,6 @@ from handlers import (
 # Registrar handlers
 start_handler.register(app)
 help_handler.register(app)
-compress_handler.register(app, user_states)
-thumbnail_handler.register(app, user_states, WORK_DIR)
-subtitles_handler.register(app, user_states)
 extract_audio_handler.register(app, user_states)
 download_handler.register(app)
 anime_handler.register(app, user_states, WORK_DIR)
@@ -147,8 +139,6 @@ facebook_handler.register(app, DOWNLOAD_DIR)
 twitter_handler.register(app, DOWNLOAD_DIR)
 tiktok_handler.register(app, DOWNLOAD_DIR)
 video_handler.register(app, user_states, WORK_DIR)
-photo_handler.register(app, user_states, WORK_DIR)
-document_handler.register(app, user_states, WORK_DIR)
 url_handler.register(app, DOWNLOAD_DIR)
 button_callback_handler.register(app, user_states, WORK_DIR)
 drive_handler.register(app, user_states, DOWNLOAD_DIR)

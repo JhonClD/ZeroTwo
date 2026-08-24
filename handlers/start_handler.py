@@ -20,9 +20,6 @@ Puedo ayudarte con todo esto:
 ━━━━━━━━━━━━━━━━━━━━
 🎬 <b>PROCESAMIENTO DE VIDEO</b>
 ━━━━━━━━━━━━━━━━━━━━
-/compress       — Comprimir video
-/thumbnail      — Añadir portada
-/subtitles      — Quemar subtítulos
 /extract_audio  — Extraer audio MP3
 
 ━━━━━━━━━━━━━━━━━━━━

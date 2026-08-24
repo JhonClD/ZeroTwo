@@ -9,9 +9,6 @@ Bot de Telegram avanzado para procesamiento de videos, descargas y búsqueda de 
 ## ✨ Características
 
 ### 📹 Procesamiento de Videos
-- **Comprimir videos** - Múltiples formatos (MP4, MKV, AVI, MOV, WEBM) y resoluciones (360p, 480p, 720p, 1080p)
-- **Añadir portadas** - Ultra rápido, sin recodificar (5-10 segundos)
-- **Quemar subtítulos** - Estilo profesional con alta calidad
 - **Extraer audio** - Formato MP3 a 192kbps
 
 ### 📥 Descargas
@@ -87,9 +84,6 @@ echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 
 | Comando | Descripción |
 |---------|-------------|
-| `/compress` | Comprimir un video |
-| `/thumbnail` | Añadir portada a un video |
-| `/subtitles` | Quemar subtítulos en un video |
 | `/extract_audio` | Extraer audio de un video |
 
 ### Descargas
@@ -115,32 +109,12 @@ echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 ## 📊 Formatos Soportados
 
 ### Videos
-- **Compresión**: MP4, MKV, AVI, MOV, WEBM
-- **Resoluciones**: 360p, 480p, 720p, 1080p, Original
-- **Subtítulos**: SRT, ASS, VTT
 
 ### Descargas
 - **MEGA**: mega.nz, mega.co.nz
 - **MediaFire**: mediafire.com
 
 ## 🎨 Características Especiales
-
-### Subtítulos Profesionales
-```
-✅ Texto blanco con borde negro
-✅ Sombra pronunciada
-✅ Fondo semi-transparente
-✅ Texto en negrita
-✅ Tamaño optimizado
-```
-
-### Portadas Ultra Rápidas
-```
-⚡ Sin recodificación
-⚡ Proceso de 5-10 segundos
-⚡ Imagen optimizada a 1920px
-⚡ Calidad JPEG 95%
-```
 
 ### Descargas Optimizadas
 ```
@@ -158,7 +132,6 @@ Rikka-Bot/
 ├── README.md              # Documentación
 ├── handlers/              # Manejadores de comandos
 │   ├── start_handler.py
-│   ├── compress_handler.py
 │   ├── anime_handler.py
 │   └── ...
 ├── utils/                 # Utilidades
@@ -229,8 +202,6 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ### v2.0.0 (2026-03-21)
 - ✨ Migración a Pyrogram (sin límite de tamaño)
-- ⚡ Portadas ultra rápidas (5-10 seg)
-- 🎨 Subtítulos profesionales mejorados
 - 🚀 Soporte aria2c para descargas rápidas
 - 🈺 Búsqueda de anime con AniList
 - 📊 Progreso detallado en terminal
@@ -238,9 +209,6 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ### v1.0.0 (2026-03-15)
 - 🎉 Lanzamiento inicial
-- 📹 Compresión de videos
-- 🖼️ Añadir portadas
-- 📝 Quemar subtítulos
 - 📥 Descargas MEGA/MediaFire
 
 ---
