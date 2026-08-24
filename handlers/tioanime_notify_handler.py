@@ -159,64 +159,54 @@ async def _get(url: str, **kwargs) -> requests.Response:
 
 
 async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
-    """Duración (seg), thumbnail (jpg) y resolución real del video.
+    """Devuelve duración, thumbnail JPEG y resolución usando ffprobe/ffmpeg.
 
-    Telegram exige que el thumb sea JPEG, con el lado mayor <= 320px y
-    < 200 KB (https://docs.pyrogram.org/api/methods/send_video) — si no,
-    lo descarta en silencio y el cliente muestra un cuadro negro con 0:00,
-    que es justo lo que pasaba al generar la miniatura a resolución completa.
-    Por eso acá se escala con ffmpeg y se reintenta con más compresión si
-    el archivo sigue pesando de más.
+    Las propiedades se consultan por separado: algunos contenedores no exponen
+    ``format.duration`` cuando se combina con ``-select_streams``. Además, no
+    se envían ceros ni ``None`` a Pyrogram, porque eso impide que Telegram
+    calcule o acepte correctamente los metadatos.
     """
     import subprocess as _sp
 
     duration = width = height = 0
+    probe = await asyncio.to_thread(
+        _sp.run,
+        ['ffprobe', '-v', 'error', '-show_entries',
+         'format=duration:stream=duration,width,height', '-of', 'json', str(video_path)],
+        capture_output=True, text=True, timeout=30
+    )
+    if probe.returncode != 0:
+        logger.warning('[tioanime-notify] ffprobe falló para %s: %s', video_path, (probe.stderr or '').strip()[-500:])
+    else:
+        try:
+            data = json.loads(probe.stdout or '{}')
+            stream = next((s for s in data.get('streams', []) if s.get('codec_type', 'video') == 'video'), {})
+            width = int(float(stream.get('width') or 0))
+            height = int(float(stream.get('height') or 0))
+            raw_duration = data.get('format', {}).get('duration') or stream.get('duration') or 0
+            duration = max(0, int(round(float(raw_duration))))
+        except (ValueError, TypeError, json.JSONDecodeError, AttributeError) as exc:
+            logger.warning('[tioanime-notify] Metadatos inválidos en %s: %s', video_path, exc)
+
+    scale = 'scale=320:-2' if width >= height else 'scale=-2:320'
+    thumb_path = tmp_dir / 'thumb.jpg'
     try:
-        r = await asyncio.to_thread(
-            _sp.run,
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height:format=duration",
-             "-of", "json", str(video_path)],
-            capture_output=True, text=True, timeout=15
-        )
-        data = json.loads(r.stdout or '{}')
-        streams = data.get('streams') or [{}]
-        width = int(streams[0].get('width') or 0)
-        height = int(streams[0].get('height') or 0)
-        duration = int(float(data.get('format', {}).get('duration') or 0))
-    except Exception:
+        thumb_path.unlink(missing_ok=True)
+    except OSError:
         pass
 
-    if width and width >= height:
-        scale = 'scale=320:-2'
-    elif width:
-        scale = 'scale=-2:320'
-    else:
-        scale = "scale='min(320,iw)':-2"
-
-    mid = max(1, duration // 2) if duration else 5
-    thumb_path = tmp_dir / 'thumb.jpg'
+    mid = max(1, duration // 2) if duration else 1
     thumb = None
-
-    for quality in (4, 8, 14, 20):  # sube compresión si el jpg sigue pesando > 200KB
-        try:
-            await asyncio.to_thread(
-                _sp.run,
-                ["ffmpeg", "-y", "-ss", str(mid), "-i", str(video_path),
-                 "-vframes", "1", "-vf", scale, "-q:v", str(quality),
-                 str(thumb_path)],
-                capture_output=True, timeout=20
-            )
-        except Exception:
-            continue
-        if thumb_path.exists() and thumb_path.stat().st_size > 0:
-            if thumb_path.stat().st_size <= 200 * 1024:
-                thumb = str(thumb_path)
-                break
-    if not thumb and thumb_path.exists() and thumb_path.stat().st_size > 0:
-        # último recurso: usarlo aunque supere levemente los 200 KB
-        thumb = str(thumb_path)
-
+    for quality in (5, 10, 16, 23):
+        cmd = ['ffmpeg', '-y', '-v', 'error', '-ss', str(mid), '-i', str(video_path),
+               '-frames:v', '1', '-vf', scale, '-q:v', str(quality),
+               '-f', 'image2', '-pix_fmt', 'yuvj420p', str(thumb_path)]
+        result = await asyncio.to_thread(_sp.run, cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0 and thumb_path.exists() and 0 < thumb_path.stat().st_size <= 200 * 1024:
+            thumb = str(thumb_path)
+            break
+        if result.returncode != 0:
+            logger.warning('[tioanime-notify] ffmpeg no generó thumbnail para %s: %s', video_path, (result.stderr or '').strip()[-500:])
     return duration, thumb, width, height
 
 
@@ -647,15 +637,21 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
             # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
             duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
-            await client.send_video(
-                chat_id, str(video_path), caption=final_caption,
-                parse_mode=enums.ParseMode.HTML, supports_streaming=True,
-                file_name=file_name,
-                duration=duration or 0,
-                thumb=thumb,
-                width=width or 0,
-                height=height or 0,
-            )
+            video_kwargs = {
+                'caption': final_caption,
+                'parse_mode': enums.ParseMode.HTML,
+                'supports_streaming': True,
+                'file_name': file_name,
+            }
+            if duration > 0:
+                video_kwargs['duration'] = duration
+            if thumb:
+                video_kwargs['thumb'] = thumb
+            if width > 0:
+                video_kwargs['width'] = width
+            if height > 0:
+                video_kwargs['height'] = height
+            await client.send_video(chat_id, str(video_path), **video_kwargs)
         else:
             await client.send_document(chat_id, str(video_path), caption=final_caption,
                                         parse_mode=enums.ParseMode.HTML, file_name=file_name)
