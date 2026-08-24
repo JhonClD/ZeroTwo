@@ -166,6 +166,10 @@ sudo apt install ffmpeg  # Ubuntu/Debian
 pkg install aria2  # Instalar aria2c para descargas 10x más rápidas
 ```
 
+## 🌐 Descargas sociales
+
+Las descargas de YouTube y Facebook intentan primero el flujo público de `loader.to` (`p.savenow.to`) y consultan su progreso hasta obtener el enlace final. Para Facebook se conservan además APIs públicas de respaldo si loader.to no puede procesar el enlace. El servicio puede cambiar sus endpoints o limitar solicitudes; el bot informa el error y no guarda credenciales privadas en el repositorio.
+
 ## 📝 Logs
 
 Los logs se guardan automáticamente en:

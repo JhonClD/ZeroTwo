@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
 
@@ -153,40 +154,17 @@ def register(app, download_dir):
             await safe_react(message, "⚡")
             
             # ==========================================
-            # DESCARGAR USANDO API DE APICAUSAS
+            # DESCARGAR PRIORIZANDO LOADER.TO
             # ==========================================
-            apikey = "causa-0e3eacf90ab7be15"
-            dl_type = 'video' if is_video else 'audio'
-            
-            api_url = f"https://rest.apicausas.xyz/api/v1/descargas/youtube?apikey={apikey}&url={video_url}&type={dl_type}"
-            
-            logger.info(f"📥 Llamando a API APICausas para {dl_type}")
-            
-            api_cmd = f'curl -s "{api_url}"'
-            api_result = subprocess.run(api_cmd, shell=True, capture_output=True, text=True, timeout=60)
-            
-            if api_result.returncode != 0:
-                raise Exception("Error llamando a la API")
-            
-            # Parsear respuesta JSON
-            api_data = json.loads(api_result.stdout)
-            
-            # Obtener URL de descarga (múltiples patrones)
-            download_url = None
-            if 'data' in api_data and isinstance(api_data['data'], dict):
-                if 'download' in api_data['data']:
-                    download_url = api_data['data']['download'].get('url')
-                elif 'url' in api_data['data']:
-                    download_url = api_data['data']['url']
-            elif 'result' in api_data:
-                download_url = api_data['result'].get('download')
-            elif 'url' in api_data:
-                download_url = api_data['url']
-            
-            if not download_url:
-                raise Exception("No se pudo obtener el enlace de descarga de la API")
-            
-            logger.info(f"✅ URL de descarga obtenida: {download_url[:60]}...")
+            media_format = '720' if is_video else 'mp3'
+            logger.info(f"📥 Solicitando {media_format} a loader.to...")
+            try:
+                download_url, loader_title = await loader_download_url(video_url, media_format)
+                if loader_title and not video_title:
+                    video_title = loader_title
+                logger.info(f"✅ loader.to devolvió una URL de descarga")
+            except LoaderToError as error:
+                raise Exception(f"loader.to no pudo procesar el video: {error}") from error
             
             # ==========================================
             # LÓGICA DE ENVÍO

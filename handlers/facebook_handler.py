@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
 
@@ -46,76 +47,58 @@ def register(app, download_dir):
         status_msg = await message.reply_text("⏳ Descargando video de Facebook...")
         
         try:
-            apikey = "causa-0e3eacf90ab7be15"
-            encoded_url = fb_link.replace('&', '%26').replace('=', '%3D').replace('?', '%3F')
-            
-            # Lista de APIs con fallback (prioridad de arriba hacia abajo)
-            apis = [
-                f"https://rest.apicausas.xyz/api/v1/descargas/facebook?apikey={apikey}&url={encoded_url}",
-                f"https://eliasar-yt-api.vercel.app/api/facebookdl?link={encoded_url}",
-                f"https://api.botcahx.eu.org/api/dowloader/fbdown?url={encoded_url}&apikey=BrunoSobrino",
-                f"https://api.vreden.my.id/api/facebook?url={encoded_url}"
-            ]
-            
             video_url = None
             video_title = None
-            
-            # Intentar con cada API hasta que una funcione
-            for i, api in enumerate(apis, 1):
-                try:
-                    logger.info(f"🔄 Intentando API #{i}...")
-                    
-                    # Llamar a la API
-                    api_cmd = f'curl -s -m 30 "{api}"'
-                    result = subprocess.run(api_cmd, shell=True, capture_output=True, text=True, timeout=35)
-                    
-                    if result.returncode != 0:
-                        logger.warning(f"❌ API #{i} falló (curl error)")
-                        continue
-                    
-                    # Parsear JSON
-                    api_data = json.loads(result.stdout)
-                    
-                    # Mapeo inteligente para diferentes estructuras de respuesta
-                    # APICausas: json.resultado.url
-                    # Eliasar: json.data.url
-                    # BotCahx: json.result.url
-                    # Vreden: json.url o json.data[0].url
-                    
-                    if 'resultado' in api_data and isinstance(api_data['resultado'], dict):
-                        video_url = api_data['resultado'].get('url')
-                        video_title = api_data['resultado'].get('title')
-                    elif 'data' in api_data:
-                        if isinstance(api_data['data'], dict):
-                            video_url = api_data['data'].get('url')
-                            video_title = api_data['data'].get('title')
-                        elif isinstance(api_data['data'], list) and len(api_data['data']) > 0:
-                            video_url = api_data['data'][0].get('url')
-                            video_title = api_data['data'][0].get('title')
-                    elif 'result' in api_data:
-                        if isinstance(api_data['result'], dict):
-                            video_url = api_data['result'].get('url')
-                            video_title = api_data['result'].get('title')
-                    elif 'url' in api_data:
-                        video_url = api_data['url']
-                    
-                    # Verificar que la URL sea válida
-                    if video_url and video_url.startswith('http'):
-                        logger.info(f"✅ API #{i} exitosa!")
-                        break
-                    else:
-                        logger.warning(f"❌ API #{i} no devolvió URL válida")
-                        video_url = None
-                        
-                except json.JSONDecodeError:
-                    logger.warning(f"❌ API #{i} devolvió JSON inválido")
-                    continue
-                except Exception as e:
-                    logger.warning(f"❌ API #{i} error: {e}")
-                    continue
-            
+
+            # loader.to soporta Facebook y es la primera opción.
+            try:
+                logger.info("🔄 Intentando loader.to para Facebook...")
+                video_url, video_title = await loader_download_url(fb_link, "720")
+                logger.info("✅ loader.to devolvió una URL de Facebook")
+            except LoaderToError as error:
+                logger.warning(f"⚠️ loader.to no disponible: {error}")
+
+            # APIs públicas de respaldo, sin depender de una sola plataforma.
             if not video_url:
-                raise Exception("No se pudo extraer el video. Las APIs podrían estar caídas.")
+                encoded_url = fb_link.replace('&', '%26').replace('=', '%3D').replace('?', '%3F')
+                apis = [
+                    f"https://eliasar-yt-api.vercel.app/api/facebookdl?link={encoded_url}",
+                    f"https://api.vreden.my.id/api/facebook?url={encoded_url}",
+                ]
+                for i, api in enumerate(apis, 1):
+                    try:
+                        logger.info(f"🔄 Intentando API pública #{i}...")
+                        result = subprocess.run(
+                            ['curl', '-sS', '-L', '--max-time', '30', api],
+                            capture_output=True, text=True, timeout=35,
+                        )
+                        if result.returncode != 0:
+                            continue
+                        api_data = json.loads(result.stdout)
+                        candidates = [api_data]
+                        if isinstance(api_data, dict):
+                            candidates.extend([
+                                api_data.get('data'), api_data.get('result'), api_data.get('resultado')
+                            ])
+                        for candidate in candidates:
+                            if isinstance(candidate, list):
+                                candidates.extend(candidate)
+                            elif isinstance(candidate, dict):
+                                candidate_url = candidate.get('url') or candidate.get('download')
+                                if isinstance(candidate_url, dict):
+                                    candidate_url = candidate_url.get('url')
+                                if isinstance(candidate_url, str) and candidate_url.startswith('http'):
+                                    video_url = candidate_url
+                                    video_title = candidate.get('title') or candidate.get('name')
+                                    break
+                        if video_url:
+                            logger.info(f"✅ API pública #{i} exitosa")
+                            break
+                    except (json.JSONDecodeError, subprocess.TimeoutExpired, Exception) as error:
+                        logger.warning(f"⚠️ API pública #{i} falló: {error}")
+
+            if not video_url:
+                raise Exception("No se pudo extraer el video con loader.to ni APIs públicas.")
             
             logger.info(f"✅ URL de descarga obtenida: {video_url[:60]}...")
             
