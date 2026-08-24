@@ -18,6 +18,11 @@ def register(app):
 Puedo ayudarte con todo esto:
 
 ━━━━━━━━━━━━━━━━━━━━
+🎬 <b>PROCESAMIENTO DE VIDEO</b>
+━━━━━━━━━━━━━━━━━━━━
+/extract_audio  — Extraer audio MP3
+
+━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 /play           — YouTube audio
@@ -50,8 +55,6 @@ Pega un enlace de MEGA o MediaFire directamente
 /anime          — Info completa de cualquier anime
 
 ━━━━━━━━━━━━━━━━━━━━
-
-Los archivos se descargan y se envían sin compresión ni edición multimedia.
 
 /help — Ver ayuda detallada de todos los comandos"""
 

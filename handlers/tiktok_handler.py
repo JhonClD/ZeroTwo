@@ -12,6 +12,7 @@ import urllib.parse
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from utils import VideoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ def register(app, download_dir):
             await status_msg.edit_text("📥 Descargando video en alta calidad...")
 
             tmp_video = download_dir / f"tt_{message.from_user.id}.mp4"
+            tmp_thumb = download_dir / f"tt_{message.from_user.id}_thumb.jpg"
 
             try:
                 dl_cmd = f'curl -s -L -o "{tmp_video}" "{video_url}"'
@@ -101,6 +103,7 @@ def register(app, download_dir):
 
                 await status_msg.edit_text("📤 Enviando video...")
 
+                duration, thumb = VideoProcessor.get_video_meta(tmp_video, tmp_thumb)
                 await message.reply_video(
                     video=str(tmp_video),
                     caption=(
@@ -109,6 +112,8 @@ def register(app, download_dir):
                     ),
                     parse_mode=enums.ParseMode.HTML,
                     supports_streaming=True,
+                    duration=duration or None,
+                    thumb=thumb,
                 )
 
                 await status_msg.delete()
@@ -116,6 +121,7 @@ def register(app, download_dir):
 
             finally:
                 tmp_video.unlink(missing_ok=True)
+                tmp_thumb.unlink(missing_ok=True)
                 logger.info("🗑️ Archivo temporal eliminado")
 
         except subprocess.TimeoutExpired:

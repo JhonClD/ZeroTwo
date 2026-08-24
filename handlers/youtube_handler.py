@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from utils import VideoProcessor
 from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ def register(app, download_dir):
             video_url = None
             video_title = None
             video_channel = None
+            video_thumbnail = None
             
             # Si es URL directa
             if query.startswith('http'):
@@ -81,6 +83,7 @@ def register(app, download_dir):
                         info = json.loads(result.stdout)
                         video_title = info.get('title', 'Video de YouTube')
                         video_channel = info.get('author_name', 'Desconocido')
+                        video_thumbnail = info.get('thumbnail_url', '')
                     except:
                         video_title = 'Video de YouTube'
                         video_channel = 'Desconocido'
@@ -109,6 +112,9 @@ def register(app, download_dir):
                         if channel_match:
                             video_channel = channel_match.group(1)
                         
+                        # Thumbnail
+                        video_thumbnail = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+                        
                         logger.info(f"✅ Video encontrado: {video_title}")
                     else:
                         await status_msg.edit_text("❌ No se encontró ningún video")
@@ -132,7 +138,18 @@ def register(app, download_dir):
 ┃ 🔗 <b>Link:</b> {video_url[:50]}...
 ╰━━━━━━━━━━━━━━━━⬣"""
             
-            await status_msg.edit_text(caption_info, parse_mode=enums.ParseMode.HTML)
+            # Enviar thumbnail con info
+            if video_thumbnail:
+                try:
+                    await message.reply_photo(
+                        photo=video_thumbnail,
+                        caption=caption_info,
+                        parse_mode=enums.ParseMode.HTML
+                    )
+                except:
+                    await status_msg.edit_text(caption_info, parse_mode=enums.ParseMode.HTML)
+            else:
+                await status_msg.edit_text(caption_info, parse_mode=enums.ParseMode.HTML)
             
             # Reaccionar de forma segura
             await safe_react(message, "⚡")
@@ -159,20 +176,25 @@ def register(app, download_dir):
                 logger.info("📹 Descargando y enviando video...")
                 tmp_video = download_dir / f"yt_{message.from_user.id}_{message.id}.mp4"
                 
+                tmp_thumb = download_dir / f"yt_{message.from_user.id}_{message.id}_thumb.jpg"
                 try:
                     dl_cmd = f'curl -sS -L --fail -o "{tmp_video}" "{download_url}"'
                     result = subprocess.run(dl_cmd, shell=True, timeout=180)
                     if result.returncode != 0 or not tmp_video.exists() or tmp_video.stat().st_size < 10_000:
                         raise Exception("Error descargando video")
 
+                    duration, thumb = VideoProcessor.get_video_meta(tmp_video, tmp_thumb)
                     await message.reply_video(
                         video=str(tmp_video),
                         caption=f"🎬 <b>{video_title}</b>",
                         parse_mode=enums.ParseMode.HTML,
                         supports_streaming=True,
+                        duration=duration or None,
+                        thumb=thumb,
                     )
                 finally:
                     tmp_video.unlink(missing_ok=True)
+                    tmp_thumb.unlink(missing_ok=True)
                 
             elif is_voice_note:
                 # ========== ENVIAR COMO NOTA DE VOZ ==========

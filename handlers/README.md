@@ -1,22 +1,37 @@
 # Handlers
 
-Esta carpeta contiene los manejadores de comandos y descargas de ZeroTwo. Cada módulo exporta una función `register(app, ...)` para registrar sus filtros de Pyrogram.
+Esta carpeta contiene los manejadores de comandos del bot.
 
-## Módulos activos
+## ⚠️ Nota Importante
 
-| Módulo | Función |
-|---|---|
-| `start_handler.py` | Comando `/start` |
-| `help_handler.py` | Comando `/help` |
-| `download_handler.py` | Descargas generales |
-| `anime_handler.py` | Búsqueda de anime |
-| `youtube_handler.py` | Descargas de YouTube |
-| `facebook_handler.py` | Descargas de Facebook mediante loader.to |
-| `twitter_handler.py` | Descargas de Twitter/X |
-| `tiktok_handler.py` | Descargas de TikTok |
-| `url_handler.py` | Descargas desde enlaces de MEGA, MediaFire y Drive |
-| `drive_handler.py` | Operaciones de Google Drive |
-| `enhance_handler.py` | Mejora de imágenes con IA |
-| `tioanime_notify_handler.py` | Notificaciones de episodios |
+Los archivos de handlers individuales deben ser extraídos del archivo completo `telegram_video_bot_pyrogram.py`.
 
-Las funciones de compresión, encoding, hardsub, subtítulos, miniaturas y extracción de audio fueron retiradas del proyecto. Los videos descargados se envían directamente sin edición multimedia.
+Cada handler debe ser un módulo separado que exporte una función `register(app, ...)`.
+
+## 📋 Handlers Pendientes de Modularizar
+
+- `start_handler.py` - Comando /start
+- `help_handler.py` - Comando /help
+- `extract_audio_handler.py` - Comando /extract_audio
+- `download_handler.py` - Comando /download
+- `anime_handler.py` - Comando /anime
+- `video_handler.py` - Handler para videos
+- `url_handler.py` - Handler para URLs
+- `button_callback_handler.py` - Handler para botones inline
+
+## 🔨 Ejemplo de Estructura
+
+```python
+# start_handler.py
+from pyrogram import filters
+from pyrogram.types import Message
+
+def register(app):
+    @app.on_message(filters.command("start"))
+    async def start_command(client, message: Message):
+        await message.reply_text("¡Hola! Soy Rikka Bot")
+```
+
+## 📝 Tarea
+
+Separar cada handler del archivo monolítico `telegram_video_bot_pyrogram.py` en archivos individuales siguiendo la estructura de ejemplo.

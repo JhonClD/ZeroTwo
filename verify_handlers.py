@@ -16,9 +16,12 @@ print("🔍 Verificando handlers...\n")
 handlers_config = [
     ('start_handler', ['app']),
     ('help_handler', ['app']),
+    ('extract_audio_handler', ['app', 'user_states']),
     ('download_handler', ['app']),
     ('anime_handler', ['app', 'user_states', 'work_dir']),
+    ('video_handler', ['app', 'user_states', 'work_dir']),
     ('url_handler', ['app', 'download_dir']),
+    ('button_callback_handler', ['app', 'user_states', 'work_dir']),
 ]
 
 all_ok = True

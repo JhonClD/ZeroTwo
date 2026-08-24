@@ -9,7 +9,8 @@ from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from downloaders import MEGADownloader, MediaFireDownloader
-from downloaders.drive_downloader import DriveDownloader
+from downloaders.drive_downloader import DriveDownloader, take_video_screenshots
+from utils import VideoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,10 @@ def register(app, download_dir):
                 parse_mode=enums.ParseMode.HTML
             )
 
+            # Screenshots si es video
+            if file_ext in VIDEO_EXTS:
+                await _send_screenshots(message, file_path, user_dir, service.lower().replace(' ', '_'))
+
             # ── Progreso de envío a Telegram ──────────────────────────────────
             last_pct = [-10]
 
@@ -124,10 +129,14 @@ def register(app, download_dir):
             try:
                 if file_ext in VIDEO_EXTS:
                     logger.info("🎬 Enviando como video…")
+                    thumb_path = user_dir / f"{file_path.stem}_thumb.jpg"
+                    duration, thumb = VideoProcessor.get_video_meta(file_path, thumb_path)
                     await message.reply_video(
                         video=str(file_path), caption=caption,
                         supports_streaming=True, progress=send_progress,
+                        duration=duration or None, thumb=thumb,
                     )
+                    thumb_path.unlink(missing_ok=True)
                 elif file_ext in AUDIO_EXTS:
                     logger.info("🎵 Enviando como audio…")
                     await message.reply_audio(
@@ -163,3 +172,26 @@ def register(app, download_dir):
                 f"❌ <b>Error</b>\n{str(e)[:200]}",
                 parse_mode=enums.ParseMode.HTML
             )
+
+
+# ── Helper de screenshots ──────────────────────────────────────────────────────
+
+async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, prefix: str):
+    """Captura 5 screenshots y los envía como álbum."""
+    logger.info("📸 Capturando screenshots del video…")
+    shots = await take_video_screenshots(video_path, work_dir, prefix=prefix)
+    if not shots:
+        return
+
+    from pyrogram.types import InputMediaPhoto
+    media_group = [InputMediaPhoto(str(s)) for s in shots]
+    media_group[0] = InputMediaPhoto(str(shots[0]), caption="🎬 <b>Preview del video</b>")
+
+    try:
+        await message.reply_media_group(media=media_group)
+        logger.info(f"✅ {len(shots)} screenshots enviados")
+    except Exception as e:
+        logger.warning(f"⚠️ Error enviando screenshots: {e}")
+    finally:
+        for s in shots:
+            s.unlink(missing_ok=True)
