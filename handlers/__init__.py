@@ -18,6 +18,7 @@ from . import (
     animeav1_notify_handler,
     animedbs_notify_handler,
     monoschinos_notify_handler,
+    jkanime_notify_handler,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     'animeav1_notify_handler',
     'animedbs_notify_handler',
     'monoschinos_notify_handler',
+    'jkanime_notify_handler',
 ]
