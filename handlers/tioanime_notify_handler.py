@@ -30,6 +30,7 @@ import time
 import asyncio
 import logging
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -393,43 +394,74 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
 # ─── Scraping — LatAnime ──────────────────────────────────────────────────────
 
 async def fetch_latest_episodes_latanime() -> list[dict]:
-    res = await _get(LATANIME_URL)
-    soup = BeautifulSoup(res.text, 'html.parser')
-    lista: list[dict] = []
-    ids = set()
+    """Obtiene los últimos episodios publicados en LatAnime.
 
-    for a_tag in soup.select('a[href*="/ver/"]'):
-        href = a_tag.get('href', '')
-        m = re.search(r'/ver/(.+?)[-_](\d+)(?:-[a-z]+)?(?:/|$)', href)
-        if not m:
+    LatAnime ya no publica los episodios directamente en la portada: ``/emision``
+    contiene tarjetas ``/anime/...`` y cada ficha contiene los enlaces reales
+    ``/ver/...-episodio-N``. Se consulta la ficha de cada tarjeta y se conserva
+    solamente el episodio más alto de cada serie, que es el feed que necesita
+    el notificador.
+    """
+    res = await _get(urljoin(LATANIME_URL + '/', 'emision'))
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, 'html.parser')
+
+    fichas: dict[str, dict] = {}
+    for a_tag in soup.select('a[href]'):
+        ficha_url = urljoin(LATANIME_URL + '/', a_tag.get('href', '').strip())
+        parsed = urlparse(ficha_url)
+        if parsed.netloc != urlparse(LATANIME_URL).netloc or not parsed.path.startswith('/anime/'):
             continue
-        slug, ep_num = m.group(1), int(m.group(2))
-        t_attr = (a_tag.get('title') or '').strip()
-        t_find_el = a_tag.select_one('h3, h2, p, span, [class*="title"], [class*="name"]')
-        t_find = t_find_el.get_text(strip=True) if t_find_el else ''
-        t_slug = re.sub(r'-episodio$', '', slug, flags=re.IGNORECASE).replace('-', ' ').strip()
-        titulo = t_attr or t_find or t_slug
+        if ficha_url in fichas:
+            continue
+        titulo_el = a_tag.select_one('h3, h2, [class*="title"], [class*="name"]')
+        titulo = (titulo_el.get_text(' ', strip=True) if titulo_el else a_tag.get_text(' ', strip=True)).strip()
         img_el = a_tag.select_one('img')
         img_src = ''
         if img_el:
             img_src = (img_el.get('data-src') or img_el.get('data-lazy') or img_el.get('data-original')
-                       or img_el.get('data-lazy-src') or img_el.get('src') or '')
-        if not img_src or img_src.startswith('data:'):
-            img_url = ''
-        elif img_src.startswith('http'):
-            img_url = img_src
-        else:
-            img_url = LATANIME_URL + img_src
-        ep_url = href if href.startswith('http') else LATANIME_URL + href
-        norm_slug = re.sub(r'-episodio$', '', slug, flags=re.IGNORECASE)
-        norm_slug = re.sub(r'-(?:castellano|latino|espanol|español|esp|sub|dub|hd)$', '', norm_slug, flags=re.IGNORECASE)
-        norm_slug = re.sub(r'-episodio$', '', norm_slug, flags=re.IGNORECASE).lower()
-        eid = f"lat-{norm_slug}-{ep_num}"
-        idioma = 'castellano' if 'castellano' in href.lower() else 'latino'
-        if eid not in ids:
-            ids.add(eid)
-            lista.append({'id': eid, 'slug': slug, 'titulo': titulo, 'epNum': ep_num, 'epUrl': ep_url,
-                           'imgUrl': img_url, 'fuente': 'latanime', 'idioma': idioma})
+                       or img_el.get('data-lazy-src') or img_el.get('src') or '').strip()
+        img_url = '' if not img_src or img_src.startswith('data:') else urljoin(ficha_url, img_src)
+        slug = parsed.path.rstrip('/').split('/')[-1]
+        idioma = 'castellano' if re.search(r'castellano|espanol|español', ficha_url + ' ' + titulo, re.I) else 'latino'
+        fichas[ficha_url] = {'url': ficha_url, 'slug': slug, 'titulo': titulo or slug.replace('-', ' '), 'imgUrl': img_url, 'idioma': idioma}
+
+    sem = asyncio.Semaphore(8)
+
+    async def leer_ficha(ficha: dict) -> list[dict]:
+        async with sem:
+            try:
+                detalle = await _get(ficha['url'], headers={**HEADERS, 'Referer': LATANIME_URL + '/'})
+                detalle.raise_for_status()
+            except Exception as exc:
+                logger.debug('[tioanime-notify] No se pudo leer LatAnime %s: %s', ficha['url'], exc)
+                return []
+        detalle_soup = BeautifulSoup(detalle.text, 'html.parser')
+        episodios = []
+        for a_tag in detalle_soup.select('a[href]'):
+            ep_url = urljoin(ficha['url'], a_tag.get('href', '').strip())
+            ep_path = urlparse(ep_url).path
+            if urlparse(ep_url).netloc != urlparse(LATANIME_URL).netloc or not ep_path.startswith('/ver/'):
+                continue
+            match = re.search(r'-episodio-(\d+)(?:/)?$', ep_path, re.I)
+            if not match:
+                match = re.search(r'(?:-episodio|[-_])([0-9]+)(?:/)?$', ep_path, re.I)
+            if not match:
+                continue
+            ep_num = int(match.group(1))
+            texto = a_tag.get_text(' ', strip=True)
+            titulo = re.sub(r'\s*[-–—]?\s*(?:capitulo|episodio)\s*\d+\s*$', '', texto, flags=re.I).strip()
+            titulo = titulo or ficha['titulo']
+            episodios.append({'id': f"lat-{ficha['slug'].lower()}-{ep_num}", 'slug': ficha['slug'],
+                              'titulo': titulo, 'epNum': ep_num, 'epUrl': ep_url,
+                              'imgUrl': ficha['imgUrl'], 'fuente': 'latanime', 'idioma': ficha['idioma']})
+        unicos = {e['epNum']: e for e in episodios}
+        return [unicos[n] for n in sorted(unicos, reverse=True)[:1]]
+
+    resultados = await asyncio.gather(*(leer_ficha(f) for f in fichas.values()))
+    lista = [ep for grupo in resultados for ep in grupo]
+    lista.sort(key=lambda e: e['epNum'], reverse=True)
+    logger.info('[tioanime-notify] %s episodios recientes en LatAnime (%s fichas)', len(lista), len(fichas))
     return lista
 
 
@@ -440,8 +472,8 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
     urls_vistos = set()
 
     for a_tag in soup.select('a[href]'):
-        href = a_tag.get('href', '')
-        label = a_tag.get_text(strip=True).lower()
+        href = a_tag.get('href', '').strip()
+        label = a_tag.get_text(' ', strip=True).lower()
         if not href.startswith('http') or href in urls_vistos:
             continue
 
@@ -475,7 +507,7 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
             for d in dominios:
                 m = re.search(rf'https?://[^"\'\s]*{re.escape(d)}[^"\'\s]*', body)
                 if m:
-                    url_real = m.group(0)
+                    url_real = m.group(0).strip()
                     break
             if not url_real and final_url and any(d in final_url for d in dominios):
                 url_real = final_url
@@ -493,7 +525,7 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
                 srvs.pop(idx)
 
     for el in soup.select('[data-src], [data-player], [data-url], iframe[src]'):
-        raw = el.get('data-src') or el.get('data-player') or el.get('data-url') or el.get('src') or ''
+        raw = (el.get('data-src') or el.get('data-player') or el.get('data-url') or el.get('src') or '').strip()
         embed_url = raw
         try:
             import base64
