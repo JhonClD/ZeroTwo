@@ -15,6 +15,7 @@ from . import (
     drive_handler,
     enhance_handler,
     tioanime_notify_handler,
+    animeav1_notify_handler,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     'drive_handler',
     'enhance_handler',
     'tioanime_notify_handler',
+    'animeav1_notify_handler',
 ]

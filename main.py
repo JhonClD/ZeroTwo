@@ -123,6 +123,7 @@ from handlers import (
     drive_handler,
     enhance_handler,
     tioanime_notify_handler,
+    animeav1_notify_handler,
 )
 
 # Registrar handlers
@@ -138,6 +139,7 @@ url_handler.register(app, DOWNLOAD_DIR)
 drive_handler.register(app, user_states, DOWNLOAD_DIR)
 enhance_handler.register(app, user_states, WORK_DIR)
 tioanime_notify_handler.register(app, WORK_DIR)
+animeav1_notify_handler.register(app, WORK_DIR)
 
 
 if __name__ == "__main__":
