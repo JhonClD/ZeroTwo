@@ -18,11 +18,6 @@ def register(app):
 Puedo ayudarte con todo esto:
 
 ━━━━━━━━━━━━━━━━━━━━
-🎬 <b>PROCESAMIENTO DE VIDEO</b>
-━━━━━━━━━━━━━━━━━━━━
-/extract_audio  — Extraer audio MP3
-
-━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 /play           — YouTube audio

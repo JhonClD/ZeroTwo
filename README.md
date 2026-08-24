@@ -80,12 +80,6 @@ echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 
 ## 📖 Comandos
 
-### Procesamiento de Videos
-
-| Comando | Descripción |
-|---------|-------------|
-| `/extract_audio` | Extraer audio de un video |
-
 ### Descargas
 
 | Comando | Descripción |

@@ -12,12 +12,9 @@ Cada handler debe ser un módulo separado que exporte una función `register(app
 
 - `start_handler.py` - Comando /start
 - `help_handler.py` - Comando /help
-- `extract_audio_handler.py` - Comando /extract_audio
 - `download_handler.py` - Comando /download
 - `anime_handler.py` - Comando /anime
-- `video_handler.py` - Handler para videos
 - `url_handler.py` - Handler para URLs
-- `button_callback_handler.py` - Handler para botones inline
 
 ## 🔨 Ejemplo de Estructura
 

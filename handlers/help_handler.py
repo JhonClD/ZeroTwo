@@ -19,11 +19,6 @@ def register(app):
 🎬 <b>PROCESAMIENTO DE VIDEOS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣ Extraer Audio</b>
-├ /extract_audio
-├ Envía el video
-└ Recibe el audio en MP3 (192kbps)
-
 ━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
