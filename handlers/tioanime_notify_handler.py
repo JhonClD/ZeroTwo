@@ -37,7 +37,6 @@ from pyrogram import filters, enums
 from pyrogram.types import Message
 
 from downloaders import MEGADownloader, MediaFireDownloader
-from utils.video_processor import VideoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -158,47 +157,64 @@ async def _get(url: str, **kwargs) -> requests.Response:
     return await asyncio.to_thread(requests.get, url, **kwargs)
 
 
-async def _es_video(video_path: Path) -> bool:
-    """Detecta si el archivo tiene una pista de video real, sin fiarse solo
-    de la extensión (un .mp4 mal nombrado, o un archivo sin extensión que
-    igual es video, no debe caer en send_document sin duración/miniatura)."""
-    if video_path.suffix.lower() in {'.mp4', '.mkv', '.avi', '.mov', '.webm'}:
-        return True
-    try:
-        import subprocess as _sp
-        r = await asyncio.to_thread(
-            _sp.run,
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(video_path)],
-            capture_output=True, text=True, timeout=10
-        )
-        return r.returncode == 0 and 'video' in r.stdout
-    except Exception:
-        return False
-
-
 async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
-    """Duración (seg), thumbnail (jpg) y resolución del video, para que
-    Telegram muestre miniatura + duración reales en vez de 0:00.
-    Usa ffprobe/ffmpeg (VideoProcessor), que ya trae el proyecto."""
-    thumb_path = tmp_dir / 'thumb.jpg'
-    duration, thumb = await asyncio.to_thread(VideoProcessor.get_video_meta, str(video_path), str(thumb_path))
+    """Duración (seg), thumbnail (jpg) y resolución real del video.
 
-    width = height = 0
+    Telegram exige que el thumb sea JPEG, con el lado mayor <= 320px y
+    < 200 KB (https://docs.pyrogram.org/api/methods/send_video) — si no,
+    lo descarta en silencio y el cliente muestra un cuadro negro con 0:00,
+    que es justo lo que pasaba al generar la miniatura a resolución completa.
+    Por eso acá se escala con ffmpeg y se reintenta con más compresión si
+    el archivo sigue pesando de más.
+    """
+    import subprocess as _sp
+
+    duration = width = height = 0
     try:
-        import subprocess as _sp
         r = await asyncio.to_thread(
             _sp.run,
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=s=x:p=0", str(video_path)],
-            capture_output=True, text=True, timeout=10
+             "-show_entries", "stream=width,height:format=duration",
+             "-of", "json", str(video_path)],
+            capture_output=True, text=True, timeout=15
         )
-        if r.returncode == 0 and 'x' in r.stdout:
-            w, h = r.stdout.strip().split('x')
-            width, height = int(w), int(h)
+        data = json.loads(r.stdout or '{}')
+        streams = data.get('streams') or [{}]
+        width = int(streams[0].get('width') or 0)
+        height = int(streams[0].get('height') or 0)
+        duration = int(float(data.get('format', {}).get('duration') or 0))
     except Exception:
         pass
+
+    if width and width >= height:
+        scale = 'scale=320:-2'
+    elif width:
+        scale = 'scale=-2:320'
+    else:
+        scale = "scale='min(320,iw)':-2"
+
+    mid = max(1, duration // 2) if duration else 5
+    thumb_path = tmp_dir / 'thumb.jpg'
+    thumb = None
+
+    for quality in (4, 8, 14, 20):  # sube compresión si el jpg sigue pesando > 200KB
+        try:
+            await asyncio.to_thread(
+                _sp.run,
+                ["ffmpeg", "-y", "-ss", str(mid), "-i", str(video_path),
+                 "-vframes", "1", "-vf", scale, "-q:v", str(quality),
+                 str(thumb_path)],
+                capture_output=True, timeout=20
+            )
+        except Exception:
+            continue
+        if thumb_path.exists() and thumb_path.stat().st_size > 0:
+            if thumb_path.stat().st_size <= 200 * 1024:
+                thumb = str(thumb_path)
+                break
+    if not thumb and thumb_path.exists() and thumb_path.stat().st_size > 0:
+        # último recurso: usarlo aunque supere levemente los 200 KB
+        thumb = str(thumb_path)
 
     return duration, thumb, width, height
 
@@ -553,30 +569,20 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 
         logger.info(f"[tioanime-notify] Buscando servidores para \"{titulo}\" ep {ep_num}...")
         srvs = (await scrape_servidores_latanime(ep_url)) if fuente == 'latanime' else (await scrape_servidores(ep_url))
-        logger.info(f"[tioanime-notify] {len(srvs)} servidor(es) detectados en {ep_url}: "
-                    f"{[s['nombre'] for s in srvs]}")
         if not srvs:
-            raise RuntimeError(
-                f"No se encontraron servidores en la página del episodio "
-                f"(posible bloqueo/cambio de estructura de {fuente})."
-            )
+            raise RuntimeError('No se encontraron servidores')
 
         await asyncio.sleep(15)
         orden = ordenar_servidores(srvs, fuente)[:5]
-        soportados = [s for s in orden if s['nombre'] in ('mega', 'mediafire')]
         video_path = None
-        errores = []
 
-        if not soportados:
-            raise RuntimeError(
-                f"Ningún servidor soportado (mega/mediafire) para este episodio. "
-                f"Disponibles: {[s['nombre'] for s in orden]}"
-            )
-
-        for srv in soportados:
+        for srv in orden:
             nombre_servidor = (srv.get('nombre') or 'servidor').upper()
+            # Igual que el JS: solo mega y mediafire tienen soporte de descarga.
+            if srv['nombre'] not in ('mega', 'mediafire'):
+                continue
             try:
-                logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ] → {srv['url'][:80]}")
+                logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ]...")
                 if srv['nombre'] == 'mega':
                     ok, fpath, err = await MEGADownloader.download(srv['url'], tmp_dir)
                 else:
@@ -587,10 +593,8 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                     break
                 else:
                     logger.info(f"[tioanime-notify] [ {nombre_servidor} ] falló: {err}")
-                    errores.append(f"{nombre_servidor}: {err}")
             except Exception as e:
                 logger.info(f"[tioanime-notify] [ {nombre_servidor} ] falló: {e}")
-                errores.append(f"{nombre_servidor}: {e}")
 
             for f in tmp_dir.glob('*'):
                 if f.name != 'cover.jpg':
@@ -600,23 +604,17 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                         pass
 
         if not video_path:
-            detalle = ' | '.join(errores) if errores else 'sin detalle'
-            raise RuntimeError(f"Todos los servidores fallaron → {detalle}")
+            raise RuntimeError('Todos los servidores fallaron')
 
         size_mb = video_path.stat().st_size / 1024 / 1024
         logger.info(f"[tioanime-notify] Descarga completa: {file_name} ({size_mb:.1f} MB) — subiendo a Telegram...")
 
         final_caption = f"✅ <b>{titulo}</b>\n📌 Episodio {zero_pad(ep_num)}\n📦 {size_mb:.1f} MB · {etiqueta}"
-        if await _es_video(video_path):
+        video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
+        if video_path.suffix.lower() in video_exts:
             # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
             # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
             duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
-            if not duration or not thumb:
-                logger.warning(
-                    f"[tioanime-notify] ffprobe/ffmpeg no devolvió metadata completa "
-                    f"para {video_path.name} (duration={duration}, thumb={thumb}) "
-                    f"— revisa que ffmpeg/ffprobe estén instalados y en PATH."
-                )
             await client.send_video(
                 chat_id, str(video_path), caption=final_caption,
                 parse_mode=enums.ParseMode.HTML, supports_streaming=True,
@@ -799,7 +797,20 @@ def register(app, work_dir: Path):
     SEEN_FILE = db_dir / 'tioanime_seen.json'
     STATE_FILE = db_dir / 'tioanime_state.json'
 
-    restaurar_notificadores(app)
+    # NOTA: no llamamos restaurar_notificadores() acá directamente, porque
+    # register() se ejecuta ANTES de que arranque el loop de asyncio
+    # (main.py llama app.loop.run_until_complete(...) recién al final).
+    # asyncio.create_task()/loop.create_task() en ese punto puede fallar
+    # ("no running event loop") según la versión de Python/Pyrogram.
+    # En vez de eso, restauramos los notificadores en cada update entrante
+    # (igual que el handler.before del plugin original de WhatsApp);
+    # iniciar_notificador() ya evita duplicar tasks si el chat ya está activo.
+    @app.on_message(filters.all, group=-1)
+    async def _tio_bootstrap(client, message: Message):
+        try:
+            restaurar_notificadores(client)
+        except Exception as e:
+            logger.error(f"[tioanime-notify] Error restaurando notificadores: {e}")
 
     async def _guard_owner(message: Message, command: str) -> bool:
         if command in COMANDOS_OWNER and not _is_owner(message.from_user.id):
