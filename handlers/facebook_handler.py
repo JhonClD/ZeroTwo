@@ -3,16 +3,71 @@ facebook_handler.py - Manejador de descargas de Facebook
 Usa múltiples APIs con sistema de fallback
 """
 
+import asyncio
 import json
 import logging
 import subprocess
 import re
 from pathlib import Path
+from urllib.parse import quote
+
+import requests
+from bs4 import BeautifulSoup
 from pyrogram import filters, enums
 from pyrogram.types import Message
-from utils.loader_to import LoaderToError, download_url as loader_download_url
+from utils import VideoProcessor
 
 logger = logging.getLogger(__name__)
+
+
+PUBLIC_FB_APIS = (
+    "https://eliasar-yt-api.vercel.app/api/facebookdl?link={url}",
+    "https://api.vreden.my.id/api/facebook?url={url}",
+)
+
+
+def _scrape_facebook_page(fb_link):
+    """Extrae video y título desde metadatos públicos de una página de Facebook."""
+    response = requests.get(
+        fb_link,
+        headers={"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36"},
+        timeout=25,
+        allow_redirects=True,
+    )
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    video_url = None
+    for prop in ("og:video", "og:video:url", "og:video:secure_url"):
+        tag = soup.find("meta", property=prop)
+        if tag and tag.get("content", "").startswith("http"):
+            video_url = tag["content"]
+            break
+    title_tag = soup.find("meta", property="og:title")
+    title = title_tag.get("content") if title_tag else None
+    return video_url, title
+
+
+def _extract_public_api_url(api_data):
+    """Busca recursivamente una URL de video en respuestas públicas variables."""
+    if isinstance(api_data, dict):
+        for key in ("url", "download", "hd", "sd", "video"):
+            value = api_data.get(key)
+            if isinstance(value, dict):
+                found = _extract_public_api_url(value)
+                if found:
+                    return found, api_data.get("title") or api_data.get("name")
+            elif isinstance(value, str) and value.startswith("http"):
+                return value, api_data.get("title") or api_data.get("name")
+        for value in api_data.values():
+            found = _extract_public_api_url(value)
+            if found:
+                return found
+    elif isinstance(api_data, list):
+        for value in api_data:
+            found = _extract_public_api_url(value)
+            if found:
+                return found
+    return None, None
 
 
 def register(app, download_dir):
@@ -50,55 +105,37 @@ def register(app, download_dir):
             video_url = None
             video_title = None
 
-            # loader.to soporta Facebook y es la primera opción.
+            # Primera opción: scraping de metadatos públicos de Facebook.
             try:
-                logger.info("🔄 Intentando loader.to para Facebook...")
-                video_url, video_title = await loader_download_url(fb_link, "720")
-                logger.info("✅ loader.to devolvió una URL de Facebook")
-            except LoaderToError as error:
-                logger.warning(f"⚠️ loader.to no disponible: {error}")
+                logger.info("🔎 Scrapeando metadatos públicos de Facebook...")
+                video_url, video_title = await asyncio.to_thread(_scrape_facebook_page, fb_link)
+                if video_url:
+                    logger.info("✅ Video encontrado mediante scraping")
+            except requests.RequestException as error:
+                logger.warning(f"⚠️ Scraping de Facebook falló: {error}")
 
-            # APIs públicas de respaldo, sin depender de una sola plataforma.
+            # APIs públicas de respaldo.
             if not video_url:
-                encoded_url = fb_link.replace('&', '%26').replace('=', '%3D').replace('?', '%3F')
-                apis = [
-                    f"https://eliasar-yt-api.vercel.app/api/facebookdl?link={encoded_url}",
-                    f"https://api.vreden.my.id/api/facebook?url={encoded_url}",
-                ]
-                for i, api in enumerate(apis, 1):
+                encoded_url = quote(fb_link, safe="")
+                for i, api_template in enumerate(PUBLIC_FB_APIS, 1):
                     try:
+                        api = api_template.format(url=encoded_url)
                         logger.info(f"🔄 Intentando API pública #{i}...")
-                        result = subprocess.run(
-                            ['curl', '-sS', '-L', '--max-time', '30', api],
-                            capture_output=True, text=True, timeout=35,
+                        result = requests.get(
+                            api,
+                            headers={"User-Agent": "ZeroTwoBot/1.0"},
+                            timeout=30,
                         )
-                        if result.returncode != 0:
-                            continue
-                        api_data = json.loads(result.stdout)
-                        candidates = [api_data]
-                        if isinstance(api_data, dict):
-                            candidates.extend([
-                                api_data.get('data'), api_data.get('result'), api_data.get('resultado')
-                            ])
-                        for candidate in candidates:
-                            if isinstance(candidate, list):
-                                candidates.extend(candidate)
-                            elif isinstance(candidate, dict):
-                                candidate_url = candidate.get('url') or candidate.get('download')
-                                if isinstance(candidate_url, dict):
-                                    candidate_url = candidate_url.get('url')
-                                if isinstance(candidate_url, str) and candidate_url.startswith('http'):
-                                    video_url = candidate_url
-                                    video_title = candidate.get('title') or candidate.get('name')
-                                    break
+                        result.raise_for_status()
+                        video_url, video_title = _extract_public_api_url(result.json())
                         if video_url:
                             logger.info(f"✅ API pública #{i} exitosa")
                             break
-                    except (json.JSONDecodeError, subprocess.TimeoutExpired, Exception) as error:
+                    except (requests.RequestException, ValueError, json.JSONDecodeError) as error:
                         logger.warning(f"⚠️ API pública #{i} falló: {error}")
 
             if not video_url:
-                raise Exception("No se pudo extraer el video con loader.to ni APIs públicas.")
+                raise Exception("No se pudo extraer el video mediante scraping ni APIs públicas.")
             
             logger.info(f"✅ URL de descarga obtenida: {video_url[:60]}...")
             
