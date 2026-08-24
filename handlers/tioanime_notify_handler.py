@@ -384,74 +384,59 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
 # ─── Scraping — LatAnime ──────────────────────────────────────────────────────
 
 async def fetch_latest_episodes_latanime() -> list[dict]:
-    """Obtiene los últimos episodios publicados en LatAnime.
+    """Extrae las tarjetas de episodios recientes directamente de LatAnime.
 
-    LatAnime ya no publica los episodios directamente en la portada: ``/emision``
-    contiene tarjetas ``/anime/...`` y cada ficha contiene los enlaces reales
-    ``/ver/...-episodio-N``. Se consulta la ficha de cada tarjeta y se conserva
-    solamente el episodio más alto de cada serie, que es el feed que necesita
-    el notificador.
+    La portada publica los episodios en enlaces ``/ver/...-episodio-N``. Se
+    recorren esos enlaces en el orden en que aparecen en el HTML, igual que el
+    bloque «Añadidos recientemente» que ve el usuario; no se visitan fichas de
+    anime ni se reordena la lista por número de episodio.
     """
-    res = await _get(urljoin(LATANIME_URL + '/', 'emision'))
+    res = await _get(LATANIME_URL + '/')
     res.raise_for_status()
     soup = BeautifulSoup(res.text, 'html.parser')
+    lista: list[dict] = []
+    ids: set[str] = set()
+    dominio = urlparse(LATANIME_URL).netloc
 
-    fichas: dict[str, dict] = {}
     for a_tag in soup.select('a[href]'):
-        ficha_url = urljoin(LATANIME_URL + '/', a_tag.get('href', '').strip())
-        parsed = urlparse(ficha_url)
-        if parsed.netloc != urlparse(LATANIME_URL).netloc or not parsed.path.startswith('/anime/'):
+        ep_url = urljoin(LATANIME_URL + '/', a_tag.get('href', '').strip())
+        parsed = urlparse(ep_url)
+        if parsed.netloc != dominio or not parsed.path.startswith('/ver/'):
             continue
-        if ficha_url in fichas:
+        match = re.search(r'/ver/(.+?)-episodio-(\d+)/?$', parsed.path, re.I)
+        if not match:
             continue
-        titulo_el = a_tag.select_one('h3, h2, [class*="title"], [class*="name"]')
-        titulo = (titulo_el.get_text(' ', strip=True) if titulo_el else a_tag.get_text(' ', strip=True)).strip()
-        img_el = a_tag.select_one('img')
+        slug, ep_num_text = match.groups()
+        ep_num = int(ep_num_text)
+        eid = f'lat-{slug.lower()}-{ep_num}'
+        if eid in ids:
+            continue
+
+        # En las tarjetas actuales la imagen usa data-src; src es solo el
+        # placeholder lazy-loading. Se busca en la tarjeta/artículo cercano.
+        tarjeta = a_tag.find_parent(['article', 'li', 'div']) or a_tag
+        img_el = tarjeta.select_one('img')
         img_src = ''
         if img_el:
-            img_src = (img_el.get('data-src') or img_el.get('data-lazy') or img_el.get('data-original')
-                       or img_el.get('data-lazy-src') or img_el.get('src') or '').strip()
-        img_url = '' if not img_src or img_src.startswith('data:') else urljoin(ficha_url, img_src)
-        slug = parsed.path.rstrip('/').split('/')[-1]
-        idioma = 'castellano' if re.search(r'castellano|espanol|español', ficha_url + ' ' + titulo, re.I) else 'latino'
-        fichas[ficha_url] = {'url': ficha_url, 'slug': slug, 'titulo': titulo or slug.replace('-', ' '), 'imgUrl': img_url, 'idioma': idioma}
+            img_src = (img_el.get('data-src') or img_el.get('data-lazy') or
+                       img_el.get('data-original') or img_el.get('src') or '').strip()
+        img_url = '' if not img_src or img_src.startswith('data:') else urljoin(ep_url, img_src)
 
-    sem = asyncio.Semaphore(8)
+        texto = a_tag.get_text(' ', strip=True)
+        titulo = re.sub(r'^.*?Episodio\s+\d+\s*[-–—]\s*', '', texto, flags=re.I).strip()
+        if not titulo:
+            titulo = re.sub(r'\s*[-–—]?\s*(?:capitulo|episodio)\s*\d+.*$', '', texto, flags=re.I).strip()
+        # La tarjeta incluye también la fecha (p. ej. «23 Ago 2026»).
+        titulo = re.sub(r'\s+\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóú]+\s+\d{4}\s*$', '', titulo).strip()
+        titulo = titulo or slug.replace('-', ' ')
+        idioma = 'castellano' if re.search(r'castellano|espanol|español', texto + ' ' + parsed.path, re.I) else 'latino'
 
-    async def leer_ficha(ficha: dict) -> list[dict]:
-        async with sem:
-            try:
-                detalle = await _get(ficha['url'], headers={**HEADERS, 'Referer': LATANIME_URL + '/'})
-                detalle.raise_for_status()
-            except Exception as exc:
-                logger.debug('[tioanime-notify] No se pudo leer LatAnime %s: %s', ficha['url'], exc)
-                return []
-        detalle_soup = BeautifulSoup(detalle.text, 'html.parser')
-        episodios = []
-        for a_tag in detalle_soup.select('a[href]'):
-            ep_url = urljoin(ficha['url'], a_tag.get('href', '').strip())
-            ep_path = urlparse(ep_url).path
-            if urlparse(ep_url).netloc != urlparse(LATANIME_URL).netloc or not ep_path.startswith('/ver/'):
-                continue
-            match = re.search(r'-episodio-(\d+)(?:/)?$', ep_path, re.I)
-            if not match:
-                match = re.search(r'(?:-episodio|[-_])([0-9]+)(?:/)?$', ep_path, re.I)
-            if not match:
-                continue
-            ep_num = int(match.group(1))
-            texto = a_tag.get_text(' ', strip=True)
-            titulo = re.sub(r'\s*[-–—]?\s*(?:capitulo|episodio)\s*\d+\s*$', '', texto, flags=re.I).strip()
-            titulo = titulo or ficha['titulo']
-            episodios.append({'id': f"lat-{ficha['slug'].lower()}-{ep_num}", 'slug': ficha['slug'],
-                              'titulo': titulo, 'epNum': ep_num, 'epUrl': ep_url,
-                              'imgUrl': ficha['imgUrl'], 'fuente': 'latanime', 'idioma': ficha['idioma']})
-        unicos = {e['epNum']: e for e in episodios}
-        return [unicos[n] for n in sorted(unicos, reverse=True)[:1]]
+        ids.add(eid)
+        lista.append({'id': eid, 'slug': slug, 'titulo': titulo, 'epNum': ep_num,
+                      'epUrl': ep_url, 'imgUrl': img_url, 'fuente': 'latanime',
+                      'idioma': idioma})
 
-    resultados = await asyncio.gather(*(leer_ficha(f) for f in fichas.values()))
-    lista = [ep for grupo in resultados for ep in grupo]
-    lista.sort(key=lambda e: e['epNum'], reverse=True)
-    logger.info('[tioanime-notify] %s episodios recientes en LatAnime (%s fichas)', len(lista), len(fichas))
+    logger.info('[tioanime-notify] %s episodios en el orden de «Añadidos recientemente» de LatAnime', len(lista))
     return lista
 
 
@@ -1018,7 +1003,7 @@ def register(app, work_dir: Path):
             cantidad = min(max(int(args[1].strip()), 1), 10) if len(args) > 1 else 1
         except ValueError:
             cantidad = 1
-        await message.reply_text(f"🔍 Obteniendo los <b>{cantidad}</b> episodio(s) más reciente(s) de <b>LatAnime</b>...", parse_mode=enums.ParseMode.HTML)
+        await message.reply_text(f"🔍 Obteniendo los primeros <b>{cantidad}</b> episodios mostrados por <b>LatAnime</b>...", parse_mode=enums.ParseMode.HTML)
         try:
             lista = await fetch_latest_episodes_latanime()
             if not lista:
@@ -1030,7 +1015,7 @@ def register(app, work_dir: Path):
 
         seleccion = lista[:cantidad]
         if len(seleccion) > 1:
-            txt = f"📋 <b>{len(seleccion)} episodios seleccionados (LatAnime):</b>\n\n" + \
+            txt = f"📋 <b>Primeros {len(seleccion)} elementos de LatAnime:</b>\n\n" + \
                 "\n".join(f"{i + 1}. <b>{e['titulo']}</b> — Ep {zero_pad(e['epNum'])}" for i, e in enumerate(seleccion)) + \
                 "\n\n⏳ <i>Se enviarán de uno en uno...</i>"
             await message.reply_text(txt, parse_mode=enums.ParseMode.HTML)
