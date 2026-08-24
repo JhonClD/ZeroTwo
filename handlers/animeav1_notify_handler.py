@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import time
+import subprocess
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -89,6 +90,48 @@ def _safe_file(value):
 
 def _episode_id(slug, number):
     return f'animeav1-{slug.lower()}-{number}'
+
+
+async def _video_metadata(video_path: Path, temp_dir: Path):
+    """Devuelve duración/resolución y genera una miniatura pequeña para Telegram."""
+    duration = width = height = 0
+    try:
+        probe = await asyncio.to_thread(
+            subprocess.run,
+            ['ffprobe', '-v', 'error', '-show_entries',
+             'format=duration:stream=codec_type,duration,width,height',
+             '-of', 'json', str(video_path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if probe.returncode == 0:
+            data = json.loads(probe.stdout or '{}')
+            stream = next((item for item in data.get('streams', [])
+                           if item.get('codec_type') == 'video'), {})
+            width = int(float(stream.get('width') or 0))
+            height = int(float(stream.get('height') or 0))
+            raw_duration = data.get('format', {}).get('duration') or stream.get('duration') or 0
+            duration = max(0, int(round(float(raw_duration))))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
+        logger.warning('[animeav1-notify] No se pudieron leer metadatos de %s: %s', video_path, error)
+
+    thumb_path = temp_dir / 'animeav1_thumb.jpg'
+    scale = 'scale=320:-2' if width >= height else 'scale=-2:320'
+    seek = max(1, duration // 2) if duration else 1
+    for quality in (5, 10, 16, 23):
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ['ffmpeg', '-y', '-v', 'error', '-ss', str(seek), '-i', str(video_path),
+                 '-frames:v', '1', '-vf', scale, '-q:v', str(quality),
+                 '-f', 'image2', '-pix_fmt', 'yuvj420p', str(thumb_path)],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0 and thumb_path.exists() and thumb_path.stat().st_size <= 200 * 1024:
+                return duration, width, height, thumb_path
+        except (OSError, subprocess.TimeoutExpired) as error:
+            logger.warning('[animeav1-notify] No se pudo crear miniatura: %s', error)
+            break
+    return duration, width, height, None
 
 
 def _is_owner(message):
@@ -222,7 +265,22 @@ async def _send_episode(chat_id, episode, client):
 
         if not video:
             raise RuntimeError('No se pudo descargar desde Mega o MediaFire')
-        await client.send_video(chat_id, str(video), caption=f'🇪🇸 <b>{title}</b> — Episodio {number}', parse_mode=enums.ParseMode.HTML)
+
+        duration, width, height, thumb = await _video_metadata(video, temp_dir)
+        send_kwargs = {
+            'caption': f'🇪🇸 <b>{title}</b> — Episodio {number}',
+            'parse_mode': enums.ParseMode.HTML,
+            'supports_streaming': True,
+        }
+        if duration:
+            send_kwargs['duration'] = duration
+        if width:
+            send_kwargs['width'] = width
+        if height:
+            send_kwargs['height'] = height
+        if thumb:
+            send_kwargs['thumb'] = str(thumb)
+        await client.send_video(chat_id, str(video), **send_kwargs)
     finally:
         for item in temp_dir.glob('*'):
             try:
