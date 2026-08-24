@@ -15,6 +15,18 @@ from utils.loader_to import LoaderToError, download_url as loader_download_url
 logger = logging.getLogger(__name__)
 
 
+async def _safe_edit(message: Message, text: str, **kwargs):
+    """Edita un mensaje sin fallar si Telegram ya contiene el mismo texto."""
+    if getattr(message, "text", None) == text:
+        return
+    try:
+        await message.edit_text(text, **kwargs)
+    except Exception as error:
+        if "MESSAGE_NOT_MODIFIED" not in str(error):
+            raise
+        logger.debug("Mensaje de estado sin cambios; se ignora MESSAGE_NOT_MODIFIED")
+
+
 def register(app, download_dir):
     """Registra el handler de Facebook"""
     
@@ -57,7 +69,7 @@ def register(app, download_dir):
             logger.info(f"✅ URL de descarga obtenida: {video_url[:60]}...")
             
             # Descargar video primero (Telegram no puede acceder directo a algunas URLs)
-            await status_msg.edit_text("📥 Descargando video...")
+            await _safe_edit(status_msg, "📥 Descargando video...")
             
             output_file = download_dir / f"fb_{message.from_user.id}.mp4"
             
@@ -72,7 +84,7 @@ def register(app, download_dir):
             logger.info(f"✅ Video descargado: {file_size:.2f} MB")
             
             # Enviar video desde archivo local
-            await status_msg.edit_text("📤 Enviando video...")
+            await _safe_edit(status_msg, "📤 Enviando video...")
             
             caption = f"✅ <b>Video de Facebook</b>"
             if video_title:
@@ -110,8 +122,8 @@ def register(app, download_dir):
             
         except subprocess.TimeoutExpired:
             logger.error("⏱️ Timeout en descarga de Facebook")
-            await status_msg.edit_text("⏱️ La descarga tardó demasiado. Intenta de nuevo.")
+            await _safe_edit(status_msg, "⏱️ La descarga tardó demasiado. Intenta de nuevo.")
             
         except Exception as e:
             logger.error(f"❌ Error: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ <b>Error:</b> {str(e)}", parse_mode=enums.ParseMode.HTML)
+            await _safe_edit(status_msg, f"❌ <b>Error:</b> {str(e)}", parse_mode=enums.ParseMode.HTML)
