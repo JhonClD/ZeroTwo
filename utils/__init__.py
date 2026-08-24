@@ -1,7 +1,3 @@
-"""
-Utils - Utilidades para el bot
-"""
+"""Utilidades generales de ZeroTwo."""
 
-from .video_processor import VideoProcessor
-
-__all__ = ['VideoProcessor']
+__all__ = []

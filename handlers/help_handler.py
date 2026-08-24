@@ -16,49 +16,29 @@ def register(app):
         help_text = """📖 <b>Ayuda Detallada</b>
 
 ━━━━━━━━━━━━━━━━━━━━
-🎬 <b>PROCESAMIENTO DE VIDEOS</b>
-━━━━━━━━━━━━━━━━━━━━
-
-<b>1️⃣ Compresión y encoding</b>
-├ Envía un video o documento de video
-├ Elige formato y resolución
-├ Selecciona perfil: Pequeño, Equilibrado, Alta calidad o H.265/HEVC
-└ FFmpeg procesa con duración, miniatura y progreso
-
-<b>2️⃣ Subtítulos y pistas</b>
-├ Responde a un video para gestionar audio/subtítulos internos
-├ Compatible con SRT, ASS y VTT
-└ Permite incrustar subtítulos mediante FFmpeg
-
-<b>3️⃣ Extraer Audio</b>
-├ /extract_audio
-├ Envía el video
-└ Recibe el audio en MP3 (192kbps)
-
-━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>6️⃣ YouTube</b>
+<b>1️⃣ YouTube</b>
 ├ /play &lt;nombre&gt; — Audio MP3
 ├ /play2 &lt;nombre&gt; — Video MP4
 ├ /playaudio &lt;nombre&gt; — Nota de voz
 ├ /ytmp3 &lt;url&gt; — Audio desde URL
 └ /ytmp4 &lt;url&gt; — Video desde URL
 
-<b>7️⃣ Facebook</b>
+<b>2️⃣ Facebook</b>
 ├ /fb &lt;url&gt;
 └ Ejemplo: /fb https://facebook.com/watch/?v=12345
 
-<b>8️⃣ Twitter / X</b>
+<b>3️⃣ Twitter / X</b>
 ├ /x &lt;url&gt;
 └ Descarga videos y fotos
 
-<b>9️⃣ TikTok</b>
+<b>4️⃣ TikTok</b>
 ├ /tiktok &lt;url&gt; — Sin marca de agua, calidad HD
 └ Alias: /ttdl /tt /tiktoknowm
 
-<b>🔟 MEGA / MediaFire / Google Drive</b>
+<b>5️⃣ MEGA / MediaFire / Google Drive</b>
 ├ Pega el enlace directamente o usa:
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
@@ -69,7 +49,7 @@ def register(app):
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣1️⃣ Mejorar Imagen con IA</b>
+<b>6️⃣ Mejorar Imagen con IA</b>
 ├ /enhance, /hd o /remini
 ├ Envía la foto con el comando como caption
 ├ O responde a una foto con el comando
@@ -80,7 +60,7 @@ def register(app):
 🔔 <b>NOTIFICACIONES DE ANIME</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣2️⃣ Notificaciones de Streaming</b>
+<b>7️⃣ Notificaciones de Streaming</b>
 ├ /notify on           — Activar notificaciones
 ├ /notify off          — Desactivar
 ├ /notify status       — Ver estado actual
@@ -95,21 +75,16 @@ def register(app):
 🔍 <b>BÚSQUEDA</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣3️⃣ Buscar Anime</b>
+<b>8️⃣ Buscar Anime</b>
 ├ /anime &lt;nombre&gt;
 ├ Info completa: estudio, géneros, sinopsis traducida
 └ Ejemplo: /anime Berserk
 
 ━━━━━━━━━━━━━━━━━━━━
-📋 <b>FORMATOS SOPORTADOS</b>
+⚠️ <b>NOTA</b>
 ━━━━━━━━━━━━━━━━━━━━
-• <b>Video:</b> MP4, MKV, AVI, MOV, WEBM
-• <b>Audio:</b> MP3, M4A, WAV, OGG, FLAC
-• <b>Subtítulos:</b> SRT, ASS, VTT
-• <b>Imagen:</b> JPG, PNG
+Los archivos se descargan y se envían sin compresión ni edición multimedia.
 
-<b>⚠️ Límite Telegram:</b> 2GB por archivo
-
-<b>💡 Tip:</b> Todos los videos descargados muestran un preview con screenshots automáticos 📸"""
+<b>⚠️ Límite Telegram:</b> 2GB por archivo"""
 
         await message.reply_text(help_text, parse_mode=enums.ParseMode.HTML)

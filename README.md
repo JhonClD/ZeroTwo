@@ -80,12 +80,6 @@ echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 
 ## 📖 Comandos
 
-### Procesamiento de Videos
-
-| Comando | Descripción |
-|---------|-------------|
-| `/extract_audio` | Extraer audio de un video |
-
 ### Descargas
 
 | Comando | Descripción |
@@ -168,11 +162,7 @@ pkg install aria2  # Instalar aria2c para descargas 10x más rápidas
 
 ## 🌐 Descargas sociales
 
-Las descargas de YouTube y Facebook utilizan exclusivamente el flujo público de `loader.to` y consultan su progreso hasta obtener el enlace final. En Facebook, el bot consulta las calidades disponibles, las muestra mediante botones y descarga la opción elegida; si loader.to no devuelve calidades, utiliza 720p como valor predeterminado. El servicio puede cambiar sus endpoints o limitar solicitudes; el bot informa el error y no guarda credenciales privadas en el repositorio.
-
-## 🎛️ Perfiles de encoding
-
-Al comprimir un video, ZeroTwo permite elegir resolución y perfil. `Pequeño` prioriza el tamaño con CRF 28 y preset `veryfast`; `Equilibrado` usa CRF 23 y preset `medium`; `Alta calidad` usa CRF 20 y preset `slow`; y `H.265 / HEVC` ofrece mayor eficiencia con el codec `libx265`. Todos los perfiles generan salida compatible con Telegram, incluyen audio AAC y tienen un límite de ejecución FFmpeg de 20 minutos.
+Las descargas de YouTube y Facebook utilizan exclusivamente el flujo público de `loader.to` y consultan su progreso hasta obtener el enlace final. Facebook utiliza 720p como formato predeterminado. El servicio puede cambiar sus endpoints o limitar solicitudes; el bot informa el error y no guarda credenciales privadas en el repositorio.
 
 ## 📝 Logs
 
