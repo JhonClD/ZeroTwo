@@ -213,7 +213,7 @@ async def scrape_servers(ep_url: str) -> list[dict]:
 
 
 def _ordered_servers(servers):
-    priority = {'mega': 0, 'mediafire': 1}
+    priority = {'mediafire': 0, 'mega': 1}
     return sorted(servers, key=lambda item: (not item.get('directo', False), priority.get(item['nombre'], 99)))
 
 
