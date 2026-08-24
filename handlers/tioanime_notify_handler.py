@@ -14,7 +14,7 @@ servidores/embeds se detectan pero se saltan, igual que en el original).
 Comandos (mismos nombres que el JS):
   /tiostart [min]   /tiostop     /tiostatus   /tiocheck
   /tioqueue         /tioflush    /tiounblock  /tiointerval <min>
-  /tioexample [N]   /latexample [N]
+  /tioexample [N]   /latexample [N]   /aav1example [N]
 
 Comandos "owner-only" (tiostart, tiostop, tiointerval, tioflush, tiounblock):
   Restringidos vía la lista OWNER_IDS (variable de entorno TIOANIME_OWNER_IDS,
@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 TIOANIME_URL = 'https://tioanime.com'
 LATANIME_URL = 'https://latanime.org'
+ANIMEAV1_URL = 'https://animeav1.com'
 
 CHECK_INTERVAL_DEFAULT = 10      # minutos
 QUEUE_DELAY            = 90      # segundos entre ítems de la cola
@@ -381,6 +382,87 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
     return srvs
 
 
+# ─── Scraping — AnimeAV1 ──────────────────────────────────────────────────────
+
+async def fetch_latest_episodes_animeav1() -> list[dict]:
+    """Extrae los episodios recientes publicados en la portada de AnimeAV1."""
+    res = await _get(ANIMEAV1_URL + '/')
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, 'html.parser')
+    lista: list[dict] = []
+    ids: set[str] = set()
+    dominio = urlparse(ANIMEAV1_URL).netloc
+
+    for a_tag in soup.select('a[href^="/media/"]'):
+        href = a_tag.get('href', '').strip()
+        parsed = urlparse(urljoin(ANIMEAV1_URL + '/', href))
+        match = re.match(r'^/media/([^/]+)/([0-9]+)$', parsed.path)
+        if parsed.netloc != dominio or not match:
+            continue
+        slug, ep_num_text = match.groups()
+        ep_num = int(ep_num_text)
+        eid = f'av1-{slug.lower()}-{ep_num}'
+        if eid in ids:
+            continue
+
+        # El enlace puede estar dentro de una tarjeta con la miniatura CDN.
+        tarjeta = a_tag.find_parent(['article', 'li', 'div']) or a_tag
+        img_el = tarjeta.select_one('img')
+        img_src = ''
+        if img_el:
+            img_src = (img_el.get('data-src') or img_el.get('data-lazy') or
+                       img_el.get('data-original') or img_el.get('src') or '').strip()
+        img_url = '' if not img_src or img_src.startswith('data:') else urljoin(parsed.geturl(), img_src)
+
+        texto = a_tag.get_text(' ', strip=True)
+        titulo = re.sub(r'^.*?Ver\s+', '', texto, flags=re.I).strip()
+        titulo = re.sub(r'\s+\d+\s*$', '', titulo).strip()
+        titulo = titulo or slug.replace('-', ' ')
+        ids.add(eid)
+        lista.append({'id': eid, 'slug': slug, 'titulo': titulo, 'epNum': ep_num,
+                      'epUrl': parsed.geturl(), 'imgUrl': img_url,
+                      'fuente': 'animeav1', 'idioma': 'castellano'})
+
+    logger.info('[tioanime-notify] %s episodios en portada de AnimeAV1', len(lista))
+    return lista
+
+
+async def scrape_servidores_animeav1(ep_url: str) -> list[dict]:
+    """Lee embeds/downloads de AnimeAV1 desde el objeto JS de la ficha."""
+    res = await _get(ep_url, headers={**HEADERS, 'Referer': ANIMEAV1_URL})
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, 'html.parser')
+    srvs: list[dict] = []
+    vistos: set[str] = set()
+
+    def push(nombre: str, url: str, directo: bool):
+        if url.startswith('http') and url not in vistos:
+            vistos.add(url)
+            srvs.append({'nombre': nombre.lower(), 'url': url, 'directo': directo})
+
+    for script in soup.find_all('script'):
+        code = script.string or script.get_text() or ''
+        # AnimeAV1 expone downloads/embeds como arrays JS dentro del estado de la página.
+        for bloque, directo in ((r'downloads\s*:\s*\{\s*SUB\s*:\s*\[(.*?)\]\s*\}', True),
+                                (r'embeds\s*:\s*\{\s*SUB\s*:\s*\[(.*?)\]\s*\}', False)):
+            match = re.search(bloque, code, re.S)
+            if not match:
+                continue
+            for item in re.finditer(r'server\s*:\s*["\']([^"\']+)["\']\s*,\s*url\s*:\s*["\']([^"\']+)', match.group(1)):
+                nombre, url = item.groups()
+                es_descargable = nombre.lower() in ('mega', 'mediafire')
+                push(nombre, url, directo and es_descargable)
+
+    # Fallback para futuras variaciones: enlaces visibles de descarga.
+    if not srvs:
+        for a_tag in soup.select('a[href]'):
+            href = a_tag.get('href', '').strip()
+            nombre = a_tag.get_text(' ', strip=True).lower()
+            if 'mega.nz' in href or 'mediafire.com' in href:
+                push('mega' if 'mega.nz' in href else 'mediafire', href, True)
+    return srvs
+
+
 # ─── Scraping — LatAnime ──────────────────────────────────────────────────────
 
 async def fetch_latest_episodes_latanime() -> list[dict]:
@@ -549,8 +631,15 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     tmp_dir = work_dir / f"tio_{int(time.time() * 1000)}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    bandera  = ('🇪🇸' if idioma == 'castellano' else '🇲🇽') if fuente == 'latanime' else '🇯🇵'
-    etiqueta = f"LatAnime {bandera}" if fuente == 'latanime' else 'TioAnime 🇯🇵'
+    if fuente == 'latanime':
+        bandera = '🇪🇸' if idioma == 'castellano' else '🇲🇽'
+        etiqueta = f'LatAnime {bandera}'
+    elif fuente == 'animeav1':
+        bandera = '🇪🇸'
+        etiqueta = 'AnimeAV1 🇪🇸'
+    else:
+        bandera = '🇯🇵'
+        etiqueta = 'TioAnime 🇯🇵'
 
     try:
         ahora = time.strftime('%I:%M %p')
@@ -575,7 +664,12 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             await client.send_message(chat_id, caption, parse_mode=enums.ParseMode.HTML)
 
         logger.info(f"[tioanime-notify] Buscando servidores para \"{titulo}\" ep {ep_num}...")
-        srvs = (await scrape_servidores_latanime(ep_url)) if fuente == 'latanime' else (await scrape_servidores(ep_url))
+        if fuente == 'latanime':
+            srvs = await scrape_servidores_latanime(ep_url)
+        elif fuente == 'animeav1':
+            srvs = await scrape_servidores_animeav1(ep_url)
+        else:
+            srvs = await scrape_servidores(ep_url)
         if not srvs:
             raise RuntimeError('No se encontraron servidores')
 
@@ -712,6 +806,10 @@ async def check_nuevos_episodios(chat_id: int, client) -> None:
         pass
     try:
         lista += await fetch_latest_episodes_latanime()
+    except Exception:
+        pass
+    try:
+        lista += await fetch_latest_episodes_animeav1()
     except Exception:
         pass
     if not lista:
@@ -877,11 +975,12 @@ def register(app, work_dir: Path):
         else:
             accion = 'activado'
         await message.reply_text(
-            f"✅ <b>Notificador TioAnime + LatAnime {accion}</b>\n\n"
+            f"✅ <b>Notificador TioAnime + LatAnime + AnimeAV1 {accion}</b>\n\n"
             f"╭━━━━━━〔 📡 〕━━━━━━\n"
             f"┃ ⏱️ Intervalo: <b>{interval_min} min</b>\n"
             f"┃ 🇯🇵 TioAnime — Sub japonés\n"
             f"┃ 🇲🇽🇪🇸 LatAnime — Latino / Castellano\n"
+            f"┃ 🇪🇸 AnimeAV1 — Sub Español\n"
             f"┃ 💬 Chat registrado\n"
             f"╰━━━━━━━━━━━━━━━━━━\n\n"
             f"<i>Usa /tiostop para detener.</i>",
@@ -894,7 +993,8 @@ def register(app, work_dir: Path):
                 return
             tio = await fetch_latest_episodes()
             lat = await fetch_latest_episodes_latanime()
-            lista = tio + lat
+            av1 = await fetch_latest_episodes_animeav1()
+            lista = tio + lat + av1
             seen = load_seen()
             vistos = seen.setdefault(str(message.chat.id), [])
             for e in lista:
@@ -904,7 +1004,7 @@ def register(app, work_dir: Path):
                 seen[str(message.chat.id)] = vistos[-500:]
             save_seen(seen)
             await message.reply_text(
-                f"📋 <b>{len(tio)}</b> ep TioAnime + <b>{len(lat)}</b> ep LatAnime registrados como base.\n"
+                f"📋 <b>{len(tio)}</b> ep TioAnime + <b>{len(lat)}</b> ep LatAnime + <b>{len(av1)}</b> ep AnimeAV1 registrados como base.\n"
                 f"<i>Solo los nuevos se enviarán.</i>",
                 parse_mode=enums.ParseMode.HTML
             )
@@ -1014,6 +1114,26 @@ def register(app, work_dir: Path):
             return
         iniciar_notificador(message.chat.id, client, mn)
         await message.reply_text(f"⏱️ Intervalo actualizado a <b>{mn} minutos</b>.", parse_mode=enums.ParseMode.HTML)
+
+    @app.on_message(filters.command('aav1example'))
+    async def aav1example_cmd(client, message: Message):
+        args = message.text.split(maxsplit=1)
+        try:
+            cantidad = min(max(int(args[1].strip()), 1), 10) if len(args) > 1 else 1
+        except ValueError:
+            cantidad = 1
+        await message.reply_text(f"🔍 Obteniendo los <b>{cantidad}</b> episodio(s) más reciente(s) de <b>AnimeAV1</b>...", parse_mode=enums.ParseMode.HTML)
+        try:
+            lista = await fetch_latest_episodes_animeav1()
+            if not lista:
+                await message.reply_text("❌ Sin episodios de AnimeAV1 disponibles. Intenta más tarde.")
+                return
+        except Exception as e:
+            await message.reply_text(f"❌ Error: {e}")
+            return
+        for e in lista[:cantidad]:
+            _episode_queue.append({'chat_id': message.chat.id, 'ep': e})
+        _create_task(procesar_cola())
 
     @app.on_message(filters.command('tioexample'))
     async def tioexample_cmd(client, message: Message):
