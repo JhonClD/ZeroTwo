@@ -17,6 +17,7 @@ from . import (
     tioanime_notify_handler,
     animeav1_notify_handler,
     animedbs_notify_handler,
+    monoschinos_notify_handler,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     'tioanime_notify_handler',
     'animeav1_notify_handler',
     'animedbs_notify_handler',
+    'monoschinos_notify_handler',
 ]

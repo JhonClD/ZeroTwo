@@ -125,6 +125,7 @@ from handlers import (
     tioanime_notify_handler,
     animeav1_notify_handler,
     animedbs_notify_handler,
+    monoschinos_notify_handler,
 )
 
 # Registrar handlers
@@ -142,6 +143,7 @@ enhance_handler.register(app, user_states, WORK_DIR)
 tioanime_notify_handler.register(app, WORK_DIR)
 animeav1_notify_handler.register(app, WORK_DIR)
 animedbs_notify_handler.register(app, WORK_DIR)
+monoschinos_notify_handler.register(app, WORK_DIR)
 
 
 if __name__ == "__main__":
