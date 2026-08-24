@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from utils import VideoProcessor
 from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
@@ -175,21 +176,25 @@ def register(app, download_dir):
                 logger.info("📹 Descargando y enviando video...")
                 tmp_video = download_dir / f"yt_{message.from_user.id}_{message.id}.mp4"
                 
+                tmp_thumb = download_dir / f"yt_{message.from_user.id}_{message.id}_thumb.jpg"
                 try:
-                    dl_cmd = f'curl -s -L -o "{tmp_video}" "{download_url}"'
-                    subprocess.run(dl_cmd, shell=True, timeout=180)
-                    
-                    if not tmp_video.exists():
+                    dl_cmd = f'curl -sS -L --fail -o "{tmp_video}" "{download_url}"'
+                    result = subprocess.run(dl_cmd, shell=True, timeout=180)
+                    if result.returncode != 0 or not tmp_video.exists() or tmp_video.stat().st_size < 10_000:
                         raise Exception("Error descargando video")
-                    
+
+                    duration, thumb = VideoProcessor.get_video_meta(tmp_video, tmp_thumb)
                     await message.reply_video(
                         video=str(tmp_video),
                         caption=f"🎬 <b>{video_title}</b>",
                         parse_mode=enums.ParseMode.HTML,
-                        supports_streaming=True
+                        supports_streaming=True,
+                        duration=duration or None,
+                        thumb=thumb,
                     )
                 finally:
                     tmp_video.unlink(missing_ok=True)
+                    tmp_thumb.unlink(missing_ok=True)
                 
             elif is_voice_note:
                 # ========== ENVIAR COMO NOTA DE VOZ ==========

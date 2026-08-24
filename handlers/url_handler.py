@@ -10,6 +10,7 @@ from pyrogram import filters, enums
 from pyrogram.types import Message
 from downloaders import MEGADownloader, MediaFireDownloader
 from downloaders.drive_downloader import DriveDownloader, take_video_screenshots
+from utils import VideoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +129,14 @@ def register(app, download_dir):
             try:
                 if file_ext in VIDEO_EXTS:
                     logger.info("🎬 Enviando como video…")
+                    thumb_path = user_dir / f"{file_path.stem}_thumb.jpg"
+                    duration, thumb = VideoProcessor.get_video_meta(file_path, thumb_path)
                     await message.reply_video(
                         video=str(file_path), caption=caption,
-                        supports_streaming=True, progress=send_progress
+                        supports_streaming=True, progress=send_progress,
+                        duration=duration or None, thumb=thumb,
                     )
+                    thumb_path.unlink(missing_ok=True)
                 elif file_ext in AUDIO_EXTS:
                     logger.info("🎵 Enviando como audio…")
                     await message.reply_audio(
