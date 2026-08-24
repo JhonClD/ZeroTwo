@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Secretos y sesiones
+.telegram_bot_token
+*.session
+*.session-journal
+.env
+.env.*
+
+# Logs y archivos generados
+bot.log
+*.log
+telegram_bot_files/
+telegram_downloads/
+*.tmp
+*.temp
+
+# Entornos locales
+.venv/
+venv/
+env/
