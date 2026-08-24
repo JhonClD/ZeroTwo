@@ -836,12 +836,23 @@ def register(app, work_dir: Path):
             logger.error(f"[tioanime-notify] Error restaurando notificadores: {e}")
 
     async def _guard_owner(message: Message, command: str) -> bool:
-        if command in COMANDOS_OWNER and not _is_owner(message.from_user.id):
-            await message.reply_text("⛔ Solo el <b>owner</b> puede usar este comando.", parse_mode=enums.ParseMode.HTML)
-            return False
-        return True
+        # En mensajes de canales Telegram puede dejar from_user en None.
+        # Si no se configuró una lista de owners, el comando sigue siendo válido.
+        if command not in COMANDOS_OWNER or not OWNER_IDS:
+            return True
+        sender = getattr(message, "from_user", None)
+        if sender and _is_owner(sender.id):
+            return True
+        await message.reply_text("⛔ Solo el <b>owner</b> puede usar este comando.", parse_mode=enums.ParseMode.HTML)
+        return False
 
-    @app.on_message(filters.command('tiostart'))
+    command_filter_tiostart = filters.command("tiostart")
+    command_filter_tiostop = filters.command("tiostop")
+    channel_filter_tiostart = filters.channel & filters.command("tiostart")
+    channel_filter_tiostop = filters.channel & filters.command("tiostop")
+
+    @app.on_message(command_filter_tiostart)
+    @app.on_message(channel_filter_tiostart)
     async def tiostart_cmd(client, message: Message):
         if not await _guard_owner(message, 'tiostart'):
             return
@@ -900,7 +911,8 @@ def register(app, work_dir: Path):
         except Exception:
             pass
 
-    @app.on_message(filters.command('tiostop'))
+    @app.on_message(command_filter_tiostop)
+    @app.on_message(channel_filter_tiostop)
     async def tiostop_cmd(client, message: Message):
         if not await _guard_owner(message, 'tiostop'):
             return
