@@ -168,7 +168,7 @@ pkg install aria2  # Instalar aria2c para descargas 10x más rápidas
 
 ## 🌐 Descargas sociales
 
-Las descargas de YouTube y Facebook utilizan exclusivamente el flujo público de `loader.to` y consultan su progreso hasta obtener el enlace final. El servicio puede cambiar sus endpoints o limitar solicitudes; el bot informa el error y no guarda credenciales privadas en el repositorio.
+Las descargas de YouTube y Facebook utilizan exclusivamente el flujo público de `loader.to` y consultan su progreso hasta obtener el enlace final. En Facebook, el bot consulta las calidades disponibles, las muestra mediante botones y descarga la opción elegida; si loader.to no devuelve calidades, utiliza 720p como valor predeterminado. El servicio puede cambiar sus endpoints o limitar solicitudes; el bot informa el error y no guarda credenciales privadas en el repositorio.
 
 ## 📝 Logs
 
