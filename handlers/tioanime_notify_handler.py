@@ -760,19 +760,29 @@ async def _notifier_loop(chat_id: int, interval_min: int) -> None:
         pass
 
 
-def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL_DEFAULT) -> None:
+def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL_DEFAULT) -> bool:
+    """Inicia o actualiza el notificador y devuelve si ya estaba activo."""
     global _client
     if client:
         _client = client
+    ya_activo = chat_id in _active_notifiers
+    prev_interval = _notifier_interval.get(chat_id)
     prev = _active_notifiers.get(chat_id)
+    if prev and prev_interval == interval_min and not prev.done():
+        return True
     if prev:
         prev.cancel()
     _active_notifiers[chat_id] = _create_task(_notifier_loop(chat_id, interval_min))
     _notifier_interval[chat_id] = interval_min
 
     state = load_state()
-    state[str(chat_id)] = {'intervalMin': interval_min, 'startedAt': int(time.time() * 1000)}
+    anterior = state.get(str(chat_id), {})
+    state[str(chat_id)] = {
+        'intervalMin': interval_min,
+        'startedAt': anterior.get('startedAt', int(time.time() * 1000)),
+    }
     save_state(state)
+    return ya_activo
 
 
 def detener_notificador(chat_id: int) -> None:
@@ -836,14 +846,27 @@ def register(app, work_dir: Path):
         if not await _guard_owner(message, 'tiostart'):
             return
         args = message.text.split(maxsplit=1)
-        try:
-            mn = int(args[1].strip()) if len(args) > 1 else None
-        except ValueError:
-            mn = None
-        interval_min = mn if (mn is not None and 5 <= mn <= 60) else CHECK_INTERVAL_DEFAULT
-        iniciar_notificador(message.chat.id, client, interval_min)
+        if len(args) > 1:
+            try:
+                interval_min = int(args[1].strip())
+            except ValueError:
+                await message.reply_text("❌ El intervalo debe ser un número entre <b>5</b> y <b>60</b> minutos.", parse_mode=enums.ParseMode.HTML)
+                return
+            if not 5 <= interval_min <= 60:
+                await message.reply_text("❌ El intervalo permitido es de <b>5</b> a <b>60</b> minutos.", parse_mode=enums.ParseMode.HTML)
+                return
+        else:
+            interval_min = CHECK_INTERVAL_DEFAULT
+        intervalo_anterior = _notifier_interval.get(message.chat.id)
+        ya_activo = iniciar_notificador(message.chat.id, client, interval_min)
+        if ya_activo and intervalo_anterior != interval_min:
+            accion = 'actualizado'
+        elif ya_activo:
+            accion = 'ya estaba activo'
+        else:
+            accion = 'activado'
         await message.reply_text(
-            f"✅ <b>Notificador TioAnime + LatAnime activado</b>\n\n"
+            f"✅ <b>Notificador TioAnime + LatAnime {accion}</b>\n\n"
             f"╭━━━━━━〔 📡 〕━━━━━━\n"
             f"┃ ⏱️ Intervalo: <b>{interval_min} min</b>\n"
             f"┃ 🇯🇵 TioAnime — Sub japonés\n"
@@ -854,6 +877,10 @@ def register(app, work_dir: Path):
             parse_mode=enums.ParseMode.HTML
         )
         try:
+            # Solo se registra una base inicial al crear el notificador. Si el
+            # usuario repite /tiostart, no se marcan episodios nuevos como vistos.
+            if ya_activo:
+                return
             tio = await fetch_latest_episodes()
             lat = await fetch_latest_episodes_latanime()
             lista = tio + lat
@@ -877,11 +904,19 @@ def register(app, work_dir: Path):
     async def tiostop_cmd(client, message: Message):
         if not await _guard_owner(message, 'tiostop'):
             return
-        if message.chat.id not in _active_notifiers:
-            await message.reply_text("ℹ️ El notificador no estaba activo.")
+        activo = message.chat.id in _active_notifiers
+        pendientes_antes = sum(1 for item in _episode_queue if item['chat_id'] == message.chat.id)
+        if activo:
+            detener_notificador(message.chat.id)
+        # No borrar el episodio que ya esté siendo enviado; solo los pendientes.
+        _episode_queue[:] = [item for item in _episode_queue if item['chat_id'] != message.chat.id]
+        if not activo and pendientes_antes == 0:
+            await message.reply_text("ℹ️ El notificador ya estaba detenido y no había episodios pendientes.")
             return
-        detener_notificador(message.chat.id)
-        await message.reply_text("🛑 <b>Notificador detenido.</b>\n<i>Usa /tiostart para reactivar.</i>", parse_mode=enums.ParseMode.HTML)
+        await message.reply_text(
+            f"🛑 <b>Notificador detenido.</b>\n"
+            f"🗑️ Episodios pendientes cancelados: <b>{pendientes_antes}</b>\n"
+            f"<i>Usa /tiostart para reactivar.</i>", parse_mode=enums.ParseMode.HTML)
 
     @app.on_message(filters.command('tiostatus'))
     async def tiostatus_cmd(client, message: Message):
