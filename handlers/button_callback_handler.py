@@ -3,7 +3,6 @@ button_callback_handler.py - Manejador de callbacks mejorado
 Soporte para: Compresión, Selección de Audio, Subtítulos y Subdrips con Banderas.
 """
 
-import asyncio
 import logging
 import os
 from pathlib import Path
@@ -137,51 +136,22 @@ def register(app, user_states, work_dir):
                 'quality_1080p': {'scale': '1920:1080', 'label': '1080p FHD'}
             }
             config = res_map.get(data, res_map['quality_360p'])
-            state['scale'] = config['scale']
-            state['resolution_label'] = config['label']
-            profile_keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton('📦 Pequeño', callback_data='profile_small'), InlineKeyboardButton('⚖️ Equilibrado', callback_data='profile_balanced')],
-                [InlineKeyboardButton('✨ Alta calidad', callback_data='profile_quality'), InlineKeyboardButton('🚀 H.265 / HEVC', callback_data='profile_hevc')],
-            ])
-            await callback_query.message.edit_text(
-                f"Resolución: <b>{config['label']}</b>\n\nSelecciona el perfil de encoding:",
-                parse_mode='html', reply_markup=profile_keyboard
+            output_path = work_dir / f"{user_id}_comp_{config['label']}{state['output_format']}"
+            
+            await callback_query.message.edit_text(f"⚙️ Comprimiendo video a {config['label']}...")
+            
+            success = VideoProcessor.compress_video_resolution(
+                video_path, str(output_path), scale=config['scale']
             )
-            await callback_query.answer()
-            return
-
-        if data.startswith('profile_'):
-            profile = data.removeprefix('profile_')
-            if profile not in VideoProcessor.ENCODING_PROFILES:
-                await callback_query.answer('Perfil no disponible.', show_alert=True)
-                return
-            label = VideoProcessor.ENCODING_PROFILES[profile]['label']
-            resolution_label = state.get('resolution_label', 'original')
-            extension = state.get('output_format', '.mp4')
-            output_path = work_dir / f"{user_id}_comp_{profile}_{resolution_label}{extension}"
-            await callback_query.message.edit_text(f"⚙️ Comprimiendo: {resolution_label} · {label}...")
-            success = await asyncio.to_thread(
-                VideoProcessor.compress_profile,
-                video_path, str(output_path), profile=profile, scale=state.get('scale')
-            )
+            
             if success:
-                caption = f"✅ Video comprimido\n🎞 {resolution_label}\n🎛 Perfil: {label}"
-                if extension.lower() == '.mp4':
-                    thumb_path = work_dir / f"{user_id}_comp_thumb.jpg"
-                    duration, thumb = VideoProcessor.get_video_meta(output_path, thumb_path)
-                    await callback_query.message.reply_video(
-                        video=str(output_path), caption=caption,
-                        supports_streaming=True, duration=duration or None, thumb=thumb
-                    )
-                    thumb_path.unlink(missing_ok=True)
-                else:
-                    await callback_query.message.reply_document(document=str(output_path), caption=caption)
-                output_path.unlink(missing_ok=True)
-            else:
-                await callback_query.message.reply_text('❌ No se pudo completar la compresión.')
-            if Path(video_path).exists():
-                Path(video_path).unlink()
+                await callback_query.message.reply_document(
+                    document=str(output_path), 
+                    caption=f"✅ Video comprimido a {config['label']}"
+                )
+                output_path.unlink()
+            
+            if Path(video_path).exists(): Path(video_path).unlink()
             del user_states[user_id]
             await callback_query.answer()
-            return
-
+            

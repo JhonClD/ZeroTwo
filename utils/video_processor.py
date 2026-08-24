@@ -21,14 +21,7 @@ _LANG_FLAGS = {
 
 
 class VideoProcessor:
-    """Clase para procesar videos usando FFmpeg."""
-
-    ENCODING_PROFILES = {
-        'small': {'label': 'Pequeño', 'codec': 'libx264', 'crf': '28', 'preset': 'veryfast', 'audio_bitrate': '96k'},
-        'balanced': {'label': 'Equilibrado', 'codec': 'libx264', 'crf': '23', 'preset': 'medium', 'audio_bitrate': '128k'},
-        'quality': {'label': 'Alta calidad', 'codec': 'libx264', 'crf': '20', 'preset': 'slow', 'audio_bitrate': '160k'},
-        'hevc': {'label': 'H.265 / HEVC', 'codec': 'libx265', 'crf': '26', 'preset': 'medium', 'audio_bitrate': '128k'},
-    }
+    """Clase para procesar videos usando FFmpeg"""
 
     # ─── Utilidades internas ──────────────────────────────────────────────────
 
@@ -91,7 +84,7 @@ class VideoProcessor:
     # ─── Compresión ───────────────────────────────────────────────────────────
 
     @staticmethod
-    def compress_video_resolution(input_path, output_path, scale=None, bitrate='2000k', crf='23', preset='medium', max_size_mb=None, codec='libx264', audio_bitrate=None, timeout=1200):
+    def compress_video_resolution(input_path, output_path, scale=None, bitrate='2000k', crf='23', preset='medium', max_size_mb=None):
         """
         Comprime un video con resolución específica.
         scale: '640:360' para 360p, '1280:720' para 720p, None para original.
@@ -102,28 +95,28 @@ class VideoProcessor:
         logger.info(f"📺 Resolución: {scale if scale else 'Original'}")
         logger.info(f"📊 Bitrate: {bitrate}, CRF: {crf}, Preset: {preset}")
 
-        cmd = ['ffmpeg', '-hide_banner', '-nostdin', '-i', str(input_path)]
+        cmd = ['ffmpeg', '-i', input_path]
 
         if scale:
             if '360' in scale:
                 cmd.extend([
                     '-vf', f'scale={scale}:force_original_aspect_ratio=decrease:flags=lanczos,pad={scale}:(ow-iw)/2:(oh-ih)/2',
-                    '-c:v', codec, '-crf', str(crf), '-preset', preset,
+                    '-c:v', 'libx264', '-crf', crf, '-preset', preset,
                     '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', '900k',
                     '-profile:v', 'main', '-level', '3.1', '-pix_fmt', 'yuv420p',
                 ])
             else:
                 cmd.extend([
                     '-vf', f'scale={scale}:force_original_aspect_ratio=decrease:flags=lanczos,pad={scale}:(ow-iw)/2:(oh-ih)/2',
-                    '-c:v', codec, '-crf', str(crf), '-preset', preset, '-b:v', bitrate,
+                    '-c:v', 'libx264', '-crf', crf, '-preset', preset, '-b:v', bitrate,
                 ])
         else:
-            cmd.extend(['-c:v', codec, '-crf', str(crf), '-preset', preset, '-b:v', bitrate])
+            cmd.extend(['-c:v', 'libx264', '-crf', crf, '-preset', preset, '-b:v', bitrate])
 
-        selected_audio_bitrate = audio_bitrate or ('96k' if '360' in str(scale) else '128k')
-        cmd.extend(['-c:a', 'aac', '-b:a', selected_audio_bitrate])
         if '360' in str(scale):
-            cmd.extend(['-ar', '44100'])
+            cmd.extend(['-c:a', 'aac', '-b:a', '96k', '-ar', '44100'])
+        else:
+            cmd.extend(['-c:a', 'aac', '-b:a', '128k'])
 
         cmd.extend(['-movflags', '+faststart', '-y', output_path])
 
@@ -144,13 +137,7 @@ class VideoProcessor:
                 elif 'error' in line.lower():
                     logger.error(f"❌ {line.strip()}")
 
-            try:
-                process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                logger.error(f"❌ Timeout de FFmpeg tras {timeout} segundos; terminando proceso")
-                process.kill()
-                process.communicate()
-                return False
+            process.wait()
 
             if process.returncode != 0:
                 logger.error(f"❌ Error en compresión: código {process.returncode}")
@@ -164,22 +151,6 @@ class VideoProcessor:
         except Exception as e:
             logger.error(f"❌ Error comprimiendo video: {e}")
             return False
-
-    @classmethod
-    def compress_profile(cls, input_path, output_path, profile='balanced', scale=None, timeout=1200):
-        """Comprime usando un perfil validado y configurable."""
-        config = cls.ENCODING_PROFILES.get(profile, cls.ENCODING_PROFILES['balanced'])
-        return cls.compress_video_resolution(
-            input_path,
-            output_path,
-            scale=scale,
-            bitrate='2000k',
-            crf=config['crf'],
-            preset=config['preset'],
-            codec=config['codec'],
-            audio_bitrate=config['audio_bitrate'],
-            timeout=timeout,
-        )
 
     # ─── Thumbnail ────────────────────────────────────────────────────────────
 
