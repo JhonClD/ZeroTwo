@@ -4,6 +4,7 @@ Comandos: /gdrive <url_o_id>  |  /gdrive_upload (luego enviar archivo)  |  /gdri
 """
 
 import logging
+from html import escape
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
@@ -16,8 +17,11 @@ AUDIO_EXTS  = {'.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac'}
 IMAGE_EXTS  = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 
 
-def register(app, user_states, download_dir):
-    """Registra los handlers de Google Drive."""
+def register(app, user_states, download_dir, default_folder_id=None):
+    """Registra los handlers de Google Drive.
+
+    ``default_folder_id`` se usa cuando /gdrive_upload no recibe un ID.
+    """
 
     # ── Descarga desde Drive ──────────────────────────────────────────────────
     @app.on_message(filters.command(['gdrive', 'drive', 'dldrive']))
@@ -96,7 +100,7 @@ def register(app, user_states, download_dir):
         """Activa el modo de subida a Drive. El siguiente archivo enviado se subirá."""
         user_id = message.from_user.id
         args    = message.text.split(maxsplit=1)
-        folder_id = args[1].strip() if len(args) > 1 else None
+        folder_id = args[1].strip() if len(args) > 1 else default_folder_id
 
         user_states[user_id] = {
             'action': 'gdrive_upload',
@@ -104,14 +108,14 @@ def register(app, user_states, download_dir):
             'folder_id': folder_id,
         }
 
-        folder_info = f"\n📁 Carpeta destino: <code>{folder_id}</code>" if folder_id else ""
+        folder_info = f"\n📁 Carpeta destino: <code>{escape(folder_id)}</code>" if folder_id else "\n📁 Carpeta destino: Mi unidad"
         await message.reply_text(
             f"☁️ <b>Modo Subida a Drive</b>{folder_info}\n\n"
-            "Envíame el archivo que quieres subir a Google Drive.",
+            "Envíame un documento, foto, video o audio para subirlo a Google Drive.",
             parse_mode=enums.ParseMode.HTML
         )
 
-    @app.on_message(filters.document | filters.video | filters.audio)
+    @app.on_message(filters.document | filters.photo | filters.video | filters.audio)
     async def gdrive_upload_file(client, message: Message):
         """Recibe el archivo y lo sube a Drive si el estado es gdrive_upload."""
         user_id = message.from_user.id
@@ -126,15 +130,24 @@ def register(app, user_states, download_dir):
         user_dir  = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
-        media = message.document or message.video or message.audio
+        media = message.document or message.photo or message.video or message.audio
         if not media:
             return
+
+        original_name = getattr(media, 'file_name', None)
+        if original_name:
+            filename = Path(original_name).name
+        else:
+            suffix = '.jpg' if message.photo else ''
+            filename = f"file_{media.file_unique_id}{suffix}"
+        filename = filename or f"file_{media.file_unique_id}"
+        mime_type = getattr(media, 'mime_type', None) or ('image/jpeg' if message.photo else 'application/octet-stream')
 
         status_msg = await message.reply_text("⬇️ Descargando archivo de Telegram…")
 
         try:
             file_path = Path(await message.download(
-                file_name=str(user_dir / (getattr(media, 'file_name', None) or f"file_{media.file_unique_id}"))
+                file_name=str(user_dir / filename)
             ))
 
             file_size = file_path.stat().st_size / (1024 * 1024)
@@ -152,20 +165,28 @@ def register(app, user_states, download_dir):
                 except Exception:
                     pass
 
-            success, info, error = await DriveUploader.upload(file_path, folder_id, progress_callback=tg_progress)
+            success, info, error = await DriveUploader.upload(
+                file_path,
+                folder_id,
+                mime_type=mime_type,
+                progress_callback=tg_progress,
+            )
 
             if success:
-                link = info.get('webViewLink', 'Sin enlace')
+                link = info.get('webViewLink') or (
+                    f"https://drive.google.com/file/d/{info['id']}/view"
+                    if info.get('id') else 'Enlace no disponible'
+                )
                 await status_msg.edit_text(
                     f"✅ <b>Subido a Google Drive</b>\n"
-                    f"📄 {info.get('name', file_path.name)}\n"
-                    f"🔗 {link}",
+                    f"📄 {escape(info.get('name', file_path.name))}\n"
+                    f"🔗 {escape(link, quote=True)}",
                     parse_mode=enums.ParseMode.HTML
                 )
                 logger.info(f"✅ Subida completa: {link}")
             else:
                 await status_msg.edit_text(
-                    f"❌ <b>Error subiendo a Drive</b>\n{error}",
+                    f"❌ <b>Error subiendo a Drive</b>\n{escape(str(error))}",
                     parse_mode=enums.ParseMode.HTML
                 )
 
@@ -174,7 +195,8 @@ def register(app, user_states, download_dir):
 
         except Exception as e:
             logger.error(f"❌ Error en subida Drive: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ Error: {str(e)[:200]}")
+            user_states.pop(user_id, None)
+            await status_msg.edit_text(f"❌ Error: {escape(str(e)[:200])}", parse_mode=enums.ParseMode.HTML)
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────

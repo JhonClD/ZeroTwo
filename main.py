@@ -95,6 +95,8 @@ BOT_TOKEN = token_file.read_text().strip()
 # Directorios de trabajo
 WORK_DIR = Path.home() / "telegram_bot_files"
 DOWNLOAD_DIR = Path.home() / "telegram_downloads"
+# Carpeta predeterminada de Google Drive. Puede quedar vacía para usar Mi unidad.
+GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None
 WORK_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -139,7 +141,12 @@ facebook_handler.register(app, DOWNLOAD_DIR)
 twitter_handler.register(app, DOWNLOAD_DIR)
 tiktok_handler.register(app, DOWNLOAD_DIR)
 url_handler.register(app, DOWNLOAD_DIR)
-drive_handler.register(app, user_states, DOWNLOAD_DIR)
+drive_handler.register(
+    app,
+    user_states,
+    DOWNLOAD_DIR,
+    default_folder_id=GOOGLE_DRIVE_FOLDER_ID,
+)
 enhance_handler.register(app, user_states, WORK_DIR)
 tioanime_notify_handler.register(app, WORK_DIR)
 animeav1_notify_handler.register(app, WORK_DIR)
@@ -169,6 +176,7 @@ if __name__ == "__main__":
 
     print_section("ESTADO")
     logger.info("  ✓ Bot iniciado correctamente")
+    logger.info("  · Carpeta Drive: %s", GOOGLE_DRIVE_FOLDER_ID or "Mi unidad")
     logger.info("  · Pulsa Ctrl+C para detenerlo")
     logger.info("─" * 58)
 

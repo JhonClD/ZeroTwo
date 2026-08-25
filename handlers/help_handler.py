@@ -47,7 +47,8 @@ def register(app):
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
 ├ ☁️ /gdrive &lt;url_o_id&gt; — Descargar de Drive
-└ 📤 /gdrive_upload [folder_id] — Subir a Drive
+├ 📤 /gdrive_upload [folder_id] — Activar subida a Drive
+└ Después envía un documento, foto, video o audio
 
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>

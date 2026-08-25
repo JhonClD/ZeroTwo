@@ -78,6 +78,31 @@ python3 main.py
 echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 ```
 
+### Google Drive: guardar archivos enviados desde Telegram
+
+ZeroTwo incluye un modo para recibir un archivo en Telegram y subirlo a Google Drive. La integración usa la API oficial de Google Drive con OAuth 2.0 y carga reanudable para archivos grandes ([guía de autenticación](https://developers.google.com/workspace/drive/api/quickstart/python), [guía de subidas](https://developers.google.com/workspace/drive/api/guides/manage-uploads)).
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), crea o selecciona un proyecto y habilita **Google Drive API**.
+2. Configura la pantalla de consentimiento OAuth y crea un cliente OAuth de tipo **Desktop app**.
+3. Descarga el JSON de credenciales y guárdalo exactamente como `downloaders/drive_credentials.json`.
+4. Inicia ZeroTwo. La primera vez que uses Drive, Google abrirá el proceso de autorización; al finalizar se creará `downloaders/drive_token.json`.
+5. En el chat del bot envía `/gdrive_upload` y después envía un documento, foto, video o audio. ZeroTwo lo subirá a **Mi unidad** y responderá con el enlace.
+
+Para usar siempre una carpeta específica, copia su ID desde la URL de Drive y define la variable antes de iniciar el bot:
+
+```bash
+export GOOGLE_DRIVE_FOLDER_ID="ID_DE_LA_CARPETA"
+python main.py
+```
+
+También puedes elegir una carpeta solamente para una subida concreta:
+
+```text
+/gdrive_upload ID_DE_LA_CARPETA
+```
+
+Los archivos `drive_credentials.json` y `drive_token.json` están excluidos de Git. No los subas al repositorio ni compartas su contenido.
+
 ## 📖 Comandos
 
 ### Descargas
@@ -85,6 +110,7 @@ echo "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" > ~/.telegram_bot_token
 | Comando | Descripción |
 |---------|-------------|
 | `/download` | Descargar de MEGA o MediaFire |
+| `/gdrive_upload [folder_id]` | Activar la subida del siguiente archivo a Google Drive |
 | Pegar enlace | Descarga automática |
 
 ### Búsqueda
@@ -138,6 +164,7 @@ Rikka-Bot/
 ## 🔒 Seguridad
 
 - El token del bot se guarda en `~/.telegram_bot_token` fuera del repositorio
+- Las credenciales OAuth de Drive se guardan en `downloaders/drive_credentials.json` y `downloaders/drive_token.json`, ambos excluidos de Git
 - Los archivos temporales se eliminan automáticamente
 - Sin almacenamiento permanente de datos de usuarios
 
@@ -195,6 +222,7 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 - [Pyrogram](https://docs.pyrogram.org/) - Framework de Telegram
 - [FFmpeg](https://ffmpeg.org/) - Procesamiento de videos
 - [AniList](https://anilist.co/) - API de anime
+- [Google Drive API](https://developers.google.com/workspace/drive/api) - Integración de almacenamiento
 
 ## 📊 Changelog
 

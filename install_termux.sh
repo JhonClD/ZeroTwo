@@ -23,7 +23,7 @@ pkg install -y git python ffmpeg megatools wget curl aria2
 echo ""
 echo -e "${BLUE}📦 Paso 3/5: Instalando dependencias Python...${NC}"
 pip install --upgrade pip
-pip install pyrogram tgcrypto
+pip install -r requirements.txt
 
 echo ""
 echo -e "${BLUE}📦 Paso 4/5: Configuración del bot...${NC}"

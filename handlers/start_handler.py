@@ -26,7 +26,8 @@ Puedo ayudarte con todo esto:
 /x              — Twitter/X video
 /tiktok         — TikTok sin marca de agua
 /gdrive         — Descargar de Google Drive
-/gdrive_upload  — Subir a Google Drive
+/gdrive_upload  — Activar subida a Google Drive
+                 Luego envía el archivo
 Pega un enlace de MEGA o MediaFire directamente
 
 ━━━━━━━━━━━━━━━━━━━━
