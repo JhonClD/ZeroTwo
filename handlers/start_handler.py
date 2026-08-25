@@ -26,7 +26,8 @@ Puedo ayudarte con todo esto:
 /x              — Twitter/X video
 /tiktok         — TikTok sin marca de agua
 /gdrive         — Descargar de Google Drive
-/gdrive_upload  — Activar subida a Google Drive
+/gdrive_upload  — Subir directamente usando API
+/drive_sync     — Guardar para sincronización Android
                  Luego envía el archivo
 Pega un enlace de MEGA o MediaFire directamente
 

@@ -103,6 +103,25 @@ También puedes elegir una carpeta solamente para una subida concreta:
 
 Los archivos `drive_credentials.json` y `drive_token.json` están excluidos de Git. No los subas al repositorio ni compartas su contenido.
 
+### Termux sin API de Google Drive
+
+Si no quieres configurar la API, usa el almacenamiento compartido de Android y una aplicación de sincronización como FolderSync. Termux requiere permiso de almacenamiento para acceder a `~/storage/shared`; puedes habilitarlo con `termux-setup-storage` y comprobarlo con `ls ~/storage/shared` ([guía de Termux](https://wiki.termux.com/wiki/Termux-setup-storage)).
+
+```bash
+termux-setup-storage
+mkdir -p ~/storage/shared/Download/ZeroTwo
+python main.py
+```
+
+En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en `Download/ZeroTwo`. En FolderSync crea una tarea que sincronice esa carpeta local con una carpeta de Google Drive. Esta modalidad no necesita `drive_credentials.json`, `drive_token.json` ni la API de Drive; la aplicación de sincronización se encarga de transferir los archivos.
+
+Si prefieres otra ruta compartida, puedes definirla antes de iniciar el bot:
+
+```bash
+export ZERO_TWO_SYNC_DIR="$HOME/storage/shared/Download/MiCarpeta"
+python main.py
+```
+
 ## 📖 Comandos
 
 ### Descargas
@@ -110,7 +129,8 @@ Los archivos `drive_credentials.json` y `drive_token.json` están excluidos de G
 | Comando | Descripción |
 |---------|-------------|
 | `/download` | Descargar de MEGA o MediaFire |
-| `/gdrive_upload [folder_id]` | Activar la subida del siguiente archivo a Google Drive |
+| `/gdrive_upload [folder_id]` | Subir el siguiente archivo directamente usando la API de Drive |
+| `/drive_sync` | Guardar el siguiente archivo en la carpeta compartida para sincronización Android |
 | Pegar enlace | Descarga automática |
 
 ### Búsqueda

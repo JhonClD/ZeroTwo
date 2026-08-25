@@ -17,10 +17,12 @@ AUDIO_EXTS  = {'.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac'}
 IMAGE_EXTS  = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 
 
-def register(app, user_states, download_dir, default_folder_id=None):
-    """Registra los handlers de Google Drive.
+def register(app, user_states, download_dir, default_folder_id=None, sync_dir=None):
+    """Registra los handlers de Google Drive y sincronización local.
 
-    ``default_folder_id`` se usa cuando /gdrive_upload no recibe un ID.
+    Si ``sync_dir`` está definido, /drive_sync guarda allí el siguiente archivo
+    sin usar la API de Google Drive. El modo /gdrive_upload conserva la subida
+    directa mediante OAuth.
     """
 
     # ── Descarga desde Drive ──────────────────────────────────────────────────
@@ -94,7 +96,7 @@ def register(app, user_states, download_dir, default_folder_id=None):
         file_path.unlink(missing_ok=True)
         logger.info("🗑️ Archivo temporal eliminado")
 
-    # ── Subida a Drive ────────────────────────────────────────────────────────
+    # ── Subida directa a Drive mediante API ───────────────────────────────────
     @app.on_message(filters.command(['gdrive_upload', 'drive_upload', 'updrive']))
     async def gdrive_upload_start(client, message: Message):
         """Activa el modo de subida a Drive. El siguiente archivo enviado se subirá."""
@@ -115,6 +117,25 @@ def register(app, user_states, download_dir, default_folder_id=None):
             parse_mode=enums.ParseMode.HTML
         )
 
+    # ── Copia local para sincronización Android, sin API ──────────────────────
+    @app.on_message(filters.command(['drive_sync', 'sync_drive']))
+    async def drive_sync_start(client, message: Message):
+        """Activa el modo que guarda el siguiente archivo en la carpeta compartida."""
+        if sync_dir is None:
+            await message.reply_text("❌ La carpeta de sincronización no está configurada.")
+            return
+        user_id = message.from_user.id
+        user_states[user_id] = {
+            'action': 'drive_sync',
+            'step': 'waiting_file',
+        }
+        await message.reply_text(
+            f"📁 <b>Modo sincronización local</b>\n\n"
+            f"Envía el archivo y se guardará en:\n<code>{escape(str(sync_dir))}</code>\n\n"
+            "Una aplicación de sincronización podrá copiarlo a Google Drive.",
+            parse_mode=enums.ParseMode.HTML,
+        )
+
     @app.on_message(filters.document | filters.photo | filters.video | filters.audio)
     async def gdrive_upload_file(client, message: Message):
         """Recibe el archivo y lo sube a Drive si el estado es gdrive_upload."""
@@ -123,7 +144,8 @@ def register(app, user_states, download_dir, default_folder_id=None):
         if user_id not in user_states:
             return
         state = user_states[user_id]
-        if state.get('action') != 'gdrive_upload' or state.get('step') != 'waiting_file':
+        action = state.get('action')
+        if action not in ('gdrive_upload', 'drive_sync') or state.get('step') != 'waiting_file':
             return
 
         folder_id = state.get('folder_id')
@@ -154,8 +176,22 @@ def register(app, user_states, download_dir, default_folder_id=None):
             file_ext  = file_path.suffix.lower()
             logger.info(f"✅ Archivo descargado: {file_path.name} ({file_size:.1f} MB)")
 
+            if action == 'drive_sync':
+                sync_dir.mkdir(parents=True, exist_ok=True)
+                target_path = sync_dir / file_path.name
+                file_path.replace(target_path)
+                await status_msg.edit_text(
+                    f"✅ <b>Archivo guardado en Termux</b>\n"
+                    f"📄 {escape(target_path.name)}\n"
+                    f"📦 {file_size:.1f} MB\n\n"
+                    "La aplicación de sincronización puede subirlo a Google Drive.",
+                    parse_mode=enums.ParseMode.HTML,
+                )
+                del user_states[user_id]
+                return
+
             await status_msg.edit_text(
-                f"📤 <b>Subiendo a Drive…</b>\n📄 {file_path.name}\n📦 {file_size:.1f} MB",
+                f"📤 <b>Subiendo a Drive…</b>\n📄 {escape(file_path.name)}\n📦 {file_size:.1f} MB",
                 parse_mode=enums.ParseMode.HTML
             )
 

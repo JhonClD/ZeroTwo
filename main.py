@@ -95,10 +95,18 @@ BOT_TOKEN = token_file.read_text().strip()
 # Directorios de trabajo
 WORK_DIR = Path.home() / "telegram_bot_files"
 DOWNLOAD_DIR = Path.home() / "telegram_downloads"
-# Carpeta predeterminada de Google Drive. Puede quedar vacía para usar Mi unidad.
+# Carpeta compartida de Termux para el modo sin API. Una app de sincronización
+# puede copiar su contenido a Google Drive.
+DEFAULT_SYNC_DIR = Path.home() / "storage" / "shared" / "Download" / "ZeroTwo"
+SYNC_DIR = Path(os.getenv("ZERO_TWO_SYNC_DIR", str(DEFAULT_SYNC_DIR))).expanduser()
+# Carpeta predeterminada de Google Drive para el modo API opcional.
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None
 WORK_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
+try:
+    SYNC_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    logger.warning("No se pudo crear %s; ejecuta termux-setup-storage o define ZERO_TWO_SYNC_DIR", SYNC_DIR)
 
 # Crear cliente de Pyrogram
 app = Client(
@@ -146,6 +154,7 @@ drive_handler.register(
     user_states,
     DOWNLOAD_DIR,
     default_folder_id=GOOGLE_DRIVE_FOLDER_ID,
+    sync_dir=SYNC_DIR,
 )
 enhance_handler.register(app, user_states, WORK_DIR)
 tioanime_notify_handler.register(app, WORK_DIR)
@@ -176,7 +185,8 @@ if __name__ == "__main__":
 
     print_section("ESTADO")
     logger.info("  ✓ Bot iniciado correctamente")
-    logger.info("  · Carpeta Drive: %s", GOOGLE_DRIVE_FOLDER_ID or "Mi unidad")
+    logger.info("  · Carpeta sincronización: %s", SYNC_DIR)
+    logger.info("  · Carpeta Drive API: %s", GOOGLE_DRIVE_FOLDER_ID or "no configurada")
     logger.info("  · Pulsa Ctrl+C para detenerlo")
     logger.info("─" * 58)
 
