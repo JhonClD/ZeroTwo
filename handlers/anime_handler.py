@@ -155,16 +155,63 @@ CRUNCHYROLL_DUBS = {
     "welcome to demon school! iruma-kun season 3": True,
 }
 
+# Alias habituales en español y variantes que pueden devolver las APIs.
+# Se mantienen separados de CRUNCHYROLL_DUBS para que la lista principal sea fácil de actualizar.
+DUB_ALIASES = {
+    "guardianes de la noche": "kimetsu no yaiba",
+    "demon slayer": "kimetsu no yaiba",
+    "mi academia de heroes": "boku no hero academia",
+    "mi hero academia": "boku no hero academia",
+    "ataque de los titanes": "shingeki no kyojin",
+    "ataque a los titanes": "shingeki no kyojin",
+    "la eminencia en la sombra": "kage no jitsuryokusha ni naritakute",
+    "nivelacion en solitario": "solo leveling",
+    "isekai slime": "tensura",
+    "re zero": "re:zero",
+    "rezero": "re:zero",
+    "jujutsu kaisen": "jujutsu kaisen",
+}
+
+
+def _normalizar_titulo_doblaje(titulo: str) -> str:
+    """Normaliza un título para comparar alias sin depender de formato o tildes."""
+    titulo = _sin_acentos(titulo or "").lower()
+    titulo = titulo.replace("&", " and ")
+    titulo = re.sub(r"[’'`´]", "", titulo)
+    titulo = re.sub(r"[^a-z0-9]+", " ", titulo)
+    return re.sub(r"\s+", " ", titulo).strip()
+
+
+def _clave_doblaje(titulo: str) -> str:
+    """Resuelve alias y elimina sufijos comunes de temporada o parte."""
+    titulo = _normalizar_titulo_doblaje(titulo)
+    titulo = DUB_ALIASES.get(titulo, titulo)
+    titulo = re.sub(
+        r"(?:\s+(?:season|temporada|parte|part|cour)\s*\d+|\s+s\d+)$",
+        "",
+        titulo,
+        flags=re.IGNORECASE,
+    ).strip()
+    return DUB_ALIASES.get(titulo, titulo)
+
+
 def _tiene_doblaje(titulo_romaji: str, titulo_english: str, titulo_native: str) -> bool:
-    """Verifica si el anime tiene doblaje latino en Crunchyroll."""
-    for titulo in [titulo_romaji, titulo_english, titulo_native]:
-        if titulo and titulo.lower().strip() in CRUNCHYROLL_DUBS:
+    """Verifica el doblaje con títulos normalizados y coincidencia por palabras completas."""
+    claves = {_clave_doblaje(t) for t in (titulo_romaji, titulo_english, titulo_native) if t}
+    claves.discard("")
+    disponibles = {_clave_doblaje(t) for t in CRUNCHYROLL_DUBS}
+
+    for clave in claves:
+        if clave in disponibles:
             return True
-        if titulo:
-            titulo_lower = titulo.lower().strip()
-            for key in CRUNCHYROLL_DUBS:
-                if key in titulo_lower or titulo_lower in key:
-                    return True
+        # Permite reconocer una temporada concreta a partir de su serie base,
+        # pero evita coincidencias arbitrarias como "art" dentro de otro título.
+        for disponible in disponibles:
+            if len(disponible) >= 5 and (
+                clave.startswith(disponible + " ")
+                or disponible.startswith(clave + " ")
+            ):
+                return True
     return False
 
 
