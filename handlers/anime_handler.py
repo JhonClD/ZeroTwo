@@ -11,11 +11,32 @@ import logging
 import subprocess
 import tempfile
 import os
+import html
+import unicodedata
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 
 logger = logging.getLogger(__name__)
+
+
+def _normalizar_consulta(texto: str) -> str:
+    """Limpia espacios y caracteres de control sin alterar el título buscado."""
+    texto = re.sub(r"[\x00-\x1f\x7f]", " ", texto or "")
+    return re.sub(r"\s+", " ", texto).strip()[:100]
+
+
+def _sin_acentos(texto: str) -> str:
+    """Genera una variante útil para títulos escritos sin tildes."""
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _escapar(texto) -> str:
+    """Escapa valores externos antes de insertarlos en mensajes HTML."""
+    return html.escape(str(texto if texto is not None else ""), quote=False)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Lista de animes con doblaje latino confirmado en Crunchyroll
@@ -207,7 +228,7 @@ def _buscar_imagen_mal(titulo: str) -> str | None:
 
 
 def _buscar_anilist(anime_name: str) -> dict | None:
-    """Busca en AniList GraphQL. Devuelve el objeto Media o None."""
+    """Busca en AniList con la consulta original y una variante sin tildes."""
     query = """
     query ($search: String) {
         Media (search: $search, type: ANIME) {
@@ -223,22 +244,32 @@ def _buscar_anilist(anime_name: str) -> dict | None:
             season
             status
             source
+            siteUrl
+            averageScore
+            popularity
             description
             bannerImage
             coverImage { extraLarge large medium }
         }
     }
     """
-    data = _curl_post_json(
-        'https://graphql.anilist.co',
-        {'query': query, 'variables': {'search': anime_name}}
-    )
-    if not data:
-        return None
-    if data.get('errors'):
-        logger.info(f"AniList: no encontrado → {anime_name}")
-        return None
-    return data.get('data', {}).get('Media')
+    consultas = [_normalizar_consulta(anime_name)]
+    sin_acentos = _sin_acentos(consultas[0])
+    if sin_acentos and sin_acentos.lower() != consultas[0].lower():
+        consultas.append(sin_acentos)
+
+    for consulta in consultas:
+        data = _curl_post_json(
+            'https://graphql.anilist.co',
+            {'query': query, 'variables': {'search': consulta}}
+        )
+        if data and not data.get('errors'):
+            resultado = data.get('data', {}).get('Media')
+            if resultado:
+                return resultado
+
+    logger.info(f"AniList: no encontrado → {anime_name}")
+    return None
 
 
 def _buscar_mal(anime_name: str) -> dict | None:
@@ -247,13 +278,16 @@ def _buscar_mal(anime_name: str) -> dict | None:
     Devuelve un dict normalizado con los mismos campos que AniList.
     """
     import urllib.parse
-    query_enc = urllib.parse.quote(anime_name)
-    data = _curl_get(f'https://api.jikan.moe/v4/anime?q={query_enc}&limit=1')
-
+    consulta = _normalizar_consulta(anime_name)
+    query_enc = urllib.parse.quote(consulta)
+    data = _curl_get(f'https://api.jikan.moe/v4/anime?q={query_enc}&limit=5')
     if not data or not data.get('data'):
         return None
 
-    mal = data['data'][0]
+    # Jikan puede devolver coincidencias parciales; priorizamos la de mayor puntuación.
+    candidatos = data['data'][:5]
+    mal = max(candidatos, key=lambda item: item.get('score') or 0)
+
 
     return {
         '_source': 'mal',
@@ -286,6 +320,8 @@ def _buscar_mal(anime_name: str) -> dict | None:
         },
         'mal_url': mal.get('url'),
         'score': mal.get('score'),
+        'popularity': mal.get('popularity'),
+        'siteUrl': mal.get('url'),
     }
 
 
@@ -399,7 +435,13 @@ def register(app, user_states, work_dir):
             )
             return
 
-        anime_name = args[1].strip()
+        anime_name = _normalizar_consulta(args[1])
+        if len(anime_name) < 2:
+            await message.reply_text(
+                "❌ Escribe al menos 2 caracteres para realizar la búsqueda.",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
         logger.info(f"🈺 Buscando anime: {anime_name}")
 
         status_msg = await message.reply_text("⏳ Buscando información del anime...")
@@ -426,19 +468,21 @@ def register(app, user_states, work_dir):
 
             # ── 3. Procesar campos ────────────────────────────────────────
             titulo = (
-                anime['title'].get('romaji')
-                or anime['title'].get('english')
-                or anime['title'].get('native')
+                anime.get('title', {}).get('romaji')
+                or anime.get('title', {}).get('english')
+                or anime.get('title', {}).get('native')
                 or 'Desconocido'
             )
-            titulo_ingles = anime['title'].get('english') or ''
-            titulo_nativo = anime['title'].get('native') or ''
+            titulo_ingles = anime.get('title', {}).get('english') or ''
+            titulo_nativo = anime.get('title', {}).get('native') or ''
 
             estudios_nodes = anime.get('studios', {}).get('nodes', [])
-            estudios = ', '.join([s['name'] for s in estudios_nodes]) if estudios_nodes else 'Desconocido'
+            estudios = ', '.join([s.get('name', '') for s in estudios_nodes if s.get('name')]) if estudios_nodes else 'Desconocido'
+            estudios = _escapar(estudios)
 
             generos_raw = anime.get('genres') or []
             generos = ', '.join([GENEROS_TRAD.get(g, g) for g in generos_raw]) if generos_raw else 'N/A'
+            generos = _escapar(generos)
 
             sinopsis = anime.get('description') or 'No disponible'
             if sinopsis not in ('No disponible', '', None):
@@ -448,6 +492,7 @@ def register(app, user_states, work_dir):
                 sinopsis = re.sub(r'\n?Nota:.*', '', sinopsis, flags=re.IGNORECASE | re.DOTALL).strip()
                 sinopsis = re.sub(r'\n?\[Escrito por.*?\]', '', sinopsis, flags=re.IGNORECASE).strip()
                 sinopsis = _traducir(sinopsis)
+            sinopsis = _escapar(sinopsis[:1800]) or 'No disponible'
 
             episodios = anime.get('episodes') or 'En emisión'
             duracion  = anime.get('duration')
@@ -456,6 +501,19 @@ def register(app, user_states, work_dir):
             formato   = FORMATOS.get(anime.get('format'), anime.get('format') or 'N/A')
             temporada = TEMPORADAS.get(anime.get('season'), 'N/A')
             estado    = ESTADOS.get(anime.get('status'), anime.get('status') or 'N/A')
+
+            # Puntuación normalizada: AniList usa 0-100 y Jikan/MAL usa 0-10.
+            puntuacion_raw = anime.get('averageScore')
+            if puntuacion_raw is not None:
+                puntuacion_txt = f"{float(puntuacion_raw) / 10:.1f}/10"
+            elif anime.get('score') is not None:
+                puntuacion_txt = f"{float(anime['score']):.1f}/10"
+            else:
+                puntuacion_txt = 'N/A'
+            ficha_url = anime.get('siteUrl') or anime.get('mal_url')
+            ficha_txt = ''
+            if isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://')):
+                ficha_txt = f'\n<a href="{_escapar(ficha_url)}">🔗 Ver ficha y más información</a>'
 
             # Fecha de estreno completa (día/mes/año)
             sd = anime.get('startDate') or {}
@@ -497,10 +555,14 @@ def register(app, user_states, work_dir):
             src_emoji, src_label = FUENTES.get(source_raw, ('📦', source_raw or 'Desconocido'))
 
             # ── 4. Doblaje Crunchyroll ────────────────────────────────────
-            tiene_dub = _tiene_doblaje(titulo, titulo_ingles, titulo_nativo)
+            titulo_original = titulo
+            tiene_dub = _tiene_doblaje(titulo_original, titulo_ingles, titulo_nativo)
             doblaje_txt = "🟢 Disponible en Crunchyroll" if tiene_dub else "🔴 No disponible"
 
             # ── 5. Bloques opcionales de título ───────────────────────────
+            titulo = _escapar(titulo)
+            titulo_ingles = _escapar(titulo_ingles)
+            titulo_nativo = _escapar(titulo_nativo)
             titulo_bloque = ""
             if titulo_ingles and titulo_ingles.strip() != titulo.strip():
                 titulo_bloque += f"\n<b>🔤 Título inglés:</b> <b>{titulo_ingles}</b>"
@@ -521,8 +583,10 @@ def register(app, user_states, work_dir):
                 f"<b>💽 Formato:</b> <b>{formato}</b>\n"
                 f"<b>🔅 Temporada:</b> <b>{temporada}</b>\n"
                 f"<b>⏳ Estado:</b> <b>{estado}</b>\n"
+                f"<b>⭐ Puntuación:</b> <b>{puntuacion_txt}</b>\n"
                 f"<b>📜 Sinopsis:</b>\n"
                 f"<blockquote><b>{sinopsis}</b></blockquote>"
+                f"{ficha_txt}"
             )
 
             # ── 6. Imagen de portada — MyAnimeList ────────────────────────
@@ -531,7 +595,7 @@ def register(app, user_states, work_dir):
             # Buscar imagen en MAL primero, luego fallback a AniList
             image_candidates = []
 
-            mal_img = _buscar_imagen_mal(titulo_ingles or titulo)
+            mal_img = _buscar_imagen_mal(titulo_original)
             if mal_img:
                 image_candidates.append(mal_img)
 
