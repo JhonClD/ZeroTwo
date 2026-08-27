@@ -655,7 +655,11 @@ def register(app, user_states, work_dir):
 
                 if len(info) > 1024:
                     await message.reply_photo(photo=str(temp_img))
-                    await message.reply_text(info, parse_mode=enums.ParseMode.HTML)
+                    await message.reply_text(
+                        info,
+                        parse_mode=enums.ParseMode.HTML,
+                        disable_web_page_preview=True,
+                    )
                 else:
                     await message.reply_photo(
                         photo=str(temp_img),
