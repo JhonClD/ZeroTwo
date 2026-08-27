@@ -259,21 +259,6 @@ def _curl_get(url: str, timeout: int = 15) -> dict | None:
 
 
 
-def _buscar_imagen_mal(titulo: str) -> str | None:
-    """Busca imagen en MAL via Jikan y retorna la URL de mayor calidad."""
-    import urllib.parse
-    q = urllib.parse.quote(titulo)
-    data = _curl_get(f'https://api.jikan.moe/v4/anime?q={q}&limit=1')
-    if not data or not data.get('data'):
-        return None
-    item = data['data'][0]
-    images = item.get('images', {}).get('jpg', {})
-    return (
-        images.get('large_image_url')
-        or images.get('image_url')
-    )
-
-
 def _buscar_anilist(anime_name: str) -> dict | None:
     """Busca en AniList con la consulta original y una variante sin tildes."""
     query = """
@@ -636,19 +621,16 @@ def register(app, user_states, work_dir):
                 f"{ficha_txt}"
             )
 
-            # ── 6. Imagen de portada — MyAnimeList ────────────────────────
-            cover = anime.get('coverImage') or {}
-
-            # Buscar imagen en MAL primero, luego fallback a AniList
-            image_candidates = []
-
-            mal_img = _buscar_imagen_mal(titulo_original)
-            if mal_img:
-                image_candidates.append(mal_img)
-
-            for url in [cover.get('large'), cover.get('extraLarge'), anime.get('bannerImage'), cover.get('medium')]:
-                if url and url not in image_candidates:
-                    image_candidates.append(url)
+            # ── 6. Imagen de portada — AniList exclusivamente ─────────────
+            # Cuando el fallback es MyAnimeList/Jikan no se muestra su imagen:
+            # así se evita mezclar la portada de otra fuente con los datos del resultado.
+            cover = anime.get('coverImage') or {} if anime.get('_source') != 'mal' else {}
+            image_candidates = [
+                cover.get('extraLarge'),
+                cover.get('large'),
+                cover.get('medium'),
+            ]
+            image_candidates = [url for url in image_candidates if url]
 
             # Intentar cada candidato hasta obtener imagen válida (>10KB)
             img_bytes = None
