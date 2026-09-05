@@ -226,6 +226,19 @@ chmod 600 "$HOME/.telegram_bot_token"
 
 No publiques este archivo, no lo incluyas en capturas de pantalla y no lo escribas directamente dentro del código. Si el token se filtra, revócalo y genera uno nuevo desde BotFather.
 
+## API de anime y MyAnimeList
+
+El comando `/anime` utiliza una cadena de fuentes para evitar que una caída temporal deje inutilizada la búsqueda: **AniList**, la **API oficial de MyAnimeList** si se configura `MAL_CLIENT_ID`, **Tenrai** como fuente pública normalizada de datos de MAL, **Jikan** como respaldo adicional y **Kitsu** como último respaldo.
+
+Para activar la API oficial de MyAnimeList, crea una aplicación desde la [configuración de API de tu perfil de MAL](https://myanimelist.net/editprofile.php), copia el Client ID y expórtalo antes de iniciar el bot:
+
+```bash
+export MAL_CLIENT_ID="TU_CLIENT_ID_DE_MYANIMELIST"
+python main.py
+```
+
+La búsqueda no requiere esta variable para funcionar: si no está definida, el bot continúa automáticamente con Tenrai y Jikan. AniList puede devolver un `403` cuando el propio servicio suspende temporalmente la API por problemas de estabilidad; en ese caso el bot no se bloquea y pasa a las fuentes de respaldo.
+
 ## Ejecución y actualización
 
 Para detener el bot, pulsa `Ctrl+C`. Los registros se muestran en la terminal y también se guardan en `bot.log`.

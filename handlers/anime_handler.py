@@ -1,6 +1,6 @@
 """
 anime_handler.py - Manejador del comando /anime
-    Fuentes: AniList (principal) → MyAnimeList/Jikan → Kitsu (fallbacks)
+    Fuentes: AniList (principal) → MAL oficial/Tenrai/Jikan → Kitsu (fallbacks)
 Imagen: cascada multi-fuente con verificación de tamaño (≥500KB preferido)
 Doblaje: Crunchyroll Latinoamérica (temporada Primavera 2026 + historial)
 """
@@ -239,12 +239,21 @@ def _curl_post_json(url: str, payload: dict, timeout: int = 15) -> dict | None:
         os.unlink(tmp_path)
 
 
-def _curl_get(url: str, timeout: int = 15, accept: str = 'application/json') -> dict | None:
+def _curl_get(
+    url: str,
+    timeout: int = 15,
+    accept: str = 'application/json',
+    headers: list[str] | None = None,
+) -> dict | None:
     """Hace GET con curl y devuelve JSON parseado."""
     try:
-        cmd = ['curl', '-s', '-L', url,
-               '-H', f'Accept: {accept}',
-               '-H', 'User-Agent: Mozilla/5.0']
+        cmd = [
+            'curl', '-s', '-L', '--max-time', str(timeout), url,
+            '-H', f'Accept: {accept}',
+            '-H', 'User-Agent: ZeroTwo/1.0',
+        ]
+        for header in headers or []:
+            cmd.extend(['-H', header])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             return None
@@ -295,6 +304,11 @@ def _buscar_anilist(anime_name: str) -> dict | None:
             'https://graphql.anilist.co',
             {'query': query, 'variables': {'search': consulta}}
         )
+        if data and data.get('errors'):
+            status = (data.get('errors') or [{}])[0].get('status')
+            if status == 403:
+                logger.warning('AniList está temporalmente deshabilitada (403); usando fuentes de respaldo')
+                break
         if data and not data.get('errors'):
             resultado = data.get('data', {}).get('Media')
             if resultado:
@@ -304,57 +318,149 @@ def _buscar_anilist(anime_name: str) -> dict | None:
     return None
 
 
-def _buscar_mal(anime_name: str) -> dict | None:
-    """
-    Fallback: busca en MyAnimeList via Jikan API v4.
-    Devuelve un dict normalizado con los mismos campos que AniList.
-    """
-    import urllib.parse
-    consulta = _normalizar_consulta(anime_name)
-    query_enc = urllib.parse.quote(consulta)
-    data = _curl_get(f'https://api.jikan.moe/v4/anime?q={query_enc}&limit=5')
-    if not data or not data.get('data'):
-        return None
+def _normalizar_mal(mal: dict) -> dict:
+    """Convierte respuestas de MAL/Jikan/Tenrai al formato de la ficha."""
+    aired = mal.get('aired') or {}
+    aired_from = (aired.get('prop') or {}).get('from') or {}
+    start_date = mal.get('start_date') or ''
+    if not aired_from and isinstance(start_date, str):
+        date_parts = start_date[:10].split('-')
+        if len(date_parts) == 3:
+            try:
+                aired_from = {
+                    'year': int(date_parts[0]),
+                    'month': int(date_parts[1]),
+                    'day': int(date_parts[2]),
+                }
+            except ValueError:
+                aired_from = {}
 
-    # Jikan puede devolver coincidencias parciales; priorizamos la de mayor puntuación.
-    candidatos = data['data'][:5]
-    mal = max(candidatos, key=lambda item: item.get('score') or 0)
-
+    images = mal.get('images') or {}
+    jpg = images.get('jpg') or {}
+    if not jpg and mal.get('main_picture'):
+        jpg = {
+            'large_image_url': mal['main_picture'].get('large'),
+            'image_url': mal['main_picture'].get('medium'),
+        }
+    alternative_titles = mal.get('alternative_titles') or {}
+    studios = mal.get('studios') or []
+    genres = mal.get('genres') or []
+    duration = mal.get('duration')
+    if isinstance(duration, str):
+        duration_match = re.search(r'(\d+)\s*min', duration, flags=re.IGNORECASE)
+        duration = int(duration_match.group(1)) if duration_match else None
+    if duration is None and isinstance(mal.get('average_episode_duration'), (int, float)):
+        duration = round(mal['average_episode_duration'] / 60)
 
     return {
         '_source': 'mal',
         'title': {
             'romaji': mal.get('title'),
-            'english': mal.get('title_english') or mal.get('title'),
-            'native': mal.get('title_japanese') or '',
+            'english': mal.get('title_english') or alternative_titles.get('en') or mal.get('title'),
+            'native': mal.get('title_japanese') or alternative_titles.get('ja') or '',
         },
         'studios': {
-            'nodes': [{'name': s['name']} for s in mal.get('studios', [])]
+            'nodes': [
+                {'name': studio.get('name', '')}
+                for studio in studios if studio.get('name')
+            ]
         },
         'startDate': {
-            'year':  mal.get('aired', {}).get('prop', {}).get('from', {}).get('year'),
-            'month': mal.get('aired', {}).get('prop', {}).get('from', {}).get('month'),
-            'day':   mal.get('aired', {}).get('prop', {}).get('from', {}).get('day'),
+            'year': aired_from.get('year') or mal.get('year'),
+            'month': aired_from.get('month'),
+            'day': aired_from.get('day'),
         },
-        'seasonYear': mal.get('aired', {}).get('prop', {}).get('from', {}).get('year'),
-        'episodes': mal.get('episodes'),
-        'genres': [g['name'] for g in mal.get('genres', [])],
-        'duration': None,
-        'format': _mal_type(mal.get('type')),
-        'season': None,
+        'seasonYear': aired_from.get('year') or mal.get('year'),
+        'episodes': mal.get('episodes') if mal.get('episodes') is not None else mal.get('num_episodes'),
+        'genres': [genre.get('name', '') for genre in genres if genre.get('name')],
+        'duration': duration,
+        'format': _mal_type(mal.get('type') or mal.get('media_type')),
+        'season': mal.get('season'),
         'status': _mal_status(mal.get('status')),
         'source': _mal_source(mal.get('source')),
         'description': mal.get('synopsis') or 'No disponible',
         'bannerImage': None,
         'coverImage': {
-            'extraLarge': mal.get('images', {}).get('jpg', {}).get('large_image_url'),
-            'large': mal.get('images', {}).get('jpg', {}).get('image_url'),
+            'extraLarge': jpg.get('large_image_url') or jpg.get('image_url'),
+            'large': jpg.get('large_image_url') or jpg.get('image_url'),
         },
         'mal_url': mal.get('url'),
-        'score': mal.get('score'),
+        'score': mal.get('score') if mal.get('score') is not None else mal.get('mean'),
         'popularity': mal.get('popularity'),
         'siteUrl': mal.get('url'),
     }
+
+
+def _mal_candidates(data: dict | None) -> list[dict]:
+    """Obtiene candidatos de las respuestas de MAL, Jikan o Tenrai."""
+    return ((data or {}).get('data') or [])[:5]
+
+
+def _buscar_mal_oficial(anime_name: str) -> dict | None:
+    """Consulta la API oficial de MAL si se configuró MAL_CLIENT_ID."""
+    client_id = os.environ.get('MAL_CLIENT_ID', '').strip()
+    if not client_id:
+        return None
+
+    import urllib.parse
+    params = urllib.parse.urlencode({
+        'q': _normalizar_consulta(anime_name),
+        'limit': 5,
+        'fields': 'id,title,main_picture,alternative_titles,start_date,synopsis,mean,popularity,num_episodes,media_type,status,genres,source,average_episode_duration,studios,url',
+    })
+    data = _curl_get(
+        f'https://api.myanimelist.net/v2/anime?{params}',
+        headers=[f'X-MAL-CLIENT-ID: {client_id}'],
+    )
+    candidatos = _mal_candidates(data)
+    if not candidatos:
+        return None
+    return _normalizar_mal(max(candidatos, key=lambda item: item.get('mean') or 0))
+
+
+def _buscar_mal_tenrai(anime_name: str) -> dict | None:
+    """Consulta Tenrai, una fuente pública de datos normalizados de MAL."""
+    import urllib.parse
+    params = urllib.parse.urlencode({
+        'q': _normalizar_consulta(anime_name),
+        'limit': 5,
+    })
+    data = _curl_get(f'https://api.tenrai.org/v1/anime?{params}')
+    candidatos = _mal_candidates(data)
+    if not candidatos:
+        return None
+    return _normalizar_mal(max(candidatos, key=lambda item: item.get('score') or 0))
+
+
+def _buscar_mal_jikan(anime_name: str) -> dict | None:
+    """Consulta Jikan como respaldo cuando MAL oficial y Tenrai no responden."""
+    import urllib.parse
+    query_enc = urllib.parse.quote(_normalizar_consulta(anime_name), safe='')
+    data = _curl_get(f'https://api.jikan.moe/v4/anime?q={query_enc}&limit=5')
+    candidatos = _mal_candidates(data)
+    if not candidatos:
+        return None
+    return _normalizar_mal(max(candidatos, key=lambda item: item.get('score') or 0))
+
+
+def _buscar_mal(anime_name: str) -> dict | None:
+    """Busca en MAL oficial, Tenrai y Jikan, en ese orden."""
+    proveedores = (
+        ('MAL oficial', _buscar_mal_oficial),
+        ('Tenrai', _buscar_mal_tenrai),
+        ('Jikan', _buscar_mal_jikan),
+    )
+    for nombre, proveedor in proveedores:
+        try:
+            resultado = proveedor(anime_name)
+        except Exception as error:
+            logger.warning(f'{nombre}: error durante la búsqueda: {error}')
+            resultado = None
+        if resultado:
+            logger.info(f'{nombre}: resultado encontrado para {anime_name}')
+            return resultado
+        logger.info(f'{nombre}: sin resultados o servicio no disponible')
+    return None
 
 
 def _buscar_kitsu(anime_name: str) -> dict | None:
@@ -445,18 +551,22 @@ def _buscar_kitsu(anime_name: str) -> dict | None:
 
 
 def _mal_type(t: str | None) -> str:
-    mapping = {'TV': 'TV', 'Movie': 'MOVIE', 'Special': 'SPECIAL',
-               'OVA': 'OVA', 'ONA': 'ONA', 'Music': 'MUSIC'}
-    return mapping.get(t or '', t or 'TV')
+    mapping = {
+        'TV': 'TV', 'MOVIE': 'MOVIE', 'SPECIAL': 'SPECIAL',
+        'OVA': 'OVA', 'ONA': 'ONA', 'MUSIC': 'MUSIC',
+    }
+    value = str(t or 'TV').upper()
+    return mapping.get(value, value)
 
 
 def _mal_status(s: str | None) -> str:
     mapping = {
-        'Finished Airing': 'FINISHED',
-        'Currently Airing': 'RELEASING',
-        'Not yet aired': 'NOT_YET_RELEASED',
+        'finished airing': 'FINISHED',
+        'currently airing': 'RELEASING',
+        'not yet aired': 'NOT_YET_RELEASED',
     }
-    return mapping.get(s or '', s or '')
+    value = str(s or '').replace('_', ' ').strip().lower()
+    return mapping.get(value, str(s or ''))
 
 
 def _mal_source(s: str | None) -> str:
@@ -570,9 +680,9 @@ def register(app, user_states, work_dir):
             anime = _buscar_anilist(anime_name)
             fuente = "AniList"
 
-            # ── 2. Fallback a MyAnimeList/Jikan ──────────────────────────
+            # ── 2. Fallback a MAL oficial/Tenrai/Jikan ───────────────────
             if not anime:
-                logger.info(f"AniList sin resultados, probando MAL para: {anime_name}")
+                logger.info(f"AniList sin resultados, probando MAL/Tenrai/Jikan para: {anime_name}")
                 await status_msg.edit_text("⏳ Buscando en MyAnimeList...")
                 anime = _buscar_mal(anime_name)
                 fuente = "MyAnimeList"
@@ -715,10 +825,9 @@ def register(app, user_states, work_dir):
                 f"{ficha_txt}"
             )
 
-            # ── 6. Imagen de portada — AniList exclusivamente ─────────────
-            # Cuando el fallback es MyAnimeList/Jikan no se muestra su imagen:
-            # así se evita mezclar la portada de otra fuente con los datos del resultado.
-            cover = anime.get('coverImage') or {} if anime.get('_source') != 'mal' else {}
+            # ── 6. Imagen de portada de la fuente que devolvió los datos ───
+            # AniList, MAL/Tenrai/Jikan y Kitsu entregan portadas compatibles.
+            cover = anime.get('coverImage') or {}
             image_candidates = [
                 cover.get('extraLarge'),
                 cover.get('large'),
