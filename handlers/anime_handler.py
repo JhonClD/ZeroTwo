@@ -1,6 +1,6 @@
 """
 anime_handler.py - Manejador del comando /anime
-Fuentes: AniList (principal) → MyAnimeList/Jikan (fallback)
+    Fuentes: AniList (principal) → MyAnimeList/Jikan → Kitsu (fallbacks)
 Imagen: cascada multi-fuente con verificación de tamaño (≥500KB preferido)
 Doblaje: Crunchyroll Latinoamérica (temporada Primavera 2026 + historial)
 """
@@ -239,11 +239,11 @@ def _curl_post_json(url: str, payload: dict, timeout: int = 15) -> dict | None:
         os.unlink(tmp_path)
 
 
-def _curl_get(url: str, timeout: int = 15) -> dict | None:
+def _curl_get(url: str, timeout: int = 15, accept: str = 'application/json') -> dict | None:
     """Hace GET con curl y devuelve JSON parseado."""
     try:
         cmd = ['curl', '-s', '-L', url,
-               '-H', 'Accept: application/json',
+               '-H', f'Accept: {accept}',
                '-H', 'User-Agent: Mozilla/5.0']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
@@ -357,6 +357,87 @@ def _buscar_mal(anime_name: str) -> dict | None:
     }
 
 
+def _buscar_kitsu(anime_name: str) -> dict | None:
+    """
+    Segundo fallback: busca en Kitsu cuando AniList y Jikan/MAL no responden.
+    Kitsu expone datos compatibles con la ficha actual y no requiere API key.
+    """
+    import urllib.parse
+
+    consulta = _normalizar_consulta(anime_name)
+    query_enc = urllib.parse.quote(consulta, safe='')
+    data = _curl_get(
+        'https://kitsu.io/api/edge/anime'
+        f'?filter%5Btext%5D={query_enc}&page%5Blimit%5D=5',
+        accept='application/vnd.api+json'
+    )
+    candidatos = (data or {}).get('data') or []
+    if not candidatos:
+        logger.info(f"Kitsu: no encontrado → {anime_name}")
+        return None
+
+    item = candidatos[0]
+    attrs = item.get('attributes') or {}
+    titles = attrs.get('titles') or {}
+    start_date = attrs.get('startDate') or ''
+    start_parts = start_date[:10].split('-') if start_date else []
+    year = month = day = None
+    if len(start_parts) == 3:
+        try:
+            year, month, day = (int(part) for part in start_parts)
+        except ValueError:
+            pass
+
+    status_map = {
+        'current': 'RELEASING',
+        'finished': 'FINISHED',
+        'upcoming': 'NOT_YET_RELEASED',
+    }
+    subtype_map = {
+        'TV': 'TV',
+        'movie': 'MOVIE',
+        'ONA': 'ONA',
+        'OVA': 'OVA',
+        'special': 'SPECIAL',
+        'music': 'MUSIC',
+    }
+    poster = attrs.get('posterImage') or {}
+    average_rating = attrs.get('averageRating')
+    try:
+        average_score = float(average_rating) if average_rating is not None else None
+    except (TypeError, ValueError):
+        average_score = None
+
+    return {
+        '_source': 'kitsu',
+        'title': {
+            'romaji': titles.get('en_jp') or attrs.get('canonicalTitle'),
+            'english': titles.get('en') or attrs.get('canonicalTitle'),
+            'native': titles.get('ja_jp') or '',
+        },
+        'studios': {'nodes': []},
+        'startDate': {'year': year, 'month': month, 'day': day},
+        'seasonYear': year,
+        'episodes': attrs.get('episodeCount'),
+        'genres': [],
+        'duration': attrs.get('episodeLength'),
+        'format': subtype_map.get(attrs.get('subtype'), attrs.get('subtype') or 'TV'),
+        'season': None,
+        'status': status_map.get(attrs.get('status'), attrs.get('status') or ''),
+        'source': '',
+        'description': attrs.get('synopsis') or attrs.get('description') or 'No disponible',
+        'bannerImage': (attrs.get('coverImage') or {}).get('original'),
+        'coverImage': {
+            'extraLarge': poster.get('original') or poster.get('large'),
+            'large': poster.get('large') or poster.get('medium'),
+            'medium': poster.get('medium') or poster.get('small'),
+        },
+        'siteUrl': f"https://kitsu.io/anime/{attrs.get('slug')}" if attrs.get('slug') else None,
+        'averageScore': average_score,
+        'popularity': attrs.get('userCount'),
+    }
+
+
 def _mal_type(t: str | None) -> str:
     mapping = {'TV': 'TV', 'Movie': 'MOVIE', 'Special': 'SPECIAL',
                'OVA': 'OVA', 'ONA': 'ONA', 'Music': 'MUSIC'}
@@ -451,7 +532,7 @@ def register(app, user_states, work_dir):
 
     @app.on_message(filters.command("anime"))
     async def anime_command(client, message: Message):
-        """Comando /anime — busca info de anime (AniList + MAL fallback)."""
+        """Comando /anime — busca info de anime con varios proveedores de respaldo."""
 
         args = message.text.split(maxsplit=1)
 
@@ -489,6 +570,13 @@ def register(app, user_states, work_dir):
                 await status_msg.edit_text("⏳ Buscando en MyAnimeList...")
                 anime = _buscar_mal(anime_name)
                 fuente = "MyAnimeList"
+
+            # ── 3. Fallback independiente cuando Jikan/MAL también cae ────
+            if not anime:
+                logger.info(f"Jikan sin resultados, probando Kitsu para: {anime_name}")
+                await status_msg.edit_text("⏳ Buscando en Kitsu...")
+                anime = _buscar_kitsu(anime_name)
+                fuente = "Kitsu"
 
             if not anime:
                 await status_msg.edit_text(
