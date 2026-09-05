@@ -368,7 +368,7 @@ def _buscar_kitsu(anime_name: str) -> dict | None:
     query_enc = urllib.parse.quote(consulta, safe='')
     data = _curl_get(
         'https://kitsu.io/api/edge/anime'
-        f'?filter%5Btext%5D={query_enc}&page%5Blimit%5D=5',
+        f'?filter%5Btext%5D={query_enc}&page%5Blimit%5D=5&include=genres',
         accept='application/vnd.api+json'
     )
     candidatos = (data or {}).get('data') or []
@@ -402,6 +402,12 @@ def _buscar_kitsu(anime_name: str) -> dict | None:
         'music': 'MUSIC',
     }
     poster = attrs.get('posterImage') or {}
+    genres = [
+        (included.get('attributes') or {}).get('name')
+        for included in (data or {}).get('included', [])
+        if included.get('type') == 'genres'
+        and (included.get('attributes') or {}).get('name')
+    ]
     average_rating = attrs.get('averageRating')
     try:
         average_score = float(average_rating) if average_rating is not None else None
@@ -419,7 +425,7 @@ def _buscar_kitsu(anime_name: str) -> dict | None:
         'startDate': {'year': year, 'month': month, 'day': day},
         'seasonYear': year,
         'episodes': attrs.get('episodeCount'),
-        'genres': [],
+        'genres': genres,
         'duration': attrs.get('episodeLength'),
         'format': subtype_map.get(attrs.get('subtype'), attrs.get('subtype') or 'TV'),
         'season': None,
