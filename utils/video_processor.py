@@ -9,6 +9,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from utils.subtitle_tools import ass_style
+
 logger = logging.getLogger(__name__)
 
 # Tabla de banderas por código de idioma
@@ -203,6 +205,13 @@ class VideoProcessor:
         is_external=True,
         external_sub_path=None,
         progress_callback=None,
+        crf="23",
+        preset="veryfast",
+        bitrate=None,
+        subtitle_color="white",
+        subtitle_alignment="bottom",
+        subtitle_size=20,
+        add_watermark=True,
     ):
         """
         Quema subtítulos en el video con estilo personalizado y marca de agua ZeroTwo.
@@ -240,20 +249,8 @@ class VideoProcessor:
             sub_filter = f"subtitles={vid_p}:si={idx}"
             logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
 
-        # ── Estilo de subtítulos ──────────────────────────────────────────────
-        sub_style = (
-            "force_style='"
-            "Fontname=sans,"
-            "FontSize=20,"
-            "Bold=1,"
-            "PrimaryColour=&HFFFFFF,"    # blanco
-            "OutlineColour=&HAABB00,"    # contorno amarillo-verdoso
-            "BorderStyle=1,"
-            "Outline=2.0,"
-            "Shadow=1.0,"
-            "MarginV=25"
-            "'"
-        )
+        # ── Estilo de subtítulos configurable ────────────────────────────────
+        sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size)
 
         # ── Marca de agua ZeroTwo (primeros 6 segundos) ───────────────────────────
         watermark = (
@@ -267,7 +264,7 @@ class VideoProcessor:
             "enable='lt(t,6)'"
         )
 
-        full_vf = f"{watermark},{sub_filter}:{sub_style}"
+        full_vf = f"{watermark},{sub_filter}:{sub_style}" if add_watermark else f"{sub_filter}:{sub_style}"
 
         # ── Mapeado de audio ──────────────────────────────────────────────────
         audio_map = ["-map", f"0:{audio_idx}"] if audio_idx is not None else ["-map", "0:a:0"]
@@ -279,8 +276,8 @@ class VideoProcessor:
             *audio_map,
             '-vf', full_vf,
             '-c:v', 'libx264',
-            '-crf', '26',
-            '-preset', 'veryfast',
+            '-crf', str(max(16, min(35, int(crf)))),
+            '-preset', str(preset),
             '-profile:v', 'main',
             '-level', '3.1',
             '-pix_fmt', 'yuv420p',
@@ -291,6 +288,8 @@ class VideoProcessor:
             '-threads', '0',
             str(output_path),
         ]
+        if bitrate:
+            cmd[cmd.index('-crf'):cmd.index('-crf') + 2] = ['-b:v', str(bitrate)]
 
         logger.info("🔧 Comando FFmpeg construido: %s", " ".join(str(part) for part in cmd))
 

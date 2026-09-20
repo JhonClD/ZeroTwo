@@ -11,11 +11,22 @@ from pathlib import Path
 
 from pyrogram import filters, enums
 from pyrogram.types import Message
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from utils.video_processor import VideoProcessor
 
 logger = logging.getLogger(__name__)
 _VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
+_ENCODE_STATES = {}
+
+
+def _encode_keyboard(user_id):
+    s = _ENCODE_STATES[user_id]
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🎚 CRF {s['crf']}", callback_data=f"enc_menu:crf:{user_id}"), InlineKeyboardButton(f"⚡ {s['preset']}", callback_data=f"enc_menu:preset:{user_id}")],
+        [InlineKeyboardButton(f"📊 Bitrate: {s['bitrate'] or 'CRF'}", callback_data=f"enc_menu:bitrate:{user_id}"), InlineKeyboardButton("🎧 Audio", callback_data=f"enc_menu:audio:{user_id}")],
+        [InlineKeyboardButton("✅ Iniciar codificación", callback_data=f"enc_start:{user_id}"), InlineKeyboardButton("❌ Cancelar", callback_data=f"enc_cancel:{user_id}")],
+    ])
 
 
 def _safe_name(name: str) -> str:
@@ -127,18 +138,16 @@ async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
     try:
         await reply.download(file_name=str(source))
         logger.info("✅ DESCARGA COMPLETADA | %s bytes=%s", source, source.stat().st_size)
-        crf, preset, bitrate, _, audio_idx = _parse_args(message.text)
-        await status.edit_text(f"⚙️ Codificando {'en dos pasadas' if two_pass else 'con CRF'}…")
-        ok, detail = await asyncio.to_thread(_run_encode, source, output, two_pass, crf, preset, bitrate, audio_idx)
-        if not ok:
-            raise RuntimeError(detail or "FFmpeg no pudo generar el archivo final")
-        await _send_result(message, output, status)
+        _ENCODE_STATES[message.from_user.id] = {"source": source, "output": output, "status": status, "two_pass": two_pass, "crf": "23", "preset": "veryfast", "bitrate": None, "audio": None}
+        await status.edit_text("🎛 <b>Configura la codificación</b>\nElige calidad, velocidad y audio. Después pulsa iniciar.", reply_markup=_encode_keyboard(message.from_user.id), parse_mode=enums.ParseMode.HTML)
+        return
     except Exception as error:
         logger.error("❌ ERROR CODIFICACIÓN | %s", error, exc_info=True)
         await status.edit_text(f"❌ Error codificando el video.\n<code>{str(error)[:500]}</code>", parse_mode=enums.ParseMode.HTML)
     finally:
-        source.unlink(missing_ok=True)
-        logger.info("🧹 LIMPIEZA | fuente=%s", source)
+        if message.from_user.id not in _ENCODE_STATES:
+            source.unlink(missing_ok=True)
+            logger.info("🧹 LIMPIEZA | fuente=%s", source)
 
 
 def register(app, download_dir: Path):
@@ -147,6 +156,43 @@ def register(app, download_dir: Path):
     encoding_dir.mkdir(parents=True, exist_ok=True)
     encoded_dir.mkdir(parents=True, exist_ok=True)
     logger.info("📂 ENCODER LISTO | entrada=%s salida=%s", encoding_dir, encoded_dir)
+
+    @app.on_callback_query(filters.regex(r"^enc_menu:(crf|preset|bitrate|audio):\d+$"))
+    async def encode_menu(client, query):
+        _, kind, uid = query.data.split(":"); uid = int(uid); state = _ENCODE_STATES.get(uid)
+        if not state or query.from_user.id != uid: return await query.answer("Sesión expirada", show_alert=True)
+        values = {"crf": ("18", "20", "23", "26", "28", "30"), "preset": ("ultrafast", "veryfast", "fast", "medium"), "bitrate": ("800k", "1200k", "2000k", "3500k", "6000k"), "audio": ("0", "1", "2")}[kind]
+        buttons = [[InlineKeyboardButton(v, callback_data=f"enc_set:{kind}:{v}:{uid}") for v in values]]
+        buttons.append([InlineKeyboardButton("↩️ Volver", callback_data=f"enc_back:{uid}")])
+        await query.message.edit_text(f"Selecciona {kind}:", reply_markup=InlineKeyboardMarkup(buttons)); await query.answer()
+
+    @app.on_callback_query(filters.regex(r"^enc_set:(crf|preset|bitrate|audio):[^:]+:\d+$"))
+    async def encode_set(client, query):
+        _, kind, value, uid = query.data.split(":"); state = _ENCODE_STATES.get(int(uid))
+        if not state: return await query.answer("Sesión expirada", show_alert=True)
+        state[kind] = int(value) if kind == "audio" else value
+        if kind == "bitrate": state["crf"] = "23"
+        await query.answer("Guardado"); await query.message.edit_text("🎛 <b>Configuración lista</b>", reply_markup=_encode_keyboard(int(uid)), parse_mode=enums.ParseMode.HTML)
+
+    @app.on_callback_query(filters.regex(r"^enc_back:\d+$"))
+    async def encode_back(client, query):
+        uid = int(query.data.split(":")[1])
+        if uid in _ENCODE_STATES: await query.message.edit_text("🎛 <b>Configura la codificación</b>", reply_markup=_encode_keyboard(uid), parse_mode=enums.ParseMode.HTML)
+
+    @app.on_callback_query(filters.regex(r"^enc_start:\d+$"))
+    async def encode_start(client, query):
+        uid = int(query.data.split(":")[1]); state = _ENCODE_STATES.get(uid)
+        if not state: return await query.answer("Sesión expirada", show_alert=True)
+        await query.answer("Codificación iniciada"); await state["status"].edit_text("⚙️ Codificando con la configuración elegida…")
+        ok, detail = await asyncio.to_thread(_run_encode, state["source"], state["output"], state["two_pass"], state["crf"], state["preset"], state["bitrate"], state["audio"])
+        if ok: await _send_result(query.message, state["output"], state["status"])
+        else: await state["status"].edit_text(f"❌ Error codificando: <code>{detail[:500]}</code>", parse_mode=enums.ParseMode.HTML)
+        _ENCODE_STATES.pop(uid, None); state["source"].unlink(missing_ok=True)
+
+    @app.on_callback_query(filters.regex(r"^enc_cancel:\d+$"))
+    async def encode_cancel(client, query):
+        uid = int(query.data.split(":")[1]); state = _ENCODE_STATES.pop(uid, None)
+        if state: state["source"].unlink(missing_ok=True); await query.message.edit_text("❌ Codificación cancelada.")
 
     @app.on_message(filters.command("dw2") & filters.reply)
     async def download_local(client, message: Message):

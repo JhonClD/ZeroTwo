@@ -30,6 +30,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Telegram | Recibir enlaces y archivos mediante un bot. |
 | Descargas | Descargar contenido de MEGA y MediaFire. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
+| Subtítulos | Selección por botones de pista interna o archivo externo, color, tamaño, alineación, CRF y preset. |
+| Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
@@ -317,6 +319,25 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/delete2` | Limpia subtítulos y logs temporales. |
 | `/dele2` | Limpia videos locales temporales. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
+
+### Flujo recomendado de subtítulos y codificación
+
+Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. Después puedes ajustar **color** (blanco, amarillo, cian o verde), **alineación**, **tamaño de letra**, **preset** y **CRF** antes de iniciar el quemado. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
+
+Para codificar sin subtítulos, responde al video con `/press` o `/press2`. El menú permite elegir CRF (calidad constante), bitrate, preset y pista de audio. En general, CRF 18–23 ofrece mayor calidad; CRF 26–30 reduce el tamaño. `veryfast` es una opción equilibrada para Termux y `medium` mejora la compresión a costa de más tiempo.
+
+### Traducción opcional
+
+La traducción no se activa por defecto. Configura un servidor compatible con LibreTranslate antes de arrancar el bot:
+
+```bash
+export LIBRETRANSLATE_URL="https://tu-servidor-libretranslate.example"
+# Opcional, si tu servidor requiere autenticación:
+export LIBRETRANSLATE_API_KEY="TU_CLAVE"
+python main.py
+```
+
+Por privacidad y estabilidad, la traducción se limita a archivos `.srt` y `.vtt`; los archivos `.ass` se pueden quemar con sus estilos originales, pero deben traducirse externamente si se necesita conservar un formato ASS complejo.
 
 ## Solución de problemas
 
