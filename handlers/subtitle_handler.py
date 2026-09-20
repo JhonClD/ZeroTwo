@@ -41,6 +41,7 @@ async def _burn_and_send(message: Message, state: dict, subtitle_path=None, sub_
     video_path = Path(state["video_path"])
     output_path = Path(state["job_dir"]) / f"{video_path.stem}_ZeroTwo.mp4"
     status = state["status"]
+    logger.info("📝 QUEMADO | entrada=%s externo=%s pista_interna=%s salida=%s", video_path, subtitle_path, sub_idx, output_path)
 
     async def progress_update(text):
         try:
@@ -70,6 +71,7 @@ async def _burn_and_send(message: Message, state: dict, subtitle_path=None, sub_
             supports_streaming=True,
         )
         await status.delete()
+        logger.info("✅ QUEMADO COMPLETADO | salida=%s bytes=%s", output_path, output_path.stat().st_size)
     except Exception as error:
         logger.error("Error quemando subtítulos: %s", error, exc_info=True)
         await status.edit_text(
@@ -80,6 +82,7 @@ async def _burn_and_send(message: Message, state: dict, subtitle_path=None, sub_
         user_states = state["user_states"]
         user_states.pop(state["user_id"], None)
         _cleanup_job(state)
+        logger.info("🧹 LIMPIEZA SUBTÍTULOS | carpeta=%s", state["job_dir"])
 
 
 def register(app, user_states, work_dir: Path):
@@ -101,6 +104,7 @@ def register(app, user_states, work_dir: Path):
         job_dir.mkdir(parents=True, exist_ok=True)
         video_path = job_dir / _media_name(reply)
         status = await message.reply_text("⏳ Descargando y analizando las pistas del video…")
+        logger.info("📥 SUBTÍTULOS | inicio usuario=%s fuente=%s destino=%s", user_id, _media_name(reply), video_path)
         state = {
             "action": "burn_subtitles",
             "video_message": reply,
@@ -114,8 +118,10 @@ def register(app, user_states, work_dir: Path):
 
         try:
             await reply.download(file_name=str(video_path))
+            logger.info("✅ SUBTÍTULOS | descarga completada archivo=%s bytes=%s", video_path, video_path.stat().st_size)
             media_info = await asyncio.to_thread(VideoProcessor.probe_media, video_path)
             subtitle_tracks = (media_info or {}).get("subtitle", [])
+            logger.info("🔎 PISTAS SUBTÍTULOS | archivo=%s cantidad=%s pistas=%s", video_path, len(subtitle_tracks), subtitle_tracks)
             if subtitle_tracks:
                 buttons = []
                 for track in subtitle_tracks[:20]:
@@ -153,6 +159,7 @@ def register(app, user_states, work_dir: Path):
                 return
             await callback_query.answer("Pista seleccionada")
             await callback_query.message.edit_text("✅ Pista seleccionada. Iniciando procesamiento…")
+            logger.info("🎯 PISTA SELECCIONADA | usuario=%s pista=%s", user_id, track_index)
             await _burn_and_send(callback_query.message, state, sub_idx=int(track_index))
         except Exception as error:
             logger.error("Error seleccionando pista de subtítulos: %s", error, exc_info=True)
@@ -174,6 +181,7 @@ def register(app, user_states, work_dir: Path):
         subtitle_path = Path(state["job_dir"]) / subtitle_name
         try:
             await message.download(file_name=str(subtitle_path))
+            logger.info("✅ SUBTÍTULO EXTERNO | archivo=%s bytes=%s", subtitle_path, subtitle_path.stat().st_size)
             await _burn_and_send(message, state, subtitle_path=subtitle_path)
         except Exception as error:
             logger.error("Error recibiendo subtítulos externos: %s", error, exc_info=True)

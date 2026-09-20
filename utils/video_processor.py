@@ -292,7 +292,7 @@ class VideoProcessor:
             str(output_path),
         ]
 
-        logger.info("🔧 Comando FFmpeg construido")
+        logger.info("🔧 Comando FFmpeg construido: %s", " ".join(str(part) for part in cmd))
 
         try:
             # Total de frames para progreso
@@ -382,6 +382,7 @@ class VideoProcessor:
                 output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
                 logger.info(f"✅ Subtítulos quemados exitosamente")
                 logger.info(f"📦 Tamaño final: {output_size_mb:.2f} MB")
+                logger.info("🏁 PROCESO COMPLETADO | quemado de subtítulos | salida=%s", output_path)
                 return True
             else:
                 logger.error(f"❌ Error quemando subtítulos: código {process.returncode}")

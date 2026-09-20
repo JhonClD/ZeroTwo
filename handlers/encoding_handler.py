@@ -1,26 +1,11 @@
 """
 encoding_handler.py - Flujo de codificación heredado del ZIP, adaptado a ZeroTwo.
-
-Comandos:
-  /dw2       Descarga el archivo al espacio local del bot.
-  /press     Codifica un video respondido con CRF (por defecto 23).
-  /press2    Codifica un video respondido con dos pasadas.
-  /compre1   Alias de /press.
-  /compress1 Alias de /press.
-  /compre2   Alias de /press con -crf N.
-  /compress2 Alias de /press2.
-  /ed2       Codifica los MKV guardados localmente e intenta usar una pista de subtítulos.
-  /ec2       Codifica los MKV guardados localmente sin subtítulos internos.
-  /up2       Envía los videos codificados pendientes.
-  /delete2   Elimina logs y subtítulos temporales.
-  /dele2     Elimina videos locales temporales.
-
-Los archivos se guardan dentro de DOWNLOAD_DIR/zerotwo_encoding.
 """
 
 import asyncio
 import logging
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -40,11 +25,7 @@ def _safe_name(name: str) -> str:
 
 def _parse_args(text: str):
     args = (text or "").split()
-    crf = "23"
-    preset = "medium"
-    bitrate = None
-    sub_idx = None
-    audio_idx = None
+    crf, preset, bitrate, sub_idx, audio_idx = "23", "medium", None, None, None
     for index, arg in enumerate(args):
         if arg == "-crf" and index + 1 < len(args) and args[index + 1].isdigit():
             crf = str(max(16, min(35, int(args[index + 1]))))
@@ -63,8 +44,36 @@ def _watermark_filter():
     return "drawtext=text='ZERO TWO':x=20:y=20:font='sans':fontsize=22:fontcolor=white:bordercolor=black:borderw=1.5:enable='lt(t,6)'"
 
 
+def _run_logged(command, stage: str):
+    """Ejecuta un proceso y refleja sus etapas/progreso en bot.log y en la terminal."""
+    logger.info("▶️ INICIO | %s", stage)
+    logger.info("🧰 COMANDO | %s", shlex.join(str(part) for part in command))
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, bufsize=1)
+    tail = []
+    progress_lines = 0
+    for raw_line in process.stderr:
+        line = raw_line.strip()
+        if not line:
+            continue
+        tail.append(line)
+        tail = tail[-20:]
+        if "frame=" in line or "time=" in line or "speed=" in line:
+            progress_lines += 1
+            if progress_lines == 1 or progress_lines % 10 == 0:
+                logger.info("📈 %s | %s", stage, line[-220:])
+        elif "error" in line.lower() or "failed" in line.lower():
+            logger.error("❌ %s | %s", stage, line[-500:])
+    return_code = process.wait()
+    if return_code == 0:
+        logger.info("✅ FIN | %s | código=%s", stage, return_code)
+    else:
+        logger.error("❌ FIN ERROR | %s | código=%s", stage, return_code)
+    return return_code, "\n".join(tail)
+
+
 def _run_encode(input_path: Path, output_path: Path, two_pass=False, crf="23", preset="medium", bitrate=None, audio_idx=None, add_watermark=True):
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("🎬 CODIFICACIÓN | entrada=%s salida=%s dos_pasadas=%s crf=%s preset=%s bitrate=%s audio=%s marca=%s", input_path, output_path, two_pass, crf, preset, bitrate, audio_idx, add_watermark)
     video_map = ["-map", "0:v:0"]
     audio_map = ["-map", f"0:a:{audio_idx}"] if audio_idx is not None else ["-map", "0:a:0?"]
     video_codec = ["-c:v", "libx264", "-preset", preset]
@@ -74,29 +83,34 @@ def _run_encode(input_path: Path, output_path: Path, two_pass=False, crf="23", p
         common.extend(["-vf", _watermark_filter()])
     common.extend([*video_codec, *video_quality, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"])
     if not two_pass:
-        result = subprocess.run([*common, str(output_path)], capture_output=True, text=True, timeout=7200)
-        return result.returncode == 0, result.stderr[-1200:]
+        rc, detail = _run_logged([*common, str(output_path)], "FFmpeg · codificación final")
+        return rc == 0, detail
+
     passlog = output_path.with_suffix(".passlog")
     first = ["ffmpeg", "-hide_banner", "-y", "-i", str(input_path), *video_map, "-an", *video_codec, *video_quality, "-pass", "1", "-passlogfile", str(passlog), "-f", "null", "/dev/null"]
-    first_result = subprocess.run(first, capture_output=True, text=True, timeout=7200)
-    if first_result.returncode != 0:
-        return False, first_result.stderr[-1200:]
+    rc, detail = _run_logged(first, "FFmpeg · primera pasada")
+    if rc != 0:
+        return False, detail
     second = [*common, "-pass", "2", "-passlogfile", str(passlog), str(output_path)]
-    second_result = subprocess.run(second, capture_output=True, text=True, timeout=7200)
+    rc, detail = _run_logged(second, "FFmpeg · segunda pasada")
     for suffix in ("", "-0.log", ".log"):
         Path(str(passlog) + suffix).unlink(missing_ok=True)
-    return second_result.returncode == 0, second_result.stderr[-1200:]
+    return rc == 0, detail
 
 
 async def _send_result(message: Message, output_path: Path, status: Message):
+    logger.info("🖼️ MINIATURA | generando para %s", output_path)
     thumb_path = output_path.with_suffix(".jpg")
     duration, thumb = await asyncio.to_thread(VideoProcessor.get_video_meta, output_path, thumb_path)
+    logger.info("📤 SUBIDA | archivo=%s duración=%s thumb=%s", output_path, duration, thumb)
     try:
         await message.reply_video(video=str(output_path), thumb=thumb, caption=f"✅ Codificación terminada\n🏷 ZeroTwo\n📄 {output_path.name}", duration=duration or None, supports_streaming=True)
         await status.delete()
+        logger.info("✅ SUBIDA COMPLETADA | %s", output_path)
     finally:
         output_path.unlink(missing_ok=True)
         thumb_path.unlink(missing_ok=True)
+        logger.info("🧹 LIMPIEZA | salida=%s miniatura=%s", output_path, thumb_path)
 
 
 async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
@@ -109,8 +123,10 @@ async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
     source = encoding_dir / f"source_{message.id}_{source_name}"
     output = encoding_dir / f"ZeroTwo_{Path(source_name).stem}.mp4"
     status = await message.reply_text("⏳ Descargando video para codificar…")
+    logger.info("📥 DESCARGA | inicio=%s destino=%s", source_name, source)
     try:
         await reply.download(file_name=str(source))
+        logger.info("✅ DESCARGA COMPLETADA | %s bytes=%s", source, source.stat().st_size)
         crf, preset, bitrate, _, audio_idx = _parse_args(message.text)
         await status.edit_text(f"⚙️ Codificando {'en dos pasadas' if two_pass else 'con CRF'}…")
         ok, detail = await asyncio.to_thread(_run_encode, source, output, two_pass, crf, preset, bitrate, audio_idx)
@@ -118,10 +134,11 @@ async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
             raise RuntimeError(detail or "FFmpeg no pudo generar el archivo final")
         await _send_result(message, output, status)
     except Exception as error:
-        logger.error("Error de codificación: %s", error, exc_info=True)
+        logger.error("❌ ERROR CODIFICACIÓN | %s", error, exc_info=True)
         await status.edit_text(f"❌ Error codificando el video.\n<code>{str(error)[:500]}</code>", parse_mode=enums.ParseMode.HTML)
     finally:
         source.unlink(missing_ok=True)
+        logger.info("🧹 LIMPIEZA | fuente=%s", source)
 
 
 def register(app, download_dir: Path):
@@ -129,6 +146,7 @@ def register(app, download_dir: Path):
     encoded_dir = encoding_dir / "encoded"
     encoding_dir.mkdir(parents=True, exist_ok=True)
     encoded_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("📂 ENCODER LISTO | entrada=%s salida=%s", encoding_dir, encoded_dir)
 
     @app.on_message(filters.command("dw2") & filters.reply)
     async def download_local(client, message: Message):
@@ -140,10 +158,13 @@ def register(app, download_dir: Path):
         name = _safe_name(getattr(media, "file_name", "archivo"))
         destination = encoding_dir / name
         status = await message.reply_text(f"📥 Descargando localmente:\n<code>{name}</code>", parse_mode=enums.ParseMode.HTML)
+        logger.info("📥 COLA LOCAL | inicio=%s destino=%s", name, destination)
         try:
             await reply.download(file_name=str(destination))
+            logger.info("✅ COLA LOCAL | completado=%s bytes=%s", destination, destination.stat().st_size)
             await status.edit_text(f"✅ Guardado en la cola local:\n<code>{destination.name}</code>", parse_mode=enums.ParseMode.HTML)
         except Exception as error:
+            logger.error("❌ ERROR DESCARGA LOCAL | %s", error, exc_info=True)
             await status.edit_text(f"❌ Error descargando: <code>{str(error)[:400]}</code>", parse_mode=enums.ParseMode.HTML)
 
     @app.on_message(filters.command(["press", "compre1", "compress1"]) & filters.reply)
@@ -163,32 +184,36 @@ def register(app, download_dir: Path):
         _, _, _, sub_idx, audio_idx = _parse_args(message.text)
         use_subs = message.command[0].lower() == "ed2"
         selected_sub_idx = sub_idx if sub_idx is not None else 0
+        logger.info("📦 COLA CODIFICACIÓN | archivos=%s modo=%s pista_sub=%s audio=%s", len(files), message.command[0], selected_sub_idx if use_subs else "no", audio_idx)
         status = await message.reply_text(f"⚙️ Codificando {len(files)} archivo(s) local(es)…")
         for source in files:
             output = encoded_dir / f"ZeroTwo_{source.stem}.mp4"
             try:
-                if use_subs and sub_idx is not None:
+                source_for_encode = source
+                if use_subs:
                     intermediate = encoding_dir / f"{source.stem}_sub.mp4"
+                    logger.info("📝 QUEMADO INTERNO | fuente=%s pista=%s salida=%s", source, selected_sub_idx, intermediate)
                     ok = await VideoProcessor.burn_subtitles(source, None, intermediate, sub_idx=selected_sub_idx, is_external=False)
                     if not ok:
                         raise RuntimeError("No se pudo quemar la pista interna seleccionada")
                     source_for_encode = intermediate
-                else:
-                    source_for_encode = source
                 crf, preset, bitrate, _, parsed_audio = _parse_args(message.text)
                 ok, detail = await asyncio.to_thread(_run_encode, source_for_encode, output, False, crf, preset, bitrate, parsed_audio if parsed_audio is not None else audio_idx, add_watermark=not (use_subs and source_for_encode != source))
                 if source_for_encode != source:
                     source_for_encode.unlink(missing_ok=True)
                 if not ok:
                     raise RuntimeError(detail or "FFmpeg falló")
+                logger.info("✅ COLA COMPLETADA | fuente=%s salida=%s", source, output)
                 await status.edit_text(f"✅ Codificado: <code>{output.name}</code>", parse_mode=enums.ParseMode.HTML)
             except Exception as error:
+                logger.error("❌ ERROR COLA | fuente=%s error=%s", source, error, exc_info=True)
                 await status.edit_text(f"❌ Error con {source.name}: <code>{str(error)[:400]}</code>", parse_mode=enums.ParseMode.HTML)
         await message.reply_text("📦 Usa /up2 para enviar los videos codificados.")
 
     @app.on_message(filters.command("up2"))
     async def upload_encoded(client, message: Message):
         files = list(encoded_dir.glob("*.mp4"))
+        logger.info("📤 COLA SUBIDA | archivos=%s", len(files))
         if not files:
             await message.reply_text("⚠️ No hay videos codificados pendientes.")
             return
@@ -197,6 +222,7 @@ def register(app, download_dir: Path):
             try:
                 await _send_result(message, path, status)
             except Exception as error:
+                logger.error("❌ ERROR SUBIDA | %s", error, exc_info=True)
                 await status.edit_text(f"❌ Error subiendo: <code>{str(error)[:400]}</code>", parse_mode=enums.ParseMode.HTML)
 
     @app.on_message(filters.command("delete2"))
@@ -206,6 +232,7 @@ def register(app, download_dir: Path):
             if path.is_file() and path.suffix.lower() in {".log", ".ass", ".srt", ".vtt"}:
                 path.unlink(missing_ok=True)
                 removed.append(path.name)
+        logger.info("🧹 LIMPIEZA TEMPORALES | archivos=%s", removed)
         await message.reply_text("🗑️ Eliminados: " + (", ".join(removed) if removed else "no había temporales"))
 
     @app.on_message(filters.command("dele2"))
@@ -215,4 +242,5 @@ def register(app, download_dir: Path):
             if path.is_file() and path.suffix.lower() in _VIDEO_EXTENSIONS:
                 path.unlink(missing_ok=True)
                 removed.append(path.name)
+        logger.info("🧹 LIMPIEZA VIDEOS | archivos=%s", removed)
         await message.reply_text("🗑️ Eliminados: " + (", ".join(removed) if removed else "no había videos locales"))
