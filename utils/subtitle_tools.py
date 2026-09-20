@@ -28,17 +28,24 @@ ALIGNMENTS = {
     "bottom_right": ("Abajo derecha", 3),
 }
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
+FONTS = {
+    "dejavu": ("DejaVu Sans", "DejaVu Sans"),
+    "liberation": ("Liberation Sans", "Liberation Sans"),
+    "serif": ("DejaVu Serif", "DejaVu Serif"),
+    "mono": ("DejaVu Sans Mono", "DejaVu Sans Mono"),
+}
 
 
-def ass_style(color="white", alignment="bottom", font_size=20, outline=2):
+def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="dejavu"):
     """Devuelve el fragmento force_style de FFmpeg sin permitir inyección."""
     color_code = COLORS.get(color, COLORS["white"])[1]
     align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
     font_size = max(12, min(64, int(font_size)))
     outline = max(0, min(8, int(outline)))
+    font_name = FONTS.get(font, FONTS["dejavu"])[1]
     return (
         "force_style='"
-        f"Fontname=DejaVu Sans,FontSize={font_size},Bold=1,"
+        f"Fontname={font_name},FontSize={font_size},Bold=1,"
         f"PrimaryColour={color_code},OutlineColour=&H00000000,"
         f"BorderStyle=1,Outline={outline},Shadow=1,Alignment={align_code},"
         "MarginV=25,WrapStyle=2'"
@@ -137,4 +144,4 @@ def log_translation_error(error):
     return str(error)
 
 
-__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "ass_style", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]
+__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]

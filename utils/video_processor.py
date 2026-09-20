@@ -211,6 +211,9 @@ class VideoProcessor:
         subtitle_color="white",
         subtitle_alignment="bottom",
         subtitle_size=20,
+        subtitle_font="dejavu",
+        watermark_color="pink",
+        watermark_size=28,
         add_watermark=True,
     ):
         """
@@ -250,15 +253,15 @@ class VideoProcessor:
             logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
-        sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size)
+        sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
 
         # ── Marca de agua ZeroTwo (primeros 6 segundos) ───────────────────────────
         watermark = (
             "drawtext=text='ZERO TWO':"
             "x=20:y=20:"
             "font='sans':"
-            "fontsize=22:"
-            "fontcolor=white:"
+            f"fontsize={max(16, min(64, int(watermark_size)))}:"
+            f"fontcolor={watermark_color}:"
             "bordercolor=black:"
             "borderw=1.5:"
             "enable='lt(t,6)'"

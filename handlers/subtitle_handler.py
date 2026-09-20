@@ -9,7 +9,7 @@ from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from utils.subtitle_tools import (
-    ALIGNMENTS, COLORS, LANGUAGES, alignment_label, color_label,
+    ALIGNMENTS, COLORS, FONTS, LANGUAGES, alignment_label, color_label,
     language_label, safe_filename, translate_subtitle_file, translation_configured,
 )
 from utils.video_processor import VideoProcessor
@@ -35,7 +35,7 @@ def _cleanup(state):
 
 
 def _settings(state):
-    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "color": "white", "alignment": "bottom", "size": 20, "translated": False, "language": "es"})
+    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "color": "white", "alignment": "bottom", "size": 20, "font": "dejavu", "translated": False, "language": "es"})
 
 
 def _config_keyboard(user_id, state):
@@ -44,6 +44,7 @@ def _config_keyboard(user_id, state):
         [InlineKeyboardButton(f"📝 Pista: {state.get('track_label', 'externa')}", callback_data=f"submenu:track:{user_id}")],
         [InlineKeyboardButton(f"🎨 Color: {color_label(s['color'])}", callback_data=f"submenu:color:{user_id}"), InlineKeyboardButton(f"↕️ Alineación: {alignment_label(s['alignment'])}", callback_data=f"submenu:align:{user_id}")],
         [InlineKeyboardButton(f"🔤 Tamaño: {s['size']}", callback_data=f"submenu:size:{user_id}"), InlineKeyboardButton(f"⚡ Preset: {s['preset']}", callback_data=f"submenu:preset:{user_id}")],
+        [InlineKeyboardButton(f"🔠 Fuente: {FONTS.get(s['font'], FONTS['dejavu'])[0]}", callback_data=f"submenu:font:{user_id}"), InlineKeyboardButton("🌸 Marca: rosa 28", callback_data=f"watermark_info:{user_id}")],
         [InlineKeyboardButton(f"🎚 CRF: {s['crf']}", callback_data=f"submenu:crf:{user_id}"), InlineKeyboardButton("📊 Bitrate: automático", callback_data=f"submenu:bitrate:{user_id}")],
     ]
     if translation_configured() and state.get("external_subtitle"):
@@ -66,7 +67,7 @@ async def _burn(message, state):
     status = state["status"]
     try:
         await status.edit_text("📝 <b>Quemando subtítulos…</b>\nSe actualizará el progreso durante FFmpeg.", parse_mode=enums.ParseMode.HTML)
-        ok = await VideoProcessor.burn_subtitles(video, subtitle, output, sub_idx=state.get("sub_idx"), is_external=subtitle is not None, progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML), crf=s["crf"], preset=s["preset"], subtitle_color=s["color"], subtitle_alignment=s["alignment"], subtitle_size=s["size"])
+        ok = await VideoProcessor.burn_subtitles(video, subtitle, output, sub_idx=state.get("sub_idx"), is_external=subtitle is not None, progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML), crf=s["crf"], preset=s["preset"], subtitle_color=s["color"], subtitle_alignment=s["alignment"], subtitle_size=s["size"], subtitle_font=s["font"], watermark_color="pink", watermark_size=28)
         if not ok:
             raise RuntimeError("FFmpeg no pudo generar el video final.")
         await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 {color_label(s['color'])} · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
@@ -127,7 +128,7 @@ def register(app, user_states, work_dir: Path):
         if ext not in _SUBTITLE_EXTENSIONS: return await message.reply_text("❌ Solo se admiten .srt, .ass o .vtt.")
         path = Path(state["job_dir"]) / name; await message.download(file_name=str(path)); state["external_subtitle"] = str(path); state["track_label"] = name; state["awaiting_external"] = False; await _show_config(message, state, "✅ Subtítulo recibido")
 
-    @app.on_callback_query(filters.regex(r"^submenu:(color|align|size|preset|crf|bitrate|translate):\d+$"))
+    @app.on_callback_query(filters.regex(r"^submenu:(color|align|size|font|preset|crf|bitrate|translate):\d+$"))
     async def submenu(client, query):
         _, kind, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
         if not state or int(uid) != query.from_user.id: return await query.answer("Sesión expirada", show_alert=True)
@@ -135,13 +136,18 @@ def register(app, user_states, work_dir: Path):
         if kind == "color": rows = [[InlineKeyboardButton(label, callback_data=f"subset:color:{key}:{uid}") for key, (label, _) in list(COLORS.items())[i:i+2]] for i in range(0, len(COLORS), 2)]
         elif kind == "align": rows = [[InlineKeyboardButton(label, callback_data=f"subset:alignment:{key}:{uid}")] for key, (label, _) in ALIGNMENTS.items()]
         elif kind == "size": rows = [[InlineKeyboardButton(str(v), callback_data=f"subset:size:{v}:{uid}") for v in (16,20,24,28,32)]]
+        elif kind == "font": rows = [[InlineKeyboardButton(label, callback_data=f"subset:font:{key}:{uid}")] for key, (label, _) in FONTS.items()]
         elif kind == "preset": rows = [[InlineKeyboardButton(v, callback_data=f"subset:preset:{v}:{uid}") for v in ("ultrafast", "veryfast", "fast", "medium")]]
         elif kind == "crf": rows = [[InlineKeyboardButton(str(v), callback_data=f"subset:crf:{v}:{uid}") for v in (18,20,23,26,28,30)]]
         elif kind == "bitrate": await query.answer("Con CRF se conserva mejor la calidad; usa /press para bitrate manual", show_alert=True); return
         elif kind == "translate": rows = [[InlineKeyboardButton(label, callback_data=f"subset:language:{key}:{uid}")] for key, label in LANGUAGES.items()]
         rows.append([InlineKeyboardButton("↩️ Volver", callback_data=f"sub_back:{uid}")]); await query.message.edit_text("Selecciona una opción:", reply_markup=InlineKeyboardMarkup(rows)); await query.answer()
 
-    @app.on_callback_query(filters.regex(r"^subset:(color|alignment|size|preset|crf|language):[^:]+:\d+$"))
+    @app.on_callback_query(filters.regex(r"^watermark_info:\d+$"))
+    async def watermark_info(client, query):
+        await query.answer("Marca ZeroTwo: rosa, tamaño 28, durante los primeros 6 segundos.", show_alert=True)
+
+    @app.on_callback_query(filters.regex(r"^subset:(color|alignment|size|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):
         _, key, value, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
         if not state: return await query.answer("Sesión expirada", show_alert=True)
