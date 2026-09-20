@@ -305,6 +305,17 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
 | `/anime <nombre>` | Busca información de un anime. |
+| `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. |
+| `/dw2` | Guarda localmente el video o archivo respondido para codificación. |
+| `/press [-crf N]` | Codifica un video respondido con FFmpeg y marca ZeroTwo. |
+| `/compre1`, `/compress1` | Alias de `/press`. |
+| `/press2` | Codifica un video respondido en dos pasadas. |
+| `/compre2`, `/compress2` | Alias de `/press2`. |
+| `/ed2 [-s N]` | Codifica MKV locales usando la pista interna de subtítulos `N`. |
+| `/ec2` | Codifica MKV locales sin quemar subtítulos. |
+| `/up2` | Envía los videos codificados pendientes. |
+| `/delete2` | Limpia subtítulos y logs temporales. |
+| `/dele2` | Limpia videos locales temporales. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 ## Solución de problemas

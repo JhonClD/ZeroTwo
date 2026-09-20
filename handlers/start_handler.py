@@ -30,6 +30,10 @@ Puedo ayudarte con todo esto:
 /drive_sync     — Guardar para sincronización Android
                  Luego envía el archivo
 /sub            — Quemar subtítulos en un video
+/dw2            — Guardar localmente un video respondido
+/press          — Codificar un video respondido
+/press2         — Codificar en dos pasadas
+/up2            — Enviar codificados pendientes
 Pega un enlace de MEGA o MediaFire directamente
 
 ━━━━━━━━━━━━━━━━━━━━

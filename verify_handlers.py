@@ -19,6 +19,8 @@ handlers_config = [
     ('download_handler', ['app']),
     ('anime_handler', ['app', 'user_states', 'work_dir']),
     ('url_handler', ['app', 'download_dir']),
+    ('subtitle_handler', ['app', 'user_states', 'work_dir']),
+    ('encoding_handler', ['app', 'download_dir']),
 ]
 
 all_ok = True
