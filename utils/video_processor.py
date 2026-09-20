@@ -205,7 +205,7 @@ class VideoProcessor:
         progress_callback=None,
     ):
         """
-        Quema subtítulos en el video con estilo personalizado y marca de agua CID.
+        Quema subtítulos en el video con estilo personalizado y marca de agua ZeroTwo.
 
         Parámetros
         ----------
@@ -255,9 +255,9 @@ class VideoProcessor:
             "'"
         )
 
-        # ── Marca de agua CID (primeros 6 segundos) ───────────────────────────
+        # ── Marca de agua ZeroTwo (primeros 6 segundos) ───────────────────────────
         watermark = (
-            "drawtext=text='CID':"
+            "drawtext=text='ZERO TWO':"
             "x=20:y=20:"
             "font='sans':"
             "fontsize=22:"

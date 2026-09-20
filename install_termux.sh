@@ -1,8 +1,8 @@
 #!/bin/bash
-# Script de instalación automática para Rikka Bot en Termux
+# Script de instalación automática para ZeroTwo en Termux
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  🤖 RIKKA BOT - INSTALADOR AUTOMÁTICO  ║"
+echo "║  🤖 ZERO TWO - INSTALADOR AUTOMÁTICO  ║"
 echo "╔══════════════════════════════════════════╗"
 echo ""
 

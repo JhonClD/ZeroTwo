@@ -1,4 +1,4 @@
-# Rikka Bot - Dependencias Python
+# ZeroTwo - Dependencias Python
 
 # Pyrogram - Cliente de Telegram MTProto
 pyrogram>=2.0.0

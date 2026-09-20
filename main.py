@@ -1,7 +1,7 @@
 """
-Rikka Bot - Bot de Telegram para procesamiento de videos
+ZeroTwo - Bot de Telegram para procesamiento de videos
 Autor: @MINORURAKUEN
-GitHub: https://github.com/MINORURAKUEN/Rikka-Bot
+GitHub: https://github.com/JhonClD/ZeroTwo
 """
 
 import os

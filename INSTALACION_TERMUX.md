@@ -25,8 +25,8 @@ pkg install git -y
 ### Paso 3: Clonar el Repositorio
 ```bash
 cd ~
-git clone https://github.com/MINORURAKUEN/Rikka-Bot.git
-cd Rikka-Bot
+git clone https://github.com/JhonClD/ZeroTwo.git
+cd ZeroTwo
 ```
 
 ### Paso 4: Ejecutar Script de Instalación
@@ -91,8 +91,8 @@ pip install --upgrade pip
 ### Paso 5: Clonar el Repositorio
 ```bash
 cd ~
-git clone https://github.com/MINORURAKUEN/Rikka-Bot.git
-cd Rikka-Bot
+git clone https://github.com/JhonClD/ZeroTwo.git
+cd ZeroTwo
 ```
 
 ### Paso 6: Instalar Dependencias Python
@@ -305,7 +305,7 @@ pkg install aria2 -y
 **Liberar espacio:**
 ```bash
 # Ver espacio usado
-du -sh ~/Rikka-Bot
+du -sh ~/ZeroTwo
 
 # Limpiar archivos temporales
 rm -rf ~/telegram_bot_files/*
@@ -320,7 +320,7 @@ pip cache purge
 ## 🔄 Actualizar el Bot
 
 ```bash
-cd ~/Rikka-Bot
+cd ~/ZeroTwo
 
 # Detener el bot (si está corriendo)
 pkill -f main.py
@@ -377,7 +377,7 @@ Contenido:
 ```bash
 #!/bin/bash
 while true; do
-    python ~/Rikka-Bot/main.py
+    python ~/ZeroTwo/main.py
     echo "Bot detenido. Reiniciando en 5 segundos..."
     sleep 5
 done
@@ -394,7 +394,7 @@ chmod +x restart_bot.sh
 ## 📞 Soporte
 
 ¿Problemas? Contacta:
-- **GitHub Issues:** https://github.com/MINORURAKUEN/Rikka-Bot/issues
+- **GitHub Issues:** https://github.com/JhonClD/ZeroTwo/issues
 - **Telegram:** @MINORURAKUEN
 
 ---

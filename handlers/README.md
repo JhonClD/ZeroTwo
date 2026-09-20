@@ -26,7 +26,7 @@ from pyrogram.types import Message
 def register(app):
     @app.on_message(filters.command("start"))
     async def start_command(client, message: Message):
-        await message.reply_text("¡Hola! Soy Rikka Bot")
+        await message.reply_text("¡Hola! Soy ZeroTwo")
 ```
 
 ## 📝 Tarea
