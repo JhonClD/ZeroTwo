@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import subprocess
+import inspect
 from pathlib import Path
 
 from utils.subtitle_tools import ass_style
@@ -363,9 +364,14 @@ class VideoProcessor:
                                         f"{bar} {pct}%\n"
                                         f"🎞 Frame: {frame}/{total_frames} | ⚡ {speed}x"
                                     )
-                                    asyncio.run_coroutine_threadsafe(
-                                        progress_callback(text), loop
-                                    )
+                                    try:
+                                        update = progress_callback(text)
+                                        if inspect.isawaitable(update):
+                                            asyncio.run_coroutine_threadsafe(update, loop)
+                                        else:
+                                            logger.debug("Callback de progreso completado de forma síncrona; se omite su programación async.")
+                                    except Exception:
+                                        logger.debug("No se pudo actualizar el progreso de subtítulos", exc_info=True)
                                     last_tg_pct[0] = pct
                             else:
                                 if line_count % 30 == 0:
