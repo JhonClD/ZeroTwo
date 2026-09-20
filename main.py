@@ -132,6 +132,7 @@ from handlers import (
     url_handler,
     drive_handler,
     enhance_handler,
+    subtitle_handler,
     tioanime_notify_handler,
     animeav1_notify_handler,
     animedbs_notify_handler,
@@ -157,6 +158,7 @@ drive_handler.register(
     sync_dir=SYNC_DIR,
 )
 enhance_handler.register(app, user_states, WORK_DIR)
+subtitle_handler.register(app, user_states, WORK_DIR)
 tioanime_notify_handler.register(app, WORK_DIR)
 animeav1_notify_handler.register(app, WORK_DIR)
 animedbs_notify_handler.register(app, WORK_DIR)

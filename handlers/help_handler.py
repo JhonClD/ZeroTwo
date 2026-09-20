@@ -19,6 +19,9 @@ def register(app):
 🎬 <b>PROCESAMIENTO DE VIDEOS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
+├ /sub — Responde a un video y luego envía .srt, .ass o .vtt
+└ Quema los subtítulos y agrega la marca ZeroTwo
+
 ━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━

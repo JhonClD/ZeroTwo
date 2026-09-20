@@ -29,6 +29,7 @@ Puedo ayudarte con todo esto:
 /gdrive_upload  — Subir directamente usando API
 /drive_sync     — Guardar para sincronización Android
                  Luego envía el archivo
+/sub            — Quemar subtítulos en un video
 Pega un enlace de MEGA o MediaFire directamente
 
 ━━━━━━━━━━━━━━━━━━━━
