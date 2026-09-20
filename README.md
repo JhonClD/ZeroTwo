@@ -322,7 +322,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 
 ### Flujo recomendado de subtítulos y codificación
 
-Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. Después puedes ajustar **fuente** (DejaVu Sans, Liberation Sans, DejaVu Serif o DejaVu Sans Mono), **color** (blanco, amarillo, cian o verde), **alineación**, **tamaño de letra**, **preset** y **CRF** antes de iniciar el quemado. La marca de agua `ZERO TWO` se renderiza en color rosa, tamaño 28, durante los primeros seis segundos. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
+Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. Después puedes ajustar **fuente** —incluida la opción **JK anime**, basada en Arial negrita—, **color** (blanco, amarillo, cian o verde), **alineación**, **tamaño de letra**, **preset** y **CRF** antes de iniciar el quemado. La marca de agua `ZERO TWO` se renderiza en color rosa, tamaño 28, durante los primeros seis segundos. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
 
 Para codificar sin subtítulos, responde al video con `/press` o `/press2`. El menú permite elegir CRF (calidad constante), bitrate, preset y pista de audio. En general, CRF 18–23 ofrece mayor calidad; CRF 26–30 reduce el tamaño. `veryfast` es una opción equilibrada para Termux y `medium` mejora la compresión a costa de más tiempo.
 

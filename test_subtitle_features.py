@@ -6,8 +6,9 @@ assert "PrimaryColour=&H0000FFFF" in style
 assert "Alignment=8" in style
 assert "FontSize=32" in style
 assert "Fontname=DejaVu Serif" in style
+assert ass_style(font="jkanime").startswith("force_style='Fontname=Arial,")
 assert VideoProcessor._escape_path("/tmp/a:b.srt") == "'/tmp/a\\:b.srt'"
 assert set(COLORS) >= {"white", "yellow", "cyan", "green"}
 assert set(ALIGNMENTS) >= {"bottom", "top", "center"}
-assert set(FONTS) >= {"dejavu", "liberation", "serif", "mono"}
+assert set(FONTS) >= {"jkanime", "dejavu", "liberation", "serif", "mono"}
 print("subtitle feature checks: ok")
