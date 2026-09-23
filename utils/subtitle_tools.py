@@ -29,7 +29,7 @@ ALIGNMENTS = {
 }
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
 FONTS = {
-    "jkanime": ("JK anime", "Arial"),
+    "jkanime": ("JK anime", "Roboto"),
     "dejavu": ("DejaVu Sans", "DejaVu Sans"),
     "liberation": ("Liberation Sans", "Liberation Sans"),
     "serif": ("DejaVu Serif", "DejaVu Serif"),
@@ -37,19 +37,20 @@ FONTS = {
 }
 
 
-def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="dejavu"):
+def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="dejavu", margin_v=12):
     """Devuelve el fragmento force_style de FFmpeg sin permitir inyección."""
     color_code = COLORS.get(color, COLORS["white"])[1]
     align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
     font_size = max(12, min(64, int(font_size)))
     outline = max(0, min(8, int(outline)))
+    margin_v = max(0, min(120, int(margin_v)))
     font_name = FONTS.get(font, FONTS["dejavu"])[1]
     return (
         "force_style='"
         f"Fontname={font_name},FontSize={font_size},Bold=1,"
         f"PrimaryColour={color_code},OutlineColour=&H00000000,"
         f"BorderStyle=1,Outline={outline},Shadow=1,Alignment={align_code},"
-        "MarginV=25,WrapStyle=2'"
+        f"MarginV={margin_v},WrapStyle=2'"
     )
 
 

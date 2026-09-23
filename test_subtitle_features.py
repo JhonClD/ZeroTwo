@@ -6,7 +6,8 @@ assert "PrimaryColour=&H0000FFFF" in style
 assert "Alignment=8" in style
 assert "FontSize=32" in style
 assert "Fontname=DejaVu Serif" in style
-assert ass_style(font="jkanime").startswith("force_style='Fontname=Arial,")
+assert ass_style(font="jkanime").startswith("force_style='Fontname=Roboto,")
+assert "MarginV=12" in ass_style(font="jkanime")
 assert VideoProcessor._escape_path("/tmp/a:b.srt") == "'/tmp/a\\:b.srt'"
 assert set(COLORS) >= {"white", "yellow", "cyan", "green"}
 assert set(ALIGNMENTS) >= {"bottom", "top", "center"}
