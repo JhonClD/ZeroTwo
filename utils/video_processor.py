@@ -384,7 +384,11 @@ class VideoProcessor:
             reader.start()
 
             await asyncio.to_thread(process.wait)
-            reader.join()
+            # FFmpeg ya terminó; no permitimos que un lector de stderr defectuoso
+            # deje bloqueado el flujo de respuesta de Telegram.
+            reader.join(timeout=5)
+            if reader.is_alive():
+                logger.warning("⚠️ El lector de progreso no cerró a tiempo; se continúa con el archivo generado.")
 
             if process.returncode == 0 and Path(output_path).exists():
                 output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)

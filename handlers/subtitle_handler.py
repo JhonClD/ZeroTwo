@@ -70,7 +70,11 @@ async def _burn(message, state):
         ok = await VideoProcessor.burn_subtitles(video, subtitle, output, sub_idx=state.get("sub_idx"), is_external=subtitle is not None, progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML), crf=s["crf"], preset=s["preset"], subtitle_color=s["color"], subtitle_alignment=s["alignment"], subtitle_size=s["size"], subtitle_font=s["font"], watermark_color="pink", watermark_size=28)
         if not ok:
             raise RuntimeError("FFmpeg no pudo generar el video final.")
+        output_mb = output.stat().st_size / (1024 * 1024)
+        logger.info("📤 SUBTÍTULOS LISTOS | preparando subida archivo=%s tamaño=%.2f MB", output, output_mb)
+        await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
         await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 {color_label(s['color'])} · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
+        logger.info("✅ SUBIDA DE SUBTÍTULOS COMPLETADA | salida=%s", output)
         await status.delete()
     except Exception as error:
         logger.error("Error quemando subtítulos", exc_info=True)
