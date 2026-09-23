@@ -139,7 +139,7 @@ def register(app, user_states, work_dir: Path):
         s = _settings(state); rows = []
         if kind == "color": rows = [[InlineKeyboardButton(label, callback_data=f"subset:color:{key}:{uid}") for key, (label, _) in list(COLORS.items())[i:i+2]] for i in range(0, len(COLORS), 2)]
         elif kind == "align": rows = [[InlineKeyboardButton(label, callback_data=f"subset:alignment:{key}:{uid}")] for key, (label, _) in ALIGNMENTS.items()]
-        elif kind == "size": rows = [[InlineKeyboardButton(str(v), callback_data=f"subset:size:{v}:{uid}") for v in (16,20,24,28,32)]]
+        elif kind == "size": rows = [[InlineKeyboardButton(f"{v}px", callback_data=f"subset:size:{v}:{uid}") for v in (18,22,26,30,34)]]
         elif kind == "font": rows = [[InlineKeyboardButton(label, callback_data=f"subset:font:{key}:{uid}")] for key, (label, _) in FONTS.items()]
         elif kind == "preset": rows = [[InlineKeyboardButton(v, callback_data=f"subset:preset:{v}:{uid}") for v in ("ultrafast", "veryfast", "fast", "medium")]]
         elif kind == "crf": rows = [[InlineKeyboardButton(str(v), callback_data=f"subset:crf:{v}:{uid}") for v in (18,20,23,26,28,30)]]

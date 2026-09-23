@@ -243,6 +243,23 @@ class VideoProcessor:
         # ── Origen de los subtítulos ──────────────────────────────────────────
         ext_path = external_sub_path or subtitle_path   # compatibilidad
 
+        # libass calcula FontSize según el lienzo del subtítulo. Declarar la
+        # resolución original evita que un SRT/ASS se vea enorme o diminuto al
+        # renderizar videos 720p, 1080p o archivos con PlayRes diferente.
+        original_size = None
+        try:
+            size_probe = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', str(video_path)],
+                capture_output=True, text=True, timeout=15,
+            )
+            width_height = size_probe.stdout.strip().split('x')
+            if len(width_height) == 2 and all(part.isdigit() for part in width_height):
+                original_size = 'x'.join(width_height)
+                logger.info("📐 Resolución original para subtítulos: %s", original_size)
+        except (OSError, subprocess.TimeoutExpired):
+            logger.warning("⚠️ No se pudo obtener la resolución original para escalar subtítulos.")
+
         if is_external and ext_path:
             sub_p = VideoProcessor._escape_path(ext_path)
             sub_filter = f"subtitles={sub_p}"
@@ -252,6 +269,8 @@ class VideoProcessor:
             idx   = sub_idx if sub_idx is not None else 0
             sub_filter = f"subtitles={vid_p}:si={idx}"
             logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
+        if original_size:
+            sub_filter += f":original_size={original_size}"
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
