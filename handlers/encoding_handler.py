@@ -52,7 +52,7 @@ def _parse_args(text: str):
 
 
 def _watermark_filter():
-    return "drawtext=text='ZERO TWO':x=20:y=20:font='sans':fontsize=22:fontcolor=white:bordercolor=black:borderw=1.5:enable='lt(t,6)'"
+    return "drawtext=text='JhonCID':x=30:y=30:font='DejaVu Sans':fontsize=28:fontcolor=0xFF4FA3:bordercolor=black:borderw=3:box=1:boxcolor=black@0.55:boxborderw=8:enable='lt(t,6)'"
 
 
 def _run_logged(command, stage: str):
@@ -115,7 +115,7 @@ async def _send_result(message: Message, output_path: Path, status: Message):
     duration, thumb = await asyncio.to_thread(VideoProcessor.get_video_meta, output_path, thumb_path)
     logger.info("📤 SUBIDA | archivo=%s duración=%s thumb=%s", output_path, duration, thumb)
     try:
-        await message.reply_video(video=str(output_path), thumb=thumb, caption=f"✅ Codificación terminada\n🏷 ZeroTwo\n📄 {output_path.name}", duration=duration or None, supports_streaming=True)
+        await message.reply_video(video=str(output_path), thumb=thumb, caption=f"✅ Codificación terminada\n🏷 JhonCID\n📄 {output_path.name}", duration=duration or None, supports_streaming=True)
         await status.delete()
         logger.info("✅ SUBIDA COMPLETADA | %s", output_path)
     finally:

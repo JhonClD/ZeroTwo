@@ -149,7 +149,7 @@ def register(app, user_states, work_dir: Path):
 
     @app.on_callback_query(filters.regex(r"^watermark_info:\d+$"))
     async def watermark_info(client, query):
-        await query.answer("Marca ZeroTwo: rosa, tamaño 28, durante los primeros 6 segundos.", show_alert=True)
+        await query.answer("Marca JhonCID: rosa brillante, tamaño 28 y fondo semitransparente durante los primeros 6 segundos.", show_alert=True)
 
     @app.on_callback_query(filters.regex(r"^subset:(color|alignment|size|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):

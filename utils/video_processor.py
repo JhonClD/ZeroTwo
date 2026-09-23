@@ -275,15 +275,18 @@ class VideoProcessor:
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
 
-        # ── Marca de agua ZeroTwo (primeros 6 segundos) ───────────────────────────
+        # ── Marca de agua JhonCID visible (primeros 6 segundos) ───────────────
         watermark = (
-            "drawtext=text='ZERO TWO':"
-            "x=20:y=20:"
-            "font='sans':"
-            f"fontsize={max(16, min(64, int(watermark_size)))}:"
-            f"fontcolor={watermark_color}:"
+            "drawtext=text='JhonCID':"
+            "x=30:y=30:"
+            "font='DejaVu Sans':"
+            f"fontsize={max(20, min(72, int(watermark_size)))}:"
+            "fontcolor=0xFF4FA3:"
             "bordercolor=black:"
-            "borderw=1.5:"
+            "borderw=3:"
+            "box=1:"
+            "boxcolor=black@0.55:"
+            "boxborderw=8:"
             "enable='lt(t,6)'"
         )
 
