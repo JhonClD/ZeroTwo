@@ -68,6 +68,8 @@ async def _burn(message, state):
     output = Path(state["job_dir"]) / f"{video.stem}_ZeroTwo.mp4"
     status = state["status"]
     try:
+        selected_font_label = FONTS.get(s["font"], FONTS["default"])[0]
+        logger.info("🔠 FUENTE SELECCIONADA | opción=%s | familia=%s", selected_font_label, FONTS.get(s["font"], FONTS["default"])[1] or "ASS original")
         await status.edit_text("📝 <b>Quemando subtítulos…</b>\nSe actualizará el progreso durante FFmpeg.", parse_mode=enums.ParseMode.HTML)
         ok = await VideoProcessor.burn_subtitles(
             video, subtitle, output, sub_idx=state.get("sub_idx"),
@@ -87,7 +89,7 @@ async def _burn(message, state):
         output_mb = output.stat().st_size / (1024 * 1024)
         logger.info("📤 SUBTÍTULOS LISTOS | preparando subida archivo=%s tamaño=%.2f MB", output, output_mb)
         await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
-        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
+        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
         logger.info("✅ SUBIDA DE SUBTÍTULOS COMPLETADA | salida=%s", output)
         await status.delete()
     except Exception as error:
