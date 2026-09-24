@@ -29,6 +29,7 @@ ALIGNMENTS = {
 }
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
 FONTS = {
+    "default": ("Predeterminada / conservar", ""),
     "jkanime": ("Roboto", "Roboto"),
     "dejavu": ("Noto Sans", "Noto Sans"),
     "liberation": ("Liberation Sans", "Liberation Sans"),
@@ -44,10 +45,11 @@ def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="
     font_size = max(12, min(64, int(font_size)))
     outline = max(0, min(8, int(outline)))
     margin_v = max(0, min(120, int(margin_v)))
-    font_name = FONTS.get(font, FONTS["dejavu"])[1]
+    font_name = FONTS.get(font, FONTS["default"])[1]
+    font_clause = f"Fontname={font_name}," if font_name else ""
     return (
         "force_style='"
-        f"Fontname={font_name},FontSize={font_size},Bold=1,"
+        f"{font_clause}FontSize={font_size},Bold=1,"
         f"PrimaryColour={color_code},OutlineColour=&H00000000,"
         f"BorderStyle=1,Outline={outline},Shadow=1,Alignment={align_code},"
         f"MarginV={margin_v},WrapStyle=2'"
