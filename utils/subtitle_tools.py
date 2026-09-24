@@ -35,6 +35,8 @@ FONTS = {
     "montserrat": ("Montserrat — limpia", "Montserrat"),
     "oswald": ("Oswald — compacta", "Oswald"),
     "mplus": ("M PLUS 1p — anime", "M PLUS 1p"),
+    "rosario": ("Rosario Bold", "Rosario"),
+    "comicsans": ("Comic Sans MS — sistema", "Comic Sans MS"),
     "liberation": ("Liberation Sans", "Liberation Sans"),
     "serif": ("DejaVu Serif", "DejaVu Serif"),
     "mono": ("DejaVu Sans Mono", "DejaVu Sans Mono"),
@@ -65,7 +67,8 @@ def ass_font_style(font="default", alignment="bottom", margin_v=12):
     margin_v = max(0, min(120, int(margin_v)))
     font_name = FONTS.get(font, FONTS["default"])[1]
     font_clause = f"Fontname={font_name}," if font_name else ""
-    return f"force_style='{font_clause}Alignment={align_code},MarginV={margin_v}'"
+    weight_clause = "Bold=1," if font == "rosario" else ""
+    return f"force_style='{font_clause}{weight_clause}Alignment={align_code},MarginV={margin_v}'"
 
 
 def _cue_blocks(text):
