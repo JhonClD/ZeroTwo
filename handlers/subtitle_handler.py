@@ -1,12 +1,15 @@
 """Flujo guiado para seleccionar, traducir y quemar subtítulos."""
 
 import asyncio
+import html
 import logging
+import os
+import shutil
 import uuid
 from pathlib import Path
 
 from pyrogram import filters, enums
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from utils.subtitle_tools import (
     ALIGNMENTS, FONTS, LANGUAGES, alignment_label,
@@ -29,9 +32,8 @@ def _media_name(message):
 
 def _cleanup(state):
     folder = Path(state["job_dir"])
-    for item in folder.glob("*"):
-        item.unlink(missing_ok=True)
-    folder.rmdir()
+    if folder.exists():
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 def _settings(state):
@@ -67,7 +69,19 @@ async def _burn(message, state):
     status = state["status"]
     try:
         await status.edit_text("📝 <b>Quemando subtítulos…</b>\nSe actualizará el progreso durante FFmpeg.", parse_mode=enums.ParseMode.HTML)
-        ok = await VideoProcessor.burn_subtitles(video, subtitle, output, sub_idx=state.get("sub_idx"), is_external=subtitle is not None, progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML), crf=s["crf"], preset=s["preset"], subtitle_color="white", subtitle_alignment=s["alignment"], subtitle_size=20, subtitle_font=s["font"], watermark_color="pink", watermark_size=28)
+        ok = await VideoProcessor.burn_subtitles(
+            video, subtitle, output, sub_idx=state.get("sub_idx"),
+            is_external=subtitle is not None,
+            progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML),
+            crf=s["crf"], preset=s["preset"], subtitle_color="white",
+            subtitle_alignment=s["alignment"], subtitle_size=20,
+            subtitle_font=s["font"], watermark_color="pink", watermark_size=28,
+            cancel_event=state["cancel_event"], process_holder=state["process_holder"],
+            timeout=state["timeout"],
+        )
+        if state["cancel_event"].is_set():
+            await status.edit_text("❌ Proceso cancelado.", parse_mode=enums.ParseMode.HTML)
+            return
         if not ok:
             raise RuntimeError("FFmpeg no pudo generar el video final.")
         output_mb = output.stat().st_size / (1024 * 1024)
@@ -78,9 +92,11 @@ async def _burn(message, state):
         await status.delete()
     except Exception as error:
         logger.error("Error quemando subtítulos", exc_info=True)
-        await status.edit_text(f"❌ No se pudieron quemar los subtítulos.\n<code>{str(error)[:350]}</code>", parse_mode=enums.ParseMode.HTML)
+        detail = html.escape(str(error)[:350])
+        await status.edit_text(f"❌ No se pudieron quemar los subtítulos.\n<code>{detail}</code>", parse_mode=enums.ParseMode.HTML)
     finally:
-        state["user_states"].pop(state["user_id"], None)
+        if state["user_states"].get(state["user_id"]) is state:
+            state["user_states"].pop(state["user_id"], None)
         _cleanup(state)
 
 
@@ -92,26 +108,32 @@ def register(app, user_states, work_dir: Path):
             await message.reply_text("📝 Responde a un video con /sub.")
             return
         user_id = _user_id(message)
+        if user_states.get(user_id):
+            await message.reply_text("⏳ Ya tienes un trabajo de subtítulos activo. Cancélalo antes de iniciar otro.")
+            return
         job_dir = Path(work_dir) / f"subtitle_{user_id}_{uuid.uuid4().hex[:8]}"
         job_dir.mkdir(parents=True, exist_ok=True)
         video_path = job_dir / safe_filename(_media_name(reply))
         status = await message.reply_text("⏳ Descargando y analizando pistas…")
-        state = {"action": "burn_subtitles", "video_path": str(video_path), "job_dir": str(job_dir), "status": status, "user_id": user_id, "user_states": user_states}
+        state = {"action": "burn_subtitles", "video_path": str(video_path), "job_dir": str(job_dir), "status": status, "user_id": user_id, "user_states": user_states, "cancel_event": asyncio.Event(), "process_holder": {}, "timeout": int(os.getenv("SUBTITLE_TIMEOUT", "7200"))}
         user_states[user_id] = state
         try:
             await reply.download(file_name=str(video_path))
             info = await asyncio.to_thread(VideoProcessor.probe_media, video_path)
             tracks = (info or {}).get("subtitle", [])
             if tracks:
-                buttons = [[InlineKeyboardButton(t.get("label", f"Pista {t['index']}")[: fifty], callback_data=f"sub_track:{user_id}:{t['index']}")] for t in tracks[:20]]
+                buttons = [[InlineKeyboardButton(t.get("label", f"Pista {t['index']}")[:fifty], callback_data=f"sub_track:{user_id}:{t['index']}")] for t in tracks[:20]]
                 buttons.append([InlineKeyboardButton("📎 Usar archivo externo", callback_data=f"sub_external:{user_id}")])
                 await status.edit_text("🎞 <b>Elige la pista de subtítulos</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
             else:
                 state["awaiting_external"] = True
                 await status.edit_text("📎 Envía ahora un archivo <code>.srt</code>, <code>.ass</code> o <code>.vtt</code>.", parse_mode=enums.ParseMode.HTML)
         except Exception as error:
-            user_states.pop(user_id, None); _cleanup(state)
-            await status.edit_text(f"❌ No se pudo analizar el video: <code>{str(error)[:300]}</code>", parse_mode=enums.ParseMode.HTML)
+            if user_states.get(user_id) is state:
+                user_states.pop(user_id, None)
+            _cleanup(state)
+            detail = html.escape(str(error)[:300])
+            await status.edit_text(f"❌ No se pudo analizar el video: <code>{detail}</code>", parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^sub_track:\d+:\d+$"))
     async def track(client, query):
@@ -121,8 +143,9 @@ def register(app, user_states, work_dir: Path):
 
     @app.on_callback_query(filters.regex(r"^sub_external:\d+$"))
     async def external(client, query):
-        state = user_states.get(query.from_user.id)
-        if state: state["awaiting_external"] = True; await query.answer(); await query.message.edit_text("📎 Envía el archivo externo <code>.srt</code>, <code>.ass</code> o <code>.vtt</code>.", parse_mode=enums.ParseMode.HTML)
+        state = user_states.get(query.from_user.id); _, uid = query.data.split(":")
+        if not state or int(uid) != query.from_user.id: return await query.answer("Sesión expirada", show_alert=True)
+        state["awaiting_external"] = True; await query.answer(); await query.message.edit_text("📎 Envía el archivo <code>.srt</code>, <code>.ass</code> o <code>.vtt</code>.", parse_mode=enums.ParseMode.HTML)
 
     @app.on_message(filters.document, group=-1)
     async def subtitle_document(client, message):
@@ -152,28 +175,43 @@ def register(app, user_states, work_dir: Path):
     @app.on_callback_query(filters.regex(r"^subset:(alignment|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):
         _, key, value, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
-        if not state: return await query.answer("Sesión expirada", show_alert=True)
+        if not state or int(uid) != query.from_user.id: return await query.answer("Sesión expirada", show_alert=True)
         s = _settings(state); s[key] = value
         if key == "language":
             try:
-                out = Path(state["job_dir"]) / f"translated_{value}.srt"; await asyncio.to_thread(translate_subtitle_file, state["external_subtitle"], out, value); state["external_subtitle"] = str(out); s["translated"] = True
-            except Exception as error: return await query.answer(f"Traducción no disponible: {str(error)[:120]}", show_alert=True)
+                out = Path(state["job_dir"]) / f"translated_{value}.srt"
+                tmp = out.with_suffix(".tmp.srt")
+                await asyncio.to_thread(translate_subtitle_file, state["external_subtitle"], tmp, value)
+                if not tmp.exists() or tmp.stat().st_size == 0: raise RuntimeError("La traducción produjo un archivo vacío.")
+                tmp.replace(out); state["external_subtitle"] = str(out); s["translated"] = True
+            except Exception as error:
+                return await query.answer(f"Traducción no disponible: {str(error)[:120]}", show_alert=True)
         await query.answer("Guardado"); await _show_config(query.message, state)
 
     @app.on_callback_query(filters.regex(r"^sub_back:\d+$"))
     async def back(client, query):
-        state = user_states.get(query.from_user.id)
-        if state: await _show_config(query.message, state)
+        _, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
+        if state and int(uid) == query.from_user.id: await _show_config(query.message, state)
+        else: await query.answer("Sesión expirada", show_alert=True)
 
     @app.on_callback_query(filters.regex(r"^sub_start:\d+$"))
     async def start(client, query):
-        state = user_states.get(query.from_user.id)
-        if state: await query.answer("Procesamiento iniciado"); await _burn(query.message, state)
+        _, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
+        if state and int(uid) == query.from_user.id: await query.answer("Procesamiento iniciado"); await _burn(query.message, state)
+        else: await query.answer("Sesión expirada", show_alert=True)
 
     @app.on_callback_query(filters.regex(r"^sub_cancel:\d+$"))
     async def cancel(client, query):
-        state = user_states.pop(query.from_user.id, None)
-        if state: _cleanup(state); await query.message.edit_text("❌ Proceso cancelado.")
+        _, uid = query.data.split(":")
+        if int(uid) != query.from_user.id: return await query.answer("Sesión expirada", show_alert=True)
+        state = user_states.get(query.from_user.id)
+        if not state: return await query.answer("Sesión expirada", show_alert=True)
+        state["cancel_event"].set()
+        if state["process_holder"].get("process") is None:
+            user_states.pop(query.from_user.id, None); _cleanup(state); await query.message.edit_text("❌ Proceso cancelado.")
+        else:
+            await query.message.edit_text("🛑 Cancelando FFmpeg…", parse_mode=enums.ParseMode.HTML)
+        await query.answer("Cancelación solicitada")
 
 
 # Evita que una variable mal escrita rompa el registro de botones.

@@ -216,6 +216,9 @@ class VideoProcessor:
         watermark_color="pink",
         watermark_size=28,
         add_watermark=True,
+        cancel_event=None,
+        timeout=None,
+        process_holder=None,
     ):
         """
         Quema subtítulos en el video con estilo personalizado y marca de agua ZeroTwo.
@@ -305,7 +308,9 @@ class VideoProcessor:
         full_vf = f"{watermark},{styled_sub_filter}" if add_watermark else styled_sub_filter
 
         # ── Mapeado de audio ──────────────────────────────────────────────────
-        audio_map = ["-map", f"0:{audio_idx}"] if audio_idx is not None else ["-map", "0:a:0"]
+        # El signo '?' permite procesar vídeos mudos sin cambiar la política
+        # normal: se conserva como máximo la pista de audio seleccionada.
+        audio_map = ["-map", f"0:{audio_idx}?"] if audio_idx is not None else ["-map", "0:a:0?"]
 
         cmd = [
             'ffmpeg', '-y',
@@ -355,6 +360,8 @@ class VideoProcessor:
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
             )
+            if process_holder is not None:
+                process_holder["process"] = process
 
             # ── Leer stderr en thread para no bloquear el event loop ────────
             import asyncio
@@ -417,14 +424,36 @@ class VideoProcessor:
             reader = threading.Thread(target=_read_stderr, daemon=True)
             reader.start()
 
-            await asyncio.to_thread(process.wait)
+            started_at = asyncio.get_running_loop().time()
+            while process.poll() is None:
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("🛑 Cancelación solicitada; terminando FFmpeg")
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=5)
+                    except asyncio.TimeoutError:
+                        logger.warning("⚠️ FFmpeg no terminó tras SIGTERM; se fuerza su cierre")
+                        process.kill()
+                        await asyncio.to_thread(process.wait)
+                    break
+                if timeout is not None and asyncio.get_running_loop().time() - started_at > timeout:
+                    logger.warning("⏱️ Tiempo máximo de FFmpeg excedido: %ss", timeout)
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=5)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        await asyncio.to_thread(process.wait)
+                    break
+                await asyncio.sleep(0.25)
             # FFmpeg ya terminó; no permitimos que un lector de stderr defectuoso
             # deje bloqueado el flujo de respuesta de Telegram.
             reader.join(timeout=5)
             if reader.is_alive():
                 logger.warning("⚠️ El lector de progreso no cerró a tiempo; se continúa con el archivo generado.")
 
-            if process.returncode == 0 and Path(output_path).exists():
+            cancelled = cancel_event is not None and cancel_event.is_set()
+            if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:
                 output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
                 logger.info(f"✅ Subtítulos quemados exitosamente")
                 logger.info(f"📦 Tamaño final: {output_size_mb:.2f} MB")
@@ -432,11 +461,16 @@ class VideoProcessor:
                 return True
             else:
                 logger.error(f"❌ Error quemando subtítulos: código {process.returncode}")
+                Path(output_path).unlink(missing_ok=True)
                 return False
 
         except Exception as e:
             logger.error(f"❌ Error en burn_subtitles: {e}", exc_info=True)
+            Path(output_path).unlink(missing_ok=True)
             return False
+        finally:
+            if process_holder is not None:
+                process_holder["process"] = None
 
     # ─── Extracción de audio ──────────────────────────────────────────────────
 
