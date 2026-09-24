@@ -10,7 +10,7 @@ import subprocess
 import inspect
 from pathlib import Path
 
-from utils.subtitle_tools import ass_style
+from utils.subtitle_tools import ass_font_style, ass_style
 
 logger = logging.getLogger(__name__)
 
@@ -281,13 +281,18 @@ class VideoProcessor:
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
+        ass_font_override = ass_font_style(subtitle_font)
         # Los ASS ya contienen color, fuente, tamaño, posición y estilos por diálogo.
-        # No aplicar force_style en ese caso porque destruiría el diseño original.
+        # Para ASS aplicamos únicamente Fontname cuando el usuario lo solicita,
+        # conservando el resto del diseño original.
         preserve_original_style = (not is_external) or (
             ext_path is not None and Path(ext_path).suffix.lower() == ".ass"
         )
         if preserve_original_style:
-            logger.info("🎨 Estilo original preservado: colores, posiciones y estilos ASS")
+            if ass_font_override:
+                logger.info("🎨 Estilo ASS preservado; fuente sobrescrita: %s", subtitle_font)
+            else:
+                logger.info("🎨 Estilo original preservado: colores, posiciones y estilos ASS")
 
         # ── Marca de agua JhonCID visible (primeros 6 segundos) ───────────────
         watermark = (
@@ -304,7 +309,10 @@ class VideoProcessor:
             "enable='lt(t,6)'"
         )
 
-        styled_sub_filter = sub_filter if preserve_original_style else f"{sub_filter}:{sub_style}"
+        if preserve_original_style:
+            styled_sub_filter = f"{sub_filter}:{ass_font_override}" if ass_font_override else sub_filter
+        else:
+            styled_sub_filter = f"{sub_filter}:{sub_style}"
         full_vf = f"{watermark},{styled_sub_filter}" if add_watermark else styled_sub_filter
 
         # ── Mapeado de audio ──────────────────────────────────────────────────

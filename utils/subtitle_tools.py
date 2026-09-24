@@ -59,6 +59,12 @@ def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="
     )
 
 
+def ass_font_style(font="default"):
+    """Devuelve un override ASS que cambia solo la familia de fuente permitida."""
+    font_name = FONTS.get(font, FONTS["default"])[1]
+    return f"force_style='Fontname={font_name}'" if font_name else ""
+
+
 def _cue_blocks(text):
     return re.split(r"\n\s*\n", text.replace("\r\n", "\n").replace("\r", "\n"))
 
@@ -151,4 +157,4 @@ def log_translation_error(error):
     return str(error)
 
 
-__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]
+__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "ass_font_style", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]

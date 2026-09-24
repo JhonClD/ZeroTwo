@@ -1,4 +1,4 @@
-from utils.subtitle_tools import ALIGNMENTS, COLORS, FONTS, ass_style
+from utils.subtitle_tools import ALIGNMENTS, COLORS, FONTS, ass_font_style, ass_style
 from utils.video_processor import VideoProcessor
 
 style = ass_style("yellow", "top", 32, 4, "serif")
@@ -8,6 +8,9 @@ assert "FontSize=32" in style
 assert "Fontname=DejaVu Serif" in style
 assert ass_style(font="jkanime").startswith("force_style='Fontname=Roboto,")
 assert "MarginV=12" in ass_style(font="jkanime")
+assert ass_font_style() == ""
+assert ass_font_style("montserrat") == "force_style='Fontname=Montserrat'"
+assert ass_font_style("mplus") == "force_style='Fontname=M PLUS 1p'"
 assert ass_style(font="montserrat").startswith("force_style='Fontname=Montserrat,")
 assert ass_style(font="oswald").startswith("force_style='Fontname=Oswald,")
 assert ass_style(font="mplus").startswith("force_style='Fontname=M PLUS 1p,")
