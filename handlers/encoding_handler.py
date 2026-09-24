@@ -14,6 +14,7 @@ from pyrogram.types import Message
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from utils.video_processor import VideoProcessor
+from utils.subtitle_tools import escape_filter_path
 
 logger = logging.getLogger(__name__)
 _VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
@@ -52,7 +53,12 @@ def _parse_args(text: str):
 
 
 def _watermark_filter():
-    return "drawtext=text='JhonCID':x=30:y=30:font='DejaVu Sans':fontsize=28:fontcolor=0xFF4FA3:bordercolor=black:borderw=3:box=1:boxcolor=black@0.55:boxborderw=8:enable='lt(t,6)'"
+    font_file = escape_filter_path(Path(__file__).resolve().parents[1] / "fonts" / "OleoScript-Regular.ttf")
+    return "drawtext=text='Jap Anime TX':x=30:y=30:" \
+        f"fontfile='{font_file}':fontsize=28:fontcolor=white:" \
+        "bordercolor=blue:borderw=4:box=0:" \
+        "alpha='if(lt(t,0.8),t/0.8,if(lt(t,5.2),1,if(lt(t,6),(6-t)/0.8,0)))':" \
+        "enable='between(t,0,6)'"
 
 
 def _run_logged(command, stage: str):
@@ -120,7 +126,7 @@ async def _send_result(message: Message, output_path: Path, status: Message):
     duration, thumb = await asyncio.to_thread(VideoProcessor.get_video_meta, output_path, thumb_path)
     logger.info("📤 SUBIDA | archivo=%s duración=%s thumb=%s", output_path, duration, thumb)
     try:
-        await message.reply_video(video=str(output_path), thumb=thumb, caption=f"✅ Codificación terminada\n🏷 JhonCID\n📄 {output_path.name}", duration=duration or None, supports_streaming=True)
+        await message.reply_video(video=str(output_path), thumb=thumb, caption=f"✅ Codificación terminada\n🏷 Jap Anime TX\n📄 {output_path.name}", duration=duration or None, supports_streaming=True)
         await status.delete()
         logger.info("✅ SUBIDA COMPLETADA | %s", output_path)
     finally:

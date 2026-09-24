@@ -46,7 +46,7 @@ def _config_keyboard(user_id, state):
         [InlineKeyboardButton(f"📝 Pista: {state.get('track_label', 'externa')}", callback_data=f"submenu:track:{user_id}")],
         [InlineKeyboardButton(f"↕️ Alineación: {alignment_label(s['alignment'])}", callback_data=f"submenu:align:{user_id}")],
         [InlineKeyboardButton(f"⚡ Preset: {s['preset']}", callback_data=f"submenu:preset:{user_id}")],
-        [InlineKeyboardButton(f"🔠 Fuente: {FONTS.get(s['font'], FONTS['dejavu'])[0]}", callback_data=f"submenu:font:{user_id}"), InlineKeyboardButton("🌸 Marca: rosa 28", callback_data=f"watermark_info:{user_id}")],
+        [InlineKeyboardButton(f"🔠 Fuente: {FONTS.get(s['font'], FONTS['dejavu'])[0]}", callback_data=f"submenu:font:{user_id}"), InlineKeyboardButton("✦ Marca: Jap Anime TX", callback_data=f"watermark_info:{user_id}")],
         [InlineKeyboardButton(f"🎚 CRF: {s['crf']}", callback_data=f"submenu:crf:{user_id}"), InlineKeyboardButton("📊 Bitrate: automático", callback_data=f"submenu:bitrate:{user_id}")],
     ]
     if translation_configured() and state.get("external_subtitle"):
@@ -170,7 +170,7 @@ def register(app, user_states, work_dir: Path):
 
     @app.on_callback_query(filters.regex(r"^watermark_info:\d+$"))
     async def watermark_info(client, query):
-        await query.answer("Marca JhonCID: rosa brillante, tamaño 28 y fondo semitransparente durante los primeros 6 segundos.", show_alert=True)
+        await query.answer("Jap Anime TX: Oleo Script Regular, blanco, borde azul de 4 px, fondo transparente y desvanecido durante 6 segundos.", show_alert=True)
 
     @app.on_callback_query(filters.regex(r"^subset:(alignment|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):

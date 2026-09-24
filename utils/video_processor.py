@@ -221,7 +221,7 @@ class VideoProcessor:
         process_holder=None,
     ):
         """
-        Quema subtítulos en el video con estilo personalizado y marca de agua ZeroTwo.
+        Quema subtítulos en el video con estilo personalizado y marca Jap Anime TX.
 
         Parámetros
         ----------
@@ -291,19 +291,20 @@ class VideoProcessor:
         if preserve_original_style:
             logger.info("🎨 Estilo ASS preservado; fuente=%s, alineación=%s", subtitle_font, subtitle_alignment)
 
-        # ── Marca de agua JhonCID visible (primeros 6 segundos) ───────────────
+        # ── Marca Jap Anime TX: Oleo Script, blanca, borde azul y fade ────────
+        watermark_font = bundled_fonts / "OleoScript-Regular.ttf"
+        watermark_fontfile = VideoProcessor._escape_path(watermark_font)
         watermark = (
-            "drawtext=text='JhonCID':"
+            "drawtext=text='Jap Anime TX':"
             "x=30:y=30:"
-            "font='DejaVu Sans':"
+            f"fontfile={watermark_fontfile}:"
             f"fontsize={max(20, min(72, int(watermark_size)))}:"
-            "fontcolor=0xFF4FA3:"
-            "bordercolor=black:"
-            "borderw=3:"
-            "box=1:"
-            "boxcolor=black@0.55:"
-            "boxborderw=8:"
-            "enable='lt(t,6)'"
+            "fontcolor=white:"
+            "bordercolor=blue:"
+            "borderw=4:"
+            "box=0:"
+            "alpha='if(lt(t,0.8),t/0.8,if(lt(t,5.2),1,if(lt(t,6),(6-t)/0.8,0)))':"
+            "enable='between(t,0,6)'"
         )
 
         if preserve_original_style:

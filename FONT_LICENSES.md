@@ -11,6 +11,7 @@ Estas fuentes se distribuyen dentro del repositorio para que FFmpeg/libass pueda
 | `Oswald-Variable.ttf` | Oswald | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/oswald) |
 | `MPLUS1p-Bold.ttf` | M PLUS 1p Bold | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/mplus1p) |
 | `Rosario-Variable.ttf` | Rosario (incluye peso Bold) | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/rosario) |
+| `OleoScript-Regular.ttf` | Oleo Script Regular | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/oleoscript) |
 
 El bot configura FFmpeg con `fontsdir=fonts/`, por lo que no es necesario instalar estas fuentes globalmente en el sistema. Las copias de la licencia OFL de las nuevas familias se conservan en `licenses/fonts/` para que libass no intente interpretarlas como fuentes. Para añadir otra fuente, coloca el archivo `.ttf` u `.otf` en esta carpeta, actualiza el mapa de familias en `utils/subtitle_tools.py` y conserva el archivo de licencia correspondiente fuera de `fonts/`.
 
