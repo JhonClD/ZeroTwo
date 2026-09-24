@@ -82,7 +82,7 @@ def _run_logged(command, stage: str):
     return return_code, "\n".join(tail)
 
 
-def _run_encode(input_path: Path, output_path: Path, two_pass=False, crf="23", preset="medium", bitrate=None, audio_idx=None, add_watermark=True):
+def _run_encode(input_path: Path, output_path: Path, two_pass=False, crf="23", preset="medium", bitrate=None, audio_idx=None, add_watermark=True, scale=None):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info("🎬 CODIFICACIÓN | entrada=%s salida=%s dos_pasadas=%s crf=%s preset=%s bitrate=%s audio=%s marca=%s", input_path, output_path, two_pass, crf, preset, bitrate, audio_idx, add_watermark)
     video_map = ["-map", "0:v:0"]
@@ -90,8 +90,13 @@ def _run_encode(input_path: Path, output_path: Path, two_pass=False, crf="23", p
     video_codec = ["-c:v", "libx264", "-preset", preset]
     video_quality = ["-b:v", bitrate] if bitrate else ["-crf", crf]
     common = ["ffmpeg", "-hide_banner", "-y", "-i", str(input_path), *video_map, *audio_map]
+    filters = []
+    if scale:
+        filters.append(f"scale={scale}:force_original_aspect_ratio=decrease:flags=lanczos,pad={scale}:(ow-iw)/2:(oh-ih)/2")
     if add_watermark:
-        common.extend(["-vf", _watermark_filter()])
+        filters.append(_watermark_filter())
+    if filters:
+        common.extend(["-vf", ",".join(filters)])
     common.extend([*video_codec, *video_quality, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"])
     if not two_pass:
         rc, detail = _run_logged([*common, str(output_path)], "FFmpeg · codificación final")
@@ -213,11 +218,11 @@ def register(app, download_dir: Path):
             logger.error("❌ ERROR DESCARGA LOCAL | %s", error, exc_info=True)
             await status.edit_text(f"❌ Error descargando: <code>{str(error)[:400]}</code>", parse_mode=enums.ParseMode.HTML)
 
-    @app.on_message(filters.command(["press", "compre1", "compress1"]) & filters.reply)
+    @app.on_message(filters.command("disabled_zero_two_press") & filters.reply)
     async def encode_crf(client, message: Message):
         await _encode_reply(message, encoding_dir, two_pass=False)
 
-    @app.on_message(filters.command(["press2", "compre2", "compress2"]) & filters.reply)
+    @app.on_message(filters.command("disabled_zero_two_press2") & filters.reply)
     async def encode_two_pass(client, message: Message):
         await _encode_reply(message, encoding_dir, two_pass=True)
 

@@ -124,7 +124,7 @@ def register(app, user_states, work_dir: Path):
         state = user_states.get(query.from_user.id)
         if state: state["awaiting_external"] = True; await query.answer(); await query.message.edit_text("📎 Envía el archivo externo <code>.srt</code>, <code>.ass</code> o <code>.vtt</code>.", parse_mode=enums.ParseMode.HTML)
 
-    @app.on_message(filters.document)
+    @app.on_message(filters.document, group=-1)
     async def subtitle_document(client, message):
         state = user_states.get(_user_id(message), {})
         if state.get("action") != "burn_subtitles" or not state.get("awaiting_external"): return

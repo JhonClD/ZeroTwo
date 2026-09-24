@@ -22,8 +22,8 @@ def register(app):
 ├ /sub — Responde a un video y luego envía .srt, .ass o .vtt
 └ Quema los subtítulos y agrega la marca ZeroTwo
 ├ /dw2 — Guarda localmente un video respondido
-├ /press [-crf N] — Codifica un video respondido
-├ /press2 — Codifica un video en dos pasadas
+├ /press — Abre botones de resolución, audio, subtítulos y modo
+├ /press2 — Abre el mismo menú con dos pasadas por defecto
 ├ /ed2 [-s N] — Codifica MKV local usando la pista N
 ├ /ec2 — Codifica MKV local sin quemar subtítulos
 └ /up2 — Envía los videos codificados pendientes

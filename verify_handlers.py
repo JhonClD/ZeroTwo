@@ -21,6 +21,7 @@ handlers_config = [
     ('url_handler', ['app', 'download_dir']),
     ('subtitle_handler', ['app', 'user_states', 'work_dir']),
     ('encoding_handler', ['app', 'download_dir']),
+    ('interactive_encoding_handler', ['app', 'work_dir']),
 ]
 
 all_ok = True
