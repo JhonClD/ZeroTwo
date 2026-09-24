@@ -12,6 +12,7 @@ assert "Fontname=DejaVu Serif" in style
 assert ass_style(font="jkanime").startswith("force_style='Fontname=Roboto,")
 assert "MarginV=12" in ass_style(font="jkanime")
 assert ass_font_style() == ""
+assert ass_font_style("jkanime") == "force_style='Fontname=Roboto,Bold=1'"
 assert ass_font_style("montserrat") == "force_style='Fontname=Montserrat'"
 assert ass_font_style("mplus", "top") == "force_style='Fontname=M PLUS 1p,Alignment=8,MarginV=12'"
 assert ass_font_style("rosario") == "force_style='Fontname=Rosario,Bold=1'"
@@ -26,9 +27,10 @@ assert set(FONTS) >= {"jkanime", "dejavu", "montserrat", "oswald", "mplus", "ros
 with TemporaryDirectory() as tmp:
     source = Path(tmp) / "input.ass"
     target = Path(tmp) / "forced.ass"
-    source.write_text("[V4+ Styles]\nStyle: Default,Arial,20\n[Events]\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial}Texto\n")
-    normalize_ass_font(source, target, "Roboto")
+    source.write_text("[V4+ Styles]\nStyle: Default,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n[Events]\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial\\b0}Texto\n")
+    normalize_ass_font(source, target, "Roboto", bold=True)
     forced = target.read_text()
     assert "Style: Default,Roboto,20" in forced
+    assert "Style: Default,Roboto,20" in forced and ",-1,0,0" in forced
     assert "\\fnArial" not in forced
 print("subtitle feature checks: ok")

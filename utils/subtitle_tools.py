@@ -30,7 +30,7 @@ ALIGNMENTS = {
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
 FONTS = {
     "default": ("Predeterminada / conservar", ""),
-    "jkanime": ("Roboto", "Roboto"),
+    "jkanime": ("JK anime", "Roboto"),
     "dejavu": ("Noto Sans", "Noto Sans"),
     "montserrat": ("Montserrat — limpia", "Montserrat"),
     "oswald": ("Oswald — compacta", "Oswald"),
@@ -65,7 +65,7 @@ def ass_font_style(font="default", alignment=None, margin_v=12):
     """Devuelve un override ASS seguro para fuente y, opcionalmente, posición."""
     font_name = FONTS.get(font, FONTS["default"])[1]
     font_clause = f"Fontname={font_name}," if font_name else ""
-    weight_clause = "Bold=1," if font == "rosario" else ""
+    weight_clause = "Bold=1," if font in {"rosario", "jkanime"} else ""
     position_clause = ""
     if alignment is not None:
         align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
@@ -75,7 +75,7 @@ def ass_font_style(font="default", alignment=None, margin_v=12):
     return f"force_style='{values}'" if values else ""
 
 
-def normalize_ass_font(input_path, output_path, font_name):
+def normalize_ass_font(input_path, output_path, font_name, bold=False):
     """Crea una copia ASS imponiendo la fuente elegida.
 
     Algunos ASS definen una fuente por estilo o la fuerzan dentro de cada
@@ -93,9 +93,13 @@ def normalize_ass_font(input_path, output_path, font_name):
             parts = line.rstrip("\r\n").split(",")
             if len(parts) >= 2:
                 parts[1] = safe_font
+                if bold and len(parts) >= 8:
+                    parts[7] = "-1"
                 line = ",".join(parts) + ending
         if line.lower().startswith("dialogue:"):
             line = re.sub(r"\\fn[^\\}]+", "", line, flags=re.IGNORECASE)
+            if bold:
+                line = re.sub(r"\\b(?:0|[1-9]\d*)", r"\\b1", line, flags=re.IGNORECASE)
         result.append(line)
     target.write_text("".join(result), encoding="utf-8")
     return target

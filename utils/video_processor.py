@@ -273,7 +273,7 @@ class VideoProcessor:
                     normalized_ass_path = Path(output_path).with_name(
                         f".{Path(output_path).stem}.forced.ass"
                     )
-                    normalize_ass_font(ext_path, normalized_ass_path, selected_font)
+                    normalize_ass_font(ext_path, normalized_ass_path, selected_font, bold=subtitle_font == "jkanime")
                     filter_path = normalized_ass_path
                     logger.info("🔤 ASS normalizado | fuente aplicada: %s", selected_font)
             sub_p = VideoProcessor._escape_path(filter_path)
@@ -297,7 +297,7 @@ class VideoProcessor:
             if extract.returncode == 0 and extracted_ass_path.exists():
                 selected_font = FONTS.get(subtitle_font, FONTS["default"])[1]
                 if selected_font:
-                    normalize_ass_font(extracted_ass_path, normalized_ass_path, selected_font)
+                    normalize_ass_font(extracted_ass_path, normalized_ass_path, selected_font, bold=subtitle_font == "jkanime")
                     sub_filter = f"subtitles={VideoProcessor._escape_path(normalized_ass_path)}"
                     logger.info("🔤 ASS interno extraído y normalizado | fuente aplicada: %s", selected_font)
                 else:
