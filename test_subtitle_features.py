@@ -8,9 +8,9 @@ assert "FontSize=32" in style
 assert "Fontname=DejaVu Serif" in style
 assert ass_style(font="jkanime").startswith("force_style='Fontname=Roboto,")
 assert "MarginV=12" in ass_style(font="jkanime")
-assert ass_font_style() == ""
-assert ass_font_style("montserrat") == "force_style='Fontname=Montserrat'"
-assert ass_font_style("mplus") == "force_style='Fontname=M PLUS 1p'"
+assert ass_font_style() == "force_style='Alignment=2,MarginV=12'"
+assert ass_font_style("montserrat") == "force_style='Fontname=Montserrat,Alignment=2,MarginV=12'"
+assert ass_font_style("mplus", "top") == "force_style='Fontname=M PLUS 1p,Alignment=8,MarginV=12'"
 assert ass_style(font="montserrat").startswith("force_style='Fontname=Montserrat,")
 assert ass_style(font="oswald").startswith("force_style='Fontname=Oswald,")
 assert ass_style(font="mplus").startswith("force_style='Fontname=M PLUS 1p,")

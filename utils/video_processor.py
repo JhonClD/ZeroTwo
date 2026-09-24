@@ -281,18 +281,15 @@ class VideoProcessor:
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
-        ass_font_override = ass_font_style(subtitle_font)
+        ass_font_override = ass_font_style(subtitle_font, subtitle_alignment)
         # Los ASS ya contienen color, fuente, tamaño, posición y estilos por diálogo.
-        # Para ASS aplicamos únicamente Fontname cuando el usuario lo solicita,
-        # conservando el resto del diseño original.
+        # Para ASS aplicamos únicamente fuente, alineación y margen vertical,
+        # conservando colores, tamaños, bordes y demás estilos originales.
         preserve_original_style = (not is_external) or (
             ext_path is not None and Path(ext_path).suffix.lower() == ".ass"
         )
         if preserve_original_style:
-            if ass_font_override:
-                logger.info("🎨 Estilo ASS preservado; fuente sobrescrita: %s", subtitle_font)
-            else:
-                logger.info("🎨 Estilo original preservado: colores, posiciones y estilos ASS")
+            logger.info("🎨 Estilo ASS preservado; fuente=%s, alineación=%s", subtitle_font, subtitle_alignment)
 
         # ── Marca de agua JhonCID visible (primeros 6 segundos) ───────────────
         watermark = (

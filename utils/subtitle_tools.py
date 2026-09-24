@@ -59,10 +59,13 @@ def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="
     )
 
 
-def ass_font_style(font="default"):
-    """Devuelve un override ASS que cambia solo la familia de fuente permitida."""
+def ass_font_style(font="default", alignment="bottom", margin_v=12):
+    """Devuelve un override ASS seguro para fuente y posición elegidas."""
+    align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
+    margin_v = max(0, min(120, int(margin_v)))
     font_name = FONTS.get(font, FONTS["default"])[1]
-    return f"force_style='Fontname={font_name}'" if font_name else ""
+    font_clause = f"Fontname={font_name}," if font_name else ""
+    return f"force_style='{font_clause}Alignment={align_code},MarginV={margin_v}'"
 
 
 def _cue_blocks(text):
