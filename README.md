@@ -30,7 +30,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Telegram | Recibir enlaces y archivos mediante un bot. |
 | Descargas | Descargar contenido de MEGA y MediaFire. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
-| Subtítulos | Selección por botones de pista interna o archivo externo, color, tamaño, alineación, CRF y preset. |
+| Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
@@ -322,7 +322,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 
 ### Flujo recomendado de subtítulos y codificación
 
-Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. Después puedes ajustar **fuente** —incluida la opción **JK anime**, basada en Roboto negrita—, **alineación**, **preset** y **CRF** antes de iniciar el quemado. El preset JK anime usa un margen inferior reducido (`MarginV=12`) para acercar el texto al borde del video. La marca de agua `JhonCID` se renderiza en rosa brillante, con contorno y fondo semitransparente, durante los primeros seis segundos. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
+Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. Después puedes ajustar **fuente**, **alineación**, **preset** y **CRF** antes de iniciar el quemado. Incluye **Roboto** para el estilo anime clásico, **Noto Sans** como opción neutra, **Montserrat** para una apariencia limpia, **Oswald** cuando hay líneas largas y se necesita ahorrar ancho, y **M PLUS 1p** para una estética anime con buena cobertura latina y japonesa. El preset JK anime usa un margen inferior reducido (`MarginV=12`) para acercar el texto al borde del video. La marca de agua `JhonCID` se renderiza en rosa brillante, con contorno y fondo semitransparente, durante los primeros seis segundos. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
 
 El botón **Cancelar** termina el proceso FFmpeg de forma cooperativa y elimina la salida parcial después de que el proceso haya finalizado; no borra un directorio mientras el encoder aún está escribiendo. Por defecto, un quemado puede durar hasta 7200 segundos. Puedes cambiar ese límite con `SUBTITLE_TIMEOUT` (en segundos), por ejemplo `export SUBTITLE_TIMEOUT=3600`. Los videos sin pista de audio también se admiten; cuando existe audio, el bot conserva la primera pista seleccionada por su política actual y la recodifica a AAC.
 
