@@ -10,7 +10,7 @@ import subprocess
 import inspect
 from pathlib import Path
 
-from utils.subtitle_tools import ass_font_style, ass_style
+from utils.subtitle_tools import FONTS, ass_font_style, ass_style, normalize_ass_font
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +245,7 @@ class VideoProcessor:
 
         # ── Origen de los subtítulos ──────────────────────────────────────────
         ext_path = external_sub_path or subtitle_path   # compatibilidad
+        normalized_ass_path = None
 
         # libass calcula FontSize según el lienzo del subtítulo. Declarar la
         # resolución original evita que un SRT/ASS se vea enorme o diminuto al
@@ -264,7 +265,17 @@ class VideoProcessor:
             logger.warning("⚠️ No se pudo obtener la resolución original para escalar subtítulos.")
 
         if is_external and ext_path:
-            sub_p = VideoProcessor._escape_path(ext_path)
+            filter_path = ext_path
+            if Path(ext_path).suffix.lower() == ".ass":
+                selected_font = FONTS.get(subtitle_font, FONTS["default"])[1]
+                if selected_font:
+                    normalized_ass_path = Path(output_path).with_name(
+                        f".{Path(output_path).stem}.forced.ass"
+                    )
+                    normalize_ass_font(ext_path, normalized_ass_path, selected_font)
+                    filter_path = normalized_ass_path
+                    logger.info("🔤 ASS normalizado | fuente aplicada: %s", selected_font)
+            sub_p = VideoProcessor._escape_path(filter_path)
             sub_filter = f"subtitles={sub_p}"
             logger.info(f"📂 Modo: subtítulos externos → {ext_path}")
         else:
@@ -460,6 +471,8 @@ class VideoProcessor:
             reader.join(timeout=5)
             if reader.is_alive():
                 logger.warning("⚠️ El lector de progreso no cerró a tiempo; se continúa con el archivo generado.")
+            if normalized_ass_path:
+                normalized_ass_path.unlink(missing_ok=True)
 
             cancelled = cancel_event is not None and cancel_event.is_set()
             if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:

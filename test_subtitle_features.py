@@ -1,4 +1,7 @@
-from utils.subtitle_tools import ALIGNMENTS, COLORS, FONTS, ass_font_style, ass_style
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from utils.subtitle_tools import ALIGNMENTS, COLORS, FONTS, ass_font_style, ass_style, normalize_ass_font
 from utils.video_processor import VideoProcessor
 
 style = ass_style("yellow", "top", 32, 4, "serif")
@@ -20,4 +23,12 @@ assert VideoProcessor._escape_path("/tmp/a:b.srt") == "'/tmp/a\\:b.srt'"
 assert set(COLORS) >= {"white", "yellow", "cyan", "green"}
 assert set(ALIGNMENTS) >= {"bottom", "top", "center"}
 assert set(FONTS) >= {"jkanime", "dejavu", "montserrat", "oswald", "mplus", "rosario", "comicsans", "liberation", "serif", "mono"}
+with TemporaryDirectory() as tmp:
+    source = Path(tmp) / "input.ass"
+    target = Path(tmp) / "forced.ass"
+    source.write_text("[V4+ Styles]\nStyle: Default,Arial,20\n[Events]\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial}Texto\n")
+    normalize_ass_font(source, target, "Roboto")
+    forced = target.read_text()
+    assert "Style: Default,Roboto,20" in forced
+    assert "\\fnArial" not in forced
 print("subtitle feature checks: ok")

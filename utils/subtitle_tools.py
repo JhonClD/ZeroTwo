@@ -75,6 +75,32 @@ def ass_font_style(font="default", alignment=None, margin_v=12):
     return f"force_style='{values}'" if values else ""
 
 
+def normalize_ass_font(input_path, output_path, font_name):
+    """Crea una copia ASS imponiendo la fuente elegida.
+
+    Algunos ASS definen una fuente por estilo o la fuerzan dentro de cada
+    diálogo con ``{\\fnFuente}``; esas etiquetas pueden ganar a force_style.
+    Se reemplazan ambas para que el selector del bot funcione de verdad.
+    """
+    source = Path(input_path)
+    target = Path(output_path)
+    text = source.read_text(encoding="utf-8-sig", errors="replace")
+    safe_font = re.sub(r"[^A-Za-z0-9 ._-]", "", str(font_name)).strip() or "Noto Sans"
+    result = []
+    for line in text.splitlines(keepends=True):
+        if re.match(r"^Style:\s*", line, re.IGNORECASE):
+            ending = line[len(line.rstrip("\r\n")):]
+            parts = line.rstrip("\r\n").split(",")
+            if len(parts) >= 2:
+                parts[1] = safe_font
+                line = ",".join(parts) + ending
+        if line.lower().startswith("dialogue:"):
+            line = re.sub(r"\\fn[^\\}]+", "", line, flags=re.IGNORECASE)
+        result.append(line)
+    target.write_text("".join(result), encoding="utf-8")
+    return target
+
+
 def _cue_blocks(text):
     return re.split(r"\n\s*\n", text.replace("\r\n", "\n").replace("\r", "\n"))
 
@@ -167,4 +193,4 @@ def log_translation_error(error):
     return str(error)
 
 
-__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "ass_font_style", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]
+__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "ass_font_style", "normalize_ass_font", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]
