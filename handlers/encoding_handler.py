@@ -52,6 +52,31 @@ def _parse_args(text: str):
     return crf, preset, bitrate, sub_idx, audio_idx
 
 
+def _duration_seconds(path: Path) -> float:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    duration = float(result.stdout.strip())
+    if duration <= 0:
+        raise ValueError("No se pudo determinar la duración del video.")
+    return duration
+
+
+def _bitrate_for_size(path: Path, target_mb: float, audio_kbps=128) -> str:
+    """Calcula bitrate de video aproximado para un tamaño final objetivo."""
+    duration = _duration_seconds(path)
+    # Dejamos un 2 % para contenedor/metadatos y reservamos el audio AAC.
+    total_kbps = (target_mb * 1024 * 8 * 0.98) / duration
+    video_kbps = int(total_kbps - audio_kbps)
+    if video_kbps < 100:
+        raise ValueError("El tamaño objetivo es demasiado pequeño para la duración del video.")
+    bitrate = f"{video_kbps}k"
+    logger.info("🎯 TAMAÑO OBJETIVO | %.2f MB | duración=%.2fs | video=%s | audio=%sk", target_mb, duration, bitrate, audio_kbps)
+    return bitrate
+
+
 def _watermark_filter():
     font_file = escape_filter_path(Path(__file__).resolve().parents[1] / "fonts" / "OleoScript-Regular.ttf")
     return "drawtext=text='Jap Anime TX':x=30:y=30:" \
@@ -135,7 +160,7 @@ async def _send_result(message: Message, output_path: Path, status: Message):
         logger.info("🧹 LIMPIEZA | salida=%s miniatura=%s", output_path, thumb_path)
 
 
-async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
+async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False, target_mb=None):
     reply = message.reply_to_message
     media = (reply.video or reply.document) if reply else None
     if not media or (reply.document and not str(getattr(reply.document, "mime_type", "")).startswith("video/")):
@@ -149,8 +174,9 @@ async def _encode_reply(message: Message, encoding_dir: Path, two_pass=False):
     try:
         await reply.download(file_name=str(source))
         logger.info("✅ DESCARGA COMPLETADA | %s bytes=%s", source, source.stat().st_size)
-        _ENCODE_STATES[message.from_user.id] = {"source": source, "output": output, "status": status, "two_pass": two_pass, "crf": "23", "preset": "veryfast", "bitrate": None, "audio": None}
-        await status.edit_text("🎛 <b>Configura la codificación</b>\nElige calidad, velocidad y audio. Después pulsa iniciar.", reply_markup=_encode_keyboard(message.from_user.id), parse_mode=enums.ParseMode.HTML)
+        target_label = f"\n🎯 Objetivo: {target_mb:g} MB · dos pasadas" if target_mb else ""
+        _ENCODE_STATES[message.from_user.id] = {"source": source, "output": output, "status": status, "two_pass": two_pass or bool(target_mb), "target_mb": target_mb, "crf": "23", "preset": "veryfast", "bitrate": None, "audio": None}
+        await status.edit_text(f"🎛 <b>Configura la codificación</b>{target_label}\nElige calidad, velocidad y audio. Después pulsa iniciar.", reply_markup=_encode_keyboard(message.from_user.id), parse_mode=enums.ParseMode.HTML)
         return
     except Exception as error:
         logger.error("❌ ERROR CODIFICACIÓN | %s", error, exc_info=True)
@@ -194,8 +220,15 @@ def register(app, download_dir: Path):
     async def encode_start(client, query):
         uid = int(query.data.split(":")[1]); state = _ENCODE_STATES.get(uid)
         if not state: return await query.answer("Sesión expirada", show_alert=True)
-        await query.answer("Codificación iniciada"); await state["status"].edit_text("⚙️ Codificando con la configuración elegida…")
-        ok, detail = await asyncio.to_thread(_run_encode, state["source"], state["output"], state["two_pass"], state["crf"], state["preset"], state["bitrate"], state["audio"])
+        await query.answer("Codificación iniciada"); await state["status"].edit_text("⚙️ Calculando bitrate y codificando…" if state.get("target_mb") else "⚙️ Codificando con la configuración elegida…")
+        bitrate = state["bitrate"]
+        try:
+            if state.get("target_mb"):
+                bitrate = await asyncio.to_thread(_bitrate_for_size, state["source"], state["target_mb"])
+                state["bitrate"] = bitrate
+            ok, detail = await asyncio.to_thread(_run_encode, state["source"], state["output"], state["two_pass"], state["crf"], state["preset"], bitrate, state["audio"])
+        except Exception as error:
+            ok, detail = False, str(error)
         if ok: await _send_result(query.message, state["output"], state["status"])
         else: await state["status"].edit_text(f"❌ Error codificando: <code>{detail[:500]}</code>", parse_mode=enums.ParseMode.HTML)
         _ENCODE_STATES.pop(uid, None); state["source"].unlink(missing_ok=True)
@@ -231,6 +264,18 @@ def register(app, download_dir: Path):
     @app.on_message(filters.command("disabled_zero_two_press2") & filters.reply)
     async def encode_two_pass(client, message: Message):
         await _encode_reply(message, encoding_dir, two_pass=True)
+
+    @app.on_message(filters.command("size") & filters.reply)
+    async def encode_target_size(client, message: Message):
+        values = message.command[1:] if len(message.command) > 1 else []
+        try:
+            target_mb = float(values[0]) if values else 0
+            if not 10 <= target_mb <= 2048:
+                raise ValueError
+        except (ValueError, TypeError):
+            await message.reply_text("Uso: responde a un video con /size 168\nEl objetivo debe estar entre 10 y 2048 MB.")
+            return
+        await _encode_reply(message, encoding_dir, two_pass=True, target_mb=target_mb)
 
     @app.on_message(filters.command(["ec2", "ed2"]))
     async def encode_local(client, message: Message):

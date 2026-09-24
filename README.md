@@ -313,6 +313,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/compre1`, `/compress1` | Alias de `/press`. |
 | `/press2` | Codifica un video respondido en dos pasadas. |
 | `/compre2`, `/compress2` | Alias de `/press2`. |
+| `/size <MB>` | Codifica en dos pasadas calculando el bitrate para aproximarse al tamaño indicado, por ejemplo `/size 168`. |
 | `/ed2 [-s N]` | Codifica MKV locales usando la pista interna de subtítulos `N`. |
 | `/ec2` | Codifica MKV locales sin quemar subtítulos. |
 | `/up2` | Envía los videos codificados pendientes. |
