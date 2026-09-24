@@ -278,6 +278,13 @@ class VideoProcessor:
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
+        # Los ASS ya contienen color, fuente, tamaño, posición y estilos por diálogo.
+        # No aplicar force_style en ese caso porque destruiría el diseño original.
+        preserve_original_style = (not is_external) or (
+            ext_path is not None and Path(ext_path).suffix.lower() == ".ass"
+        )
+        if preserve_original_style:
+            logger.info("🎨 Estilo original preservado: colores, posiciones y estilos ASS")
 
         # ── Marca de agua JhonCID visible (primeros 6 segundos) ───────────────
         watermark = (
@@ -294,7 +301,8 @@ class VideoProcessor:
             "enable='lt(t,6)'"
         )
 
-        full_vf = f"{watermark},{sub_filter}:{sub_style}" if add_watermark else f"{sub_filter}:{sub_style}"
+        styled_sub_filter = sub_filter if preserve_original_style else f"{sub_filter}:{sub_style}"
+        full_vf = f"{watermark},{styled_sub_filter}" if add_watermark else styled_sub_filter
 
         # ── Mapeado de audio ──────────────────────────────────────────────────
         audio_map = ["-map", f"0:{audio_idx}"] if audio_idx is not None else ["-map", "0:a:0"]
