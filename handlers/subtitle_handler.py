@@ -170,7 +170,7 @@ def register(app, user_states, work_dir: Path):
 
     @app.on_callback_query(filters.regex(r"^watermark_info:\d+$"))
     async def watermark_info(client, query):
-        await query.answer("Jap Anime TX: Oleo Script Regular, blanco, borde azul de 4 px, fondo transparente y desvanecido durante 6 segundos.", show_alert=True)
+        await query.answer("Jap Anime TX: Oleo Script Regular, blanco, borde azul de 8 px, fondo transparente y desvanecido durante 6 segundos.", show_alert=True)
 
     @app.on_callback_query(filters.regex(r"^subset:(alignment|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):

@@ -304,7 +304,7 @@ class VideoProcessor:
             f"fontsize={max(20, min(72, int(watermark_size)))}:"
             "fontcolor=white:"
             "bordercolor=blue:"
-            "borderw=4:"
+            "borderw=8:"
             "box=0:"
             "alpha='if(lt(t,0.8),t/0.8,if(lt(t,5.2),1,if(lt(t,6),(6-t)/0.8,0)))':"
             "enable='between(t,0,6)'"

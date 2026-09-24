@@ -56,7 +56,7 @@ def _watermark_filter():
     font_file = escape_filter_path(Path(__file__).resolve().parents[1] / "fonts" / "OleoScript-Regular.ttf")
     return "drawtext=text='Jap Anime TX':x=30:y=30:" \
         f"fontfile='{font_file}':fontsize=28:fontcolor=white:" \
-        "bordercolor=blue:borderw=4:box=0:" \
+        "bordercolor=blue:borderw=8:box=0:" \
         "alpha='if(lt(t,0.8),t/0.8,if(lt(t,5.2),1,if(lt(t,6),(6-t)/0.8,0)))':" \
         "enable='between(t,0,6)'"
 
