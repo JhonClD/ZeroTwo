@@ -57,8 +57,14 @@ def register(app):
 ├ 🔶 MediaFire — mediafire.com
 ├ ☁️ /gdrive &lt;url_o_id&gt; — Descargar de Drive
 ├ 📤 /gdrive_upload [folder_id] — Subir usando API de Drive
+
 ├ 📁 /drive_sync — Guardar para sincronización Android
 └ Después envía un documento, foto, video o audio
+
+<b>🔟 Torrents</b>
+├ Pega un enlace magnet directamente
+├ Responde a un archivo .torrent con /torrent
+└ Requiere aria2 instalado en Termux
 
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>

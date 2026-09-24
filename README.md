@@ -306,6 +306,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/download` | Inicia una descarga desde MEGA o MediaFire. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
+| `/torrent` | Responde a un archivo `.torrent` para descargarlo con aria2c; los enlaces `magnet:` se pueden pegar directamente. |
 | `/anime <nombre>` | Busca información de un anime. |
 | `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. |
 | `/dw2` | Guarda localmente el video o archivo respondido para codificación. |

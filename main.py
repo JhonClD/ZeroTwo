@@ -140,6 +140,7 @@ from handlers import (
     animedbs_notify_handler,
     monoschinos_notify_handler,
     jkanime_notify_handler,
+    torrent_handler,
 )
 
 # Registrar handlers
@@ -168,6 +169,7 @@ animeav1_notify_handler.register(app, WORK_DIR)
 animedbs_notify_handler.register(app, WORK_DIR)
 monoschinos_notify_handler.register(app, WORK_DIR)
 jkanime_notify_handler.register(app, WORK_DIR)
+torrent_handler.register(app, DOWNLOAD_DIR)
 
 
 if __name__ == "__main__":
