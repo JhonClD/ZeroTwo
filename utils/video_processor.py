@@ -246,6 +246,7 @@ class VideoProcessor:
         # ── Origen de los subtítulos ──────────────────────────────────────────
         ext_path = external_sub_path or subtitle_path   # compatibilidad
         normalized_ass_path = None
+        extracted_ass_path = None
 
         # libass calcula FontSize según el lienzo del subtítulo. Declarar la
         # resolución original evita que un SRT/ASS se vea enorme o diminuto al
@@ -279,9 +280,34 @@ class VideoProcessor:
             sub_filter = f"subtitles={sub_p}"
             logger.info(f"📂 Modo: subtítulos externos → {ext_path}")
         else:
-            vid_p = VideoProcessor._escape_path(video_path)
             idx   = sub_idx if sub_idx is not None else 0
-            sub_filter = f"subtitles={vid_p}:si={idx}"
+            # Extraer la pista interna a ASS permite reemplazar también las
+            # etiquetas \fn de los diálogos, que force_style no puede vencer.
+            extracted_ass_path = Path(output_path).with_name(
+                f".{Path(output_path).stem}.source.ass"
+            )
+            normalized_ass_path = Path(output_path).with_name(
+                f".{Path(output_path).stem}.forced.ass"
+            )
+            extract = subprocess.run(
+                ['ffmpeg', '-y', '-v', 'error', '-i', str(video_path),
+                 '-map', f'0:s:{idx}', '-c:s', 'copy', str(extracted_ass_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            if extract.returncode == 0 and extracted_ass_path.exists():
+                selected_font = FONTS.get(subtitle_font, FONTS["default"])[1]
+                if selected_font:
+                    normalize_ass_font(extracted_ass_path, normalized_ass_path, selected_font)
+                    sub_filter = f"subtitles={VideoProcessor._escape_path(normalized_ass_path)}"
+                    logger.info("🔤 ASS interno extraído y normalizado | fuente aplicada: %s", selected_font)
+                else:
+                    sub_filter = f"subtitles={VideoProcessor._escape_path(extracted_ass_path)}"
+            else:
+                vid_p = VideoProcessor._escape_path(video_path)
+                sub_filter = f"subtitles={vid_p}:si={idx}"
+                extracted_ass_path = None
+                normalized_ass_path = None
+                logger.warning("⚠️ No se pudo extraer la pista interna; se usa directamente desde el contenedor.")
             logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
         bundled_fonts = Path(__file__).resolve().parents[1] / "fonts"
         if bundled_fonts.is_dir():
@@ -473,6 +499,8 @@ class VideoProcessor:
                 logger.warning("⚠️ El lector de progreso no cerró a tiempo; se continúa con el archivo generado.")
             if normalized_ass_path:
                 normalized_ass_path.unlink(missing_ok=True)
+            if extracted_ass_path:
+                extracted_ass_path.unlink(missing_ok=True)
 
             cancelled = cancel_event is not None and cancel_event.is_set()
             if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:
