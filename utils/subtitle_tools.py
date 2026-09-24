@@ -61,14 +61,18 @@ def ass_style(color="white", alignment="bottom", font_size=20, outline=2, font="
     )
 
 
-def ass_font_style(font="default", alignment="bottom", margin_v=12):
-    """Devuelve un override ASS seguro para fuente y posición elegidas."""
-    align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
-    margin_v = max(0, min(120, int(margin_v)))
+def ass_font_style(font="default", alignment=None, margin_v=12):
+    """Devuelve un override ASS seguro para fuente y, opcionalmente, posición."""
     font_name = FONTS.get(font, FONTS["default"])[1]
     font_clause = f"Fontname={font_name}," if font_name else ""
     weight_clause = "Bold=1," if font == "rosario" else ""
-    return f"force_style='{font_clause}{weight_clause}Alignment={align_code},MarginV={margin_v}'"
+    position_clause = ""
+    if alignment is not None:
+        align_code = ALIGNMENTS.get(alignment, ALIGNMENTS["bottom"])[1]
+        margin_v = max(0, min(120, int(margin_v)))
+        position_clause = f"Alignment={align_code},MarginV={margin_v}"
+    values = ",".join(part for part in (font_clause.rstrip(","), weight_clause.rstrip(","), position_clause) if part)
+    return f"force_style='{values}'" if values else ""
 
 
 def _cue_blocks(text):

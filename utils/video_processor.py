@@ -281,15 +281,18 @@ class VideoProcessor:
 
         # ── Estilo de subtítulos configurable ────────────────────────────────
         sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
-        ass_font_override = ass_font_style(subtitle_font, subtitle_alignment)
+        # En ASS no usamos Alignment/MarginV globales: force_style afecta también
+        # carteles, títulos y logos. La posición definida por el propio ASS se
+        # conserva; solo se permite cambiar la fuente de forma segura.
+        ass_font_override = ass_font_style(subtitle_font)
         # Los ASS ya contienen color, fuente, tamaño, posición y estilos por diálogo.
-        # Para ASS aplicamos únicamente fuente, alineación y margen vertical,
-        # conservando colores, tamaños, bordes y demás estilos originales.
+        # Para ASS aplicamos únicamente la fuente, conservando posiciones,
+        # colores, tamaños, bordes y demás estilos originales.
         preserve_original_style = (not is_external) or (
             ext_path is not None and Path(ext_path).suffix.lower() == ".ass"
         )
         if preserve_original_style:
-            logger.info("🎨 Estilo ASS preservado; fuente=%s, alineación=%s", subtitle_font, subtitle_alignment)
+            logger.info("🎨 Estilo ASS preservado; fuente=%s; posición original intacta", subtitle_font)
 
         # ── Marca Jap Anime TX: Oleo Script, blanca, borde azul y fade ────────
         watermark_font = bundled_fonts / "OleoScript-Regular.ttf"
