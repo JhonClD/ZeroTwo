@@ -29,8 +29,8 @@ ALIGNMENTS = {
 }
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
 FONTS = {
-    "jkanime": ("JK anime", "Roboto"),
-    "dejavu": ("DejaVu Sans", "DejaVu Sans"),
+    "jkanime": ("Roboto", "Roboto"),
+    "dejavu": ("Noto Sans", "Noto Sans"),
     "liberation": ("Liberation Sans", "Liberation Sans"),
     "serif": ("DejaVu Serif", "DejaVu Serif"),
     "mono": ("DejaVu Sans Mono", "DejaVu Sans Mono"),

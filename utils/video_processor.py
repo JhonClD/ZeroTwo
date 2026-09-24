@@ -269,6 +269,10 @@ class VideoProcessor:
             idx   = sub_idx if sub_idx is not None else 0
             sub_filter = f"subtitles={vid_p}:si={idx}"
             logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
+        bundled_fonts = Path(__file__).resolve().parents[1] / "fonts"
+        if bundled_fonts.is_dir():
+            sub_filter += f":fontsdir={VideoProcessor._escape_path(bundled_fonts)}"
+            logger.info("🔤 Fuentes incluidas activadas: %s", bundled_fonts)
         if original_size:
             sub_filter += f":original_size={original_size}"
 
