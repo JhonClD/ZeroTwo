@@ -37,7 +37,7 @@ def _cleanup(state):
 
 
 def _settings(state):
-    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "alignment": "bottom", "font": "rosario", "translated": False, "language": "es"})
+    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "alignment": "bottom", "font": "default", "translated": False, "language": "es"})
 
 
 def _config_keyboard(user_id, state):
