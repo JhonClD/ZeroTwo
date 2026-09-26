@@ -318,6 +318,21 @@ def _buscar_anilist(anime_name: str) -> dict | None:
     return None
 
 
+def _candidatos_imagen(anime: dict) -> list[str]:
+    """Prioriza el banner horizontal de AniList y conserva portadas de respaldo."""
+    cover = anime.get('coverImage') or {}
+    candidatos = [
+        anime.get('bannerImage'),
+        cover.get('extraLarge'),
+        cover.get('large'),
+        cover.get('medium'),
+    ]
+    return list(dict.fromkeys(
+        url for url in candidatos
+        if isinstance(url, str) and url.startswith(('https://', 'http://'))
+    ))
+
+
 def _normalizar_mal(mal: dict) -> dict:
     """Convierte respuestas de MAL/Jikan/Tenrai al formato de la ficha."""
     aired = mal.get('aired') or {}
@@ -829,13 +844,7 @@ def register(app, user_states, work_dir):
 
             # ── 6. Imagen de portada de la fuente que devolvió los datos ───
             # AniList, MAL/Tenrai/Jikan y Kitsu entregan portadas compatibles.
-            cover = anime.get('coverImage') or {}
-            image_candidates = [
-                cover.get('extraLarge'),
-                cover.get('large'),
-                cover.get('medium'),
-            ]
-            image_candidates = [url for url in image_candidates if url]
+            image_candidates = _candidatos_imagen(anime)
 
             # Intentar cada candidato hasta obtener imagen válida (>10KB)
             img_bytes = None
