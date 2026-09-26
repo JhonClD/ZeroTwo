@@ -6,6 +6,9 @@ pyrogram>=2.0.0
 # TgCrypto - Aceleración de cifrado para Pyrogram
 tgcrypto
 
+# Composición de portadas horizontales para /anime
+Pillow>=10.0.0
+
 # Nota: Las siguientes herramientas se instalan vía sistema operativo
 # 
 # En Termux (Android):

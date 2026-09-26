@@ -14,8 +14,11 @@ import os
 import html
 import unicodedata
 from pathlib import Path
+from io import BytesIO
 from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 logger = logging.getLogger(__name__)
 
@@ -340,6 +343,96 @@ def _guardar_imagen_temporal(img_bytes: bytes, work_dir: Path) -> Path:
     ) as temp_file:
         temp_file.write(img_bytes)
     return Path(temp_file.name)
+
+
+def _fuente_portada(nombre: str, tamaño: int):
+    """Carga una fuente del repositorio y conserva un fallback para instalaciones mínimas."""
+    fuente = Path(__file__).resolve().parent.parent / 'fonts' / nombre
+    try:
+        return ImageFont.truetype(str(fuente), tamaño)
+    except OSError:
+        return ImageFont.load_default()
+
+
+def _crear_portada_anime(
+    fondo_bytes: bytes,
+    poster_bytes: bytes | None,
+    titulo: str,
+    formato: str,
+    generos: str,
+    work_dir: Path,
+) -> Path:
+    """Construye una portada horizontal estilo ficha, optimizada para Telegram."""
+    ancho, alto = 1200, 675
+
+    def abrir(datos: bytes) -> Image.Image:
+        return Image.open(BytesIO(datos)).convert('RGB')
+
+    fondo = abrir(fondo_bytes)
+    # El banner ocupa todo el lienzo y recibe desenfoque para que el texto destaque.
+    fondo = ImageOps.fit(fondo, (ancho, alto), method=Image.Resampling.LANCZOS)
+    fondo = fondo.filter(ImageFilter.GaussianBlur(18))
+    lienzo = fondo.copy()
+    oscurecer = Image.new('RGBA', (ancho, alto), (8, 12, 20, 145))
+    lienzo = Image.alpha_composite(lienzo.convert('RGBA'), oscurecer)
+
+    dibujo = ImageDraw.Draw(lienzo)
+    panel_ancho = 690
+    panel = Image.new('RGBA', (panel_ancho, alto), (10, 14, 23, 208))
+    panel = panel.filter(ImageFilter.GaussianBlur(0.4))
+    lienzo.alpha_composite(panel, (0, 0))
+    # Degradado oscuro adicional hacia el borde del arte.
+    for x in range(panel_ancho, ancho):
+        alpha = int(170 * (1 - (x - panel_ancho) / (ancho - panel_ancho)))
+        dibujo.line((x, 0, x, alto), fill=(8, 12, 20, alpha))
+
+    if poster_bytes:
+        try:
+            poster = ImageOps.fit(abrir(poster_bytes), (510, 600), method=Image.Resampling.LANCZOS)
+            poster = poster.filter(ImageFilter.UnsharpMask(radius=2, percent=120, threshold=3))
+            poster_x, poster_y = 655, 38
+            mask = Image.new('L', poster.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle((0, 0, *poster.size), radius=26, fill=255)
+            lienzo.paste(poster, (poster_x, poster_y), mask)
+            dibujo = ImageDraw.Draw(lienzo)
+        except Exception as error:
+            logger.warning('No se pudo componer el arte de portada: %s', error)
+
+    titulo_fuente = _fuente_portada('Montserrat-Variable.ttf', 52)
+    meta_fuente = _fuente_portada('Roboto-Regular.ttf', 28)
+    etiqueta_fuente = _fuente_portada('Roboto-Bold.ttf', 21)
+    max_chars = 25 if len(titulo) > 24 else 32
+    palabras = titulo.split()
+    lineas, actual = [], ''
+    for palabra in palabras:
+        candidato = f'{actual} {palabra}'.strip()
+        if len(candidato) > max_chars and actual:
+            lineas.append(actual)
+            actual = palabra
+        else:
+            actual = candidato
+    if actual:
+        lineas.append(actual)
+    lineas = lineas[:3]
+    y = 130
+    for linea in lineas:
+        dibujo.text((58, y), linea, font=titulo_fuente, fill='white', stroke_width=1, stroke_fill=(0, 0, 0, 120))
+        y += 65
+    dibujo.text((62, y + 12), formato, font=meta_fuente, fill=(233, 92, 166))
+
+    etiquetas = [genero.strip() for genero in generos.split(',') if genero.strip()][:3]
+    x, y_etiquetas = 58, 540
+    for etiqueta in etiquetas:
+        ancho_etiqueta = int(dibujo.textlength(etiqueta, font=etiqueta_fuente)) + 30
+        if x + ancho_etiqueta > panel_ancho - 25:
+            break
+        dibujo.rounded_rectangle((x, y_etiquetas, x + ancho_etiqueta, y_etiquetas + 38), radius=18, fill=(255, 255, 255, 35), outline=(255, 255, 255, 65))
+        dibujo.text((x + 15, y_etiquetas + 7), etiqueta, font=etiqueta_fuente, fill=(235, 238, 245))
+        x += ancho_etiqueta + 12
+
+    salida = BytesIO()
+    lienzo.convert('RGB').save(salida, format='JPEG', quality=92, optimize=True)
+    return _guardar_imagen_temporal(salida.getvalue(), work_dir)
 
 
 def _normalizar_mal(mal: dict) -> dict:
@@ -855,8 +948,8 @@ def register(app, user_states, work_dir):
             # AniList, MAL/Tenrai/Jikan y Kitsu entregan portadas compatibles.
             image_candidates = _candidatos_imagen(anime)
 
-            # Intentar cada candidato hasta obtener imagen válida (>10KB)
-            img_bytes = None
+            # Descargar hasta dos recursos: primero el banner/fondo y después la portada.
+            imagenes_validas = []
             for candidate in image_candidates:
                 try:
                     r = subprocess.run(
@@ -864,16 +957,26 @@ def register(app, user_states, work_dir):
                         capture_output=True, timeout=30
                     )
                     if r.returncode == 0 and len(r.stdout) > 10_000:
-                        img_bytes = r.stdout
+                        imagenes_validas.append(r.stdout)
                         logger.info(f"🖼 Imagen OK: {len(r.stdout)//1024}KB → {candidate[:80]}")
-                        break
+                        if len(imagenes_validas) >= 2:
+                            break
                     else:
                         logger.info(f"🖼 Imagen inválida ({len(r.stdout)} bytes) → {candidate[:80]}")
                 except Exception as e:
                     logger.warning(f"🖼 Error descargando {candidate}: {e}")
 
-            if img_bytes:
-                temp_img = _guardar_imagen_temporal(img_bytes, work_dir)
+            if imagenes_validas:
+                # El primer recurso se usa como fondo; el segundo como arte vertical.
+                # Si solo existe uno, la composición funciona igualmente con el banner.
+                temp_img = _crear_portada_anime(
+                    imagenes_validas[0],
+                    imagenes_validas[1] if len(imagenes_validas) > 1 else None,
+                    html.unescape(re.sub(r'<[^>]+>', '', titulo)),
+                    formato,
+                    generos,
+                    work_dir,
+                )
                 try:
                     if len(info) > 1024:
                         resumen_portada = (
