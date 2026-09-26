@@ -15,7 +15,7 @@ import html
 import unicodedata
 from pathlib import Path
 from pyrogram import filters, enums
-from pyrogram.types import Message
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 logger = logging.getLogger(__name__)
 
@@ -696,7 +696,7 @@ def register(app, user_states, work_dir):
 
             if not anime:
                 await status_msg.edit_text(
-                    f"❌ No se encontró el anime: <b>{anime_name}</b>\n\n"
+                    f"❌ No se encontró el anime: <b>{_escapar(anime_name)}</b>\n\n"
                     "Intenta con el título en japonés o inglés.",
                     parse_mode=enums.ParseMode.HTML
                 )
@@ -714,11 +714,9 @@ def register(app, user_states, work_dir):
 
             estudios_nodes = anime.get('studios', {}).get('nodes', [])
             estudios = ', '.join([s.get('name', '') for s in estudios_nodes if s.get('name')]) if estudios_nodes else 'Desconocido'
-            estudios = _escapar(estudios)
 
             generos_raw = anime.get('genres') or []
             generos = ', '.join([GENEROS_TRAD.get(g, g) for g in generos_raw]) if generos_raw else 'N/A'
-            generos = _escapar(generos)
 
             sinopsis = anime.get('description') or 'No disponible'
             if sinopsis not in ('No disponible', '', None):
@@ -728,7 +726,7 @@ def register(app, user_states, work_dir):
                 sinopsis = re.sub(r'\n?Nota:.*', '', sinopsis, flags=re.IGNORECASE | re.DOTALL).strip()
                 sinopsis = re.sub(r'\n?\[Escrito por.*?\]', '', sinopsis, flags=re.IGNORECASE).strip()
                 sinopsis = _traducir(sinopsis)
-            sinopsis = _escapar(sinopsis[:1800]) or 'No disponible'
+            sinopsis = _escapar(sinopsis[:1400]) or 'No disponible'
 
             episodios = anime.get('episodes') or 'En emisión'
             duracion  = anime.get('duration')
@@ -747,9 +745,14 @@ def register(app, user_states, work_dir):
             else:
                 puntuacion_txt = 'N/A'
             ficha_url = anime.get('siteUrl') or anime.get('mal_url')
-            ficha_txt = ''
-            if isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://')):
-                ficha_txt = f'\n<a href="{_escapar(ficha_url)}">🔗 Ver ficha y más información</a>'
+            if not (isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://'))):
+                ficha_url = None
+            teclado_ficha = (
+                InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"🔗 Abrir ficha en {fuente}", url=ficha_url)
+                ]])
+                if ficha_url else None
+            )
 
             # Fecha de estreno completa (día/mes/año)
             sd = anime.get('startDate') or {}
@@ -761,10 +764,11 @@ def register(app, user_states, work_dir):
                 5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
                 9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
             }
-            if sd_year and sd_month and sd_day:
-                estreno_txt = f"{sd_day} de {MESES[sd_month]} de {sd_year}"
-            elif sd_year and sd_month:
-                estreno_txt = f"{MESES[sd_month].capitalize()} de {sd_year}"
+            nombre_mes = MESES.get(sd_month) if isinstance(sd_month, int) else None
+            if sd_year and nombre_mes and sd_day:
+                estreno_txt = f"{sd_day} de {nombre_mes} de {sd_year}"
+            elif sd_year and nombre_mes:
+                estreno_txt = f"{nombre_mes.capitalize()} de {sd_year}"
             elif sd_year:
                 estreno_txt = str(sd_year)
             else:
@@ -793,7 +797,10 @@ def register(app, user_states, work_dir):
             # ── 4. Doblaje Crunchyroll ────────────────────────────────────
             titulo_original = titulo
             tiene_dub = _tiene_doblaje(titulo_original, titulo_ingles, titulo_nativo)
-            doblaje_txt = "🟢 Disponible en Crunchyroll" if tiene_dub else "🔴 No disponible"
+            doblaje_txt = (
+                "🟢 Confirmado en Crunchyroll"
+                if tiene_dub else "⚪ No figura en la lista verificada"
+            )
 
             # ── 5. Bloques opcionales de título ───────────────────────────
             titulo = _escapar(titulo)
@@ -806,23 +813,18 @@ def register(app, user_states, work_dir):
                 titulo_bloque += f"\n<b>🈯 Título nativo:</b> <b>{titulo_nativo}</b>"
 
             info = (
-                f"<b>✨ INFORMACIÓN DEL ANIME ✨</b>\n\n"
-                f"<b>🈺 Título:</b> <b>{titulo}</b>"
+                f"<b>🌸 {titulo}</b>\n"
                 f"{titulo_bloque}\n"
-                f"<b>🏦 Estudio:</b> <b>{estudios}</b>\n"
-                f"<b>{src_emoji} Fuente:</b> <b>{src_label}</b>\n"
-                f"<b>📅 Estreno:</b> <b>{estreno_txt}</b>\n"
-                f"<b>🗂 Episodios:</b> <b>{episodios}</b>\n"
-                f"<b>🎙 Doblaje latino:</b> <b>{doblaje_txt}</b>\n"
-                f"<b>🏷 Géneros:</b> <b>{generos}</b>\n"
-                f"<b>⏱ Duración:</b> <b>{duracion_txt}</b>\n"
-                f"<b>💽 Formato:</b> <b>{formato}</b>\n"
-                f"<b>🔅 Temporada:</b> <b>{temporada}</b>\n"
-                f"<b>⏳ Estado:</b> <b>{estado}</b>\n"
-                f"<b>⭐ Puntuación:</b> <b>{puntuacion_txt}</b>\n"
-                f"<b>📜 Sinopsis:</b>\n"
-                f"<blockquote><b>{sinopsis}</b></blockquote>"
-                f"{ficha_txt}"
+                f"⭐ <b>{_escapar(puntuacion_txt)}</b>  ·  "
+                f"{_escapar(formato)}  ·  {_escapar(estado)}\n"
+                f"📅 {_escapar(estreno_txt)}  ·  🔅 {_escapar(temporada)}\n"
+                f"🎞 {_escapar(episodios)} episodios  ·  ⏱ {_escapar(duracion_txt)}\n"
+                f"🏢 {_escapar(estudios)}\n"
+                f"🏷 {_escapar(generos)}\n"
+                f"🎙 <b>Doblaje latino:</b> {_escapar(doblaje_txt)}\n\n"
+                f"<b>📖 Sinopsis</b>\n"
+                f"<blockquote>{sinopsis}</blockquote>\n"
+                f"<i>{src_emoji} Datos de {_escapar(src_label)}</i>"
             )
 
             # ── 6. Imagen de portada de la fuente que devolvió los datos ───
@@ -857,24 +859,41 @@ def register(app, user_states, work_dir):
                 temp_img.write_bytes(img_bytes)
 
                 if len(info) > 1024:
-                    await message.reply_photo(photo=str(temp_img))
+                    resumen_portada = (
+                        f"<b>🌸 {titulo}</b>\n"
+                        f"⭐ {_escapar(puntuacion_txt)}  ·  {_escapar(formato)}\n"
+                        f"📅 {_escapar(estreno_txt)}  ·  🎞 {_escapar(episodios)} episodios\n"
+                        f"🎙 {_escapar(doblaje_txt)}"
+                    )
+                    await message.reply_photo(
+                        photo=str(temp_img),
+                        caption=resumen_portada,
+                        parse_mode=enums.ParseMode.HTML,
+                    )
                     await message.reply_text(
                         info,
                         parse_mode=enums.ParseMode.HTML,
                         disable_web_page_preview=True,
+                        reply_markup=teclado_ficha,
                     )
                 else:
                     await message.reply_photo(
                         photo=str(temp_img),
                         caption=info,
-                        parse_mode=enums.ParseMode.HTML
+                        parse_mode=enums.ParseMode.HTML,
+                        reply_markup=teclado_ficha,
                     )
                 await status_msg.delete()
                 temp_img.unlink(missing_ok=True)
                 return
 
             # Sin imagen → solo texto
-            await status_msg.edit_text(info, parse_mode=enums.ParseMode.HTML)
+            await status_msg.edit_text(
+                info,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True,
+                reply_markup=teclado_ficha,
+            )
 
         except Exception as e:
             logger.error(f"❌ Error en /anime: {e}", exc_info=True)
