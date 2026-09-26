@@ -103,6 +103,13 @@ pip install -r requirements.txt
 Esto instalará:
 - ✅ `pyrogram>=2.0.0` - Cliente de Telegram
 - ✅ `tgcrypto` - Aceleración de cifrado
+- ✅ `Pillow` - Portadas visuales de `/anime`
+
+Las librerías de Google Drive son opcionales. Solo si vas a usar `/gdrive_upload`, instala también:
+
+```bash
+pip install -r requirements-google.txt
+```
 
 ### Paso 7: Configurar Token del Bot
 

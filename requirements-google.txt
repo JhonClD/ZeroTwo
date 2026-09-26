@@ -1,0 +1,5 @@
+# Dependencias opcionales para /gdrive_upload
+# La instalación base de ZeroTwo no las necesita.
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.0.0

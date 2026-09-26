@@ -241,6 +241,12 @@ python main.py
 
 La búsqueda no requiere esta variable para funcionar: si no está definida, el bot continúa automáticamente con Tenrai y Jikan. AniList puede devolver un `403` cuando el propio servicio suspende temporalmente la API por problemas de estabilidad; en ese caso el bot no se bloquea y pasa a las fuentes de respaldo.
 
+La instalación base no incluye las librerías de Google Drive, porque `/drive_sync` funciona sin ellas y algunas versiones recientes de Python en Termux pueden intentar compilar `cryptography`. Si necesitas `/gdrive_upload`, instálalas aparte:
+
+```bash
+python -m pip install -r requirements-google.txt
+```
+
 ## Ejecución y actualización
 
 Para detener el bot, pulsa `Ctrl+C`. Los registros se muestran en la terminal y también se guardan en `bot.log`.
