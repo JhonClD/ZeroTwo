@@ -333,6 +333,15 @@ def _candidatos_imagen(anime: dict) -> list[str]:
     ))
 
 
+def _guardar_imagen_temporal(img_bytes: bytes, work_dir: Path) -> Path:
+    """Guarda la imagen con un nombre único que no depende del usuario de Telegram."""
+    with tempfile.NamedTemporaryFile(
+        mode='wb', suffix='.jpg', prefix='anime_', dir=work_dir, delete=False
+    ) as temp_file:
+        temp_file.write(img_bytes)
+    return Path(temp_file.name)
+
+
 def _normalizar_mal(mal: dict) -> dict:
     """Convierte respuestas de MAL/Jikan/Tenrai al formato de la ficha."""
     aired = mal.get('aired') or {}
@@ -864,36 +873,36 @@ def register(app, user_states, work_dir):
                     logger.warning(f"🖼 Error descargando {candidate}: {e}")
 
             if img_bytes:
-                temp_img = work_dir / f"anime_{message.from_user.id}.jpg"
-                temp_img.write_bytes(img_bytes)
-
-                if len(info) > 1024:
-                    resumen_portada = (
-                        f"<b>🌸 {titulo}</b>\n"
-                        f"⭐ {_escapar(puntuacion_txt)}  ·  {_escapar(formato)}\n"
-                        f"📅 {_escapar(estreno_txt)}  ·  🎞 {_escapar(episodios)} episodios\n"
-                        f"🎙 {_escapar(doblaje_txt)}"
-                    )
-                    await message.reply_photo(
-                        photo=str(temp_img),
-                        caption=resumen_portada,
-                        parse_mode=enums.ParseMode.HTML,
-                    )
-                    await message.reply_text(
-                        info,
-                        parse_mode=enums.ParseMode.HTML,
-                        disable_web_page_preview=True,
-                        reply_markup=teclado_ficha,
-                    )
-                else:
-                    await message.reply_photo(
-                        photo=str(temp_img),
-                        caption=info,
-                        parse_mode=enums.ParseMode.HTML,
-                        reply_markup=teclado_ficha,
-                    )
-                await status_msg.delete()
-                temp_img.unlink(missing_ok=True)
+                temp_img = _guardar_imagen_temporal(img_bytes, work_dir)
+                try:
+                    if len(info) > 1024:
+                        resumen_portada = (
+                            f"<b>🌸 {titulo}</b>\n"
+                            f"⭐ {_escapar(puntuacion_txt)}  ·  {_escapar(formato)}\n"
+                            f"📅 {_escapar(estreno_txt)}  ·  🎞 {_escapar(episodios)} episodios\n"
+                            f"🎙 {_escapar(doblaje_txt)}"
+                        )
+                        await message.reply_photo(
+                            photo=str(temp_img),
+                            caption=resumen_portada,
+                            parse_mode=enums.ParseMode.HTML,
+                        )
+                        await message.reply_text(
+                            info,
+                            parse_mode=enums.ParseMode.HTML,
+                            disable_web_page_preview=True,
+                            reply_markup=teclado_ficha,
+                        )
+                    else:
+                        await message.reply_photo(
+                            photo=str(temp_img),
+                            caption=info,
+                            parse_mode=enums.ParseMode.HTML,
+                            reply_markup=teclado_ficha,
+                        )
+                    await status_msg.delete()
+                finally:
+                    temp_img.unlink(missing_ok=True)
                 return
 
             # Sin imagen → solo texto
@@ -907,6 +916,6 @@ def register(app, user_states, work_dir):
         except Exception as e:
             logger.error(f"❌ Error en /anime: {e}", exc_info=True)
             await status_msg.edit_text(
-                f"❌ <b>Error interno</b>\n\n<code>{str(e)[:200]}</code>",
+                f"❌ <b>Error interno</b>\n\n<code>{_escapar(str(e)[:200])}</code>",
                 parse_mode=enums.ParseMode.HTML
             )
