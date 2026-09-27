@@ -203,6 +203,7 @@ def register(app, download_dir):
                 return
             session["title"], session["episodes"] = item["title"], episodes
             buttons = [[InlineKeyboardButton(f"Episodio {ep['number']}", callback_data=f"adep:{parts[1]}:{i}")] for i, ep in enumerate(episodes)]
+            buttons.append([InlineKeyboardButton("⬅️ Regresar a resultados", callback_data=f"adback:{parts[1]}:results")])
             await query.message.edit_text(f"🎌 <b>{html.escape(item['title'])}</b>\nSelecciona un episodio:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
         except Exception as error:
             await query.message.edit_text(f"❌ Error obteniendo episodios: {html.escape(str(error)[:250])}", parse_mode=enums.ParseMode.HTML)
@@ -223,9 +224,28 @@ def register(app, download_dir):
             session["site"] = parts[2]
             session["results"] = results
             buttons = [[InlineKeyboardButton(item["title"][:50], callback_data=f"adsel:{parts[1]}:{i}")] for i, item in enumerate(results)]
+            buttons.append([InlineKeyboardButton("⬅️ Regresar a páginas", callback_data=f"adback:{parts[1]}:sites")])
             await query.message.edit_text(f"🎌 <b>Resultados en {html.escape(SOURCES[parts[2]]['name'])}:</b>\nSelecciona un anime:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
         except Exception as error:
             await query.message.edit_text(f"❌ Error buscando en esa página: {html.escape(str(error)[:250])}", parse_mode=enums.ParseMode.HTML)
+
+    @app.on_callback_query(filters.regex(r"^adback:"))
+    async def anime_back(client, query):
+        parts = query.data.split(":")
+        session = _SESSIONS.get(parts[1])
+        if not session or not query.from_user or query.from_user.id != session["user_id"]:
+            await query.answer("Esta selección no es tuya o ya expiró.", show_alert=True)
+            return
+        await query.answer()
+        if parts[2] == "sites":
+            buttons = [[InlineKeyboardButton(source["name"], callback_data=f"adsite:{parts[1]}:{key}")] for key, source in SOURCES.items()]
+            await query.message.edit_text("🌐 <b>Elige dónde quieres buscar y ver el anime:</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+            return
+        results = session.get("results", [])
+        buttons = [[InlineKeyboardButton(item["title"][:50], callback_data=f"adsel:{parts[1]}:{i}")] for i, item in enumerate(results)]
+        buttons.append([InlineKeyboardButton("⬅️ Regresar a páginas", callback_data=f"adback:{parts[1]}:sites")])
+        site_name = SOURCES.get(session.get("site"), {}).get("name", "la página")
+        await query.message.edit_text(f"🎌 <b>Resultados en {html.escape(site_name)}:</b>\nSelecciona un anime:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^adep:"))
     async def episode_select(client, query):
