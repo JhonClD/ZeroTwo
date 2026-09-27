@@ -33,6 +33,15 @@ _SITE_SEARCH = {
 }
 
 
+def _owner_id(message: Message) -> int:
+    """Identificador estable para mensajes de usuario, canal o chat."""
+    if message.from_user:
+        return message.from_user.id
+    if message.sender_chat:
+        return message.sender_chat.id
+    return message.chat.id
+
+
 async def _search_anime(query: str, site_key: str = "veranimes") -> list[dict]:
     """Busca títulos en el sitio seleccionado."""
     url = _SITE_SEARCH.get(site_key, _SITE_SEARCH["veranimes"]).format(query=quote_plus(query))
@@ -116,7 +125,7 @@ async def _resolve_and_download(url: str, output_dir: Path, progress):
 
 
 async def _download_episode(message: Message, episode_url: str, title: str, download_dir: Path, status: Message):
-    user_dir = download_dir / f"user_{message.from_user.id}"
+    user_dir = download_dir / f"user_{_owner_id(message)}"
     user_dir.mkdir(parents=True, exist_ok=True)
     async def progress(text):
         try:
@@ -148,7 +157,7 @@ def register(app, download_dir):
             status = await message.reply_text("🔎 <b>Buscando resultados…</b>", parse_mode=enums.ParseMode.HTML)
             try:
                 token = uuid.uuid4().hex[:10]
-                _SESSIONS[token] = {"user_id": message.from_user.id, "query": raw}
+                _SESSIONS[token] = {"user_id": _owner_id(message), "query": raw}
                 buttons = [[InlineKeyboardButton(source["name"], callback_data=f"adsite:{token}:{key}")] for key, source in SOURCES.items()]
                 await status.edit_text("🌐 <b>Elige dónde quieres buscar y ver el anime:</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
             except Exception as error:
@@ -182,7 +191,7 @@ def register(app, download_dir):
     async def anime_select(client, query):
         parts = query.data.split(":")
         session = _SESSIONS.get(parts[1])
-        if not session or query.from_user.id != session["user_id"]:
+        if not session or not query.from_user or query.from_user.id != session["user_id"]:
             await query.answer("Esta selección no es tuya o ya expiró.", show_alert=True)
             return
         await query.answer()
@@ -202,7 +211,7 @@ def register(app, download_dir):
     async def site_select(client, query):
         parts = query.data.split(":")
         session = _SESSIONS.get(parts[1])
-        if not session or query.from_user.id != session["user_id"]:
+        if not session or not query.from_user or query.from_user.id != session["user_id"]:
             await query.answer("Esta selección no es tuya o ya expiró.", show_alert=True)
             return
         await query.answer("Buscando en el sitio elegido…")
@@ -222,7 +231,7 @@ def register(app, download_dir):
     async def episode_select(client, query):
         parts = query.data.split(":")
         session = _SESSIONS.get(parts[1])
-        if not session or query.from_user.id != session["user_id"]:
+        if not session or not query.from_user or query.from_user.id != session["user_id"]:
             await query.answer("Esta selección no es tuya o ya expiró.", show_alert=True)
             return
         await query.answer("Iniciando descarga…")
