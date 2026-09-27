@@ -222,13 +222,22 @@ def _tiene_doblaje(titulo_romaji: str, titulo_english: str, titulo_native: str) 
     return False
 
 
-def _estado_doblaje_regional(titulo_romaji: str, titulo_english: str, titulo_native: str) -> str:
+def _estado_doblaje_regional(
+    titulo_romaji: str,
+    titulo_english: str,
+    titulo_native: str,
+    verificacion: dict | None = None,
+) -> str:
     """Devuelve el estado por región; ❔ significa que la región aún no fue verificada."""
     titulos = (titulo_romaji, titulo_english, titulo_native)
     claves = {_clave_doblaje(titulo) for titulo in titulos if titulo}
     regiones = {"es": None, "mx": None}
+    if verificacion:
+        for region in regiones:
+            if region in verificacion and isinstance(verificacion[region], bool):
+                regiones[region] = verificacion[region]
     for clave in claves:
-        if clave in DUB_REGION_OVERRIDES:
+        if clave in DUB_REGION_OVERRIDES and not verificacion:
             regiones.update(DUB_REGION_OVERRIDES[clave])
 
     # La lista histórica de Crunchyroll confirma doblaje latino, pero no necesariamente
@@ -323,6 +332,7 @@ def _buscar_anilist(anime_name: str) -> dict | None:
             description
             bannerImage
             coverImage { extraLarge large medium }
+            externalLinks { url site type }
         }
     }
     """
@@ -370,6 +380,38 @@ def _candidatos_imagen(anime: dict) -> list[str]:
         url for url in candidatos
         if isinstance(url, str) and url.startswith(('https://', 'http://'))
     ))
+
+
+def _buscar_doblaje_crunchyroll(anime: dict) -> dict | None:
+    """Lee idiomas de audio de un enlace de Crunchyroll publicado por AniList."""
+    enlaces = anime.get('externalLinks') or []
+    urls = [
+        enlace.get('url') for enlace in enlaces
+        if isinstance(enlace, dict)
+        and enlace.get('site', '').lower() == 'crunchyroll'
+        and isinstance(enlace.get('url'), str)
+    ]
+    for url in urls[:2]:
+        try:
+            result = subprocess.run(
+                ['curl', '-s', '-L', '--max-time', '15', '-A', 'ZeroTwo/1.0', url],
+                capture_output=True, text=True, timeout=20,
+            )
+            if result.returncode != 0:
+                continue
+            contenido = html.unescape(result.stdout)
+            audio = re.search(r'Audio\s*:\s*(.*?)(?:Subtitles|Subtítulos)\s*:', contenido, re.IGNORECASE | re.DOTALL)
+            if not audio:
+                continue
+            idiomas = re.sub(r'<[^>]+>', ' ', audio.group(1))
+            idiomas = re.sub(r'\s+', ' ', idiomas).lower()
+            return {
+                'es': 'español (españa)' in idiomas,
+                'mx': 'español (américa latina)' in idiomas,
+            }
+        except Exception as error:
+            logger.info('Crunchyroll: no se pudo leer audio de %s: %s', url, error)
+    return None
 
 
 def _guardar_imagen_temporal(img_bytes: bytes, work_dir: Path) -> Path:
@@ -858,7 +900,13 @@ def register(app, user_states, work_dir):
             src_emoji, src_label = FUENTES.get(source_raw, ('📦', source_raw or 'Desconocido'))
 
             # ── 4. Doblaje regional ───────────────────────────────────────
-            doblaje_txt = _estado_doblaje_regional(titulo, titulo_ingles, titulo_nativo)
+            verificacion_doblaje = _buscar_doblaje_crunchyroll(anime)
+            doblaje_txt = _estado_doblaje_regional(
+                titulo,
+                titulo_ingles,
+                titulo_nativo,
+                verificacion=verificacion_doblaje,
+            )
 
             # ── 5. Bloques opcionales de título ───────────────────────────
             titulo = _escapar(titulo)
