@@ -51,11 +51,7 @@ def register(app):
 ├ /tiktok &lt;url&gt; — Sin marca de agua, calidad HD
 └ Alias: /ttdl /tt /tiktoknowm
 
-<b>9️⃣ Descarga directa con yt-dlp</b>
-├ Pega un enlace compatible y ZeroTwo lo descarga automáticamente
-├ Ejemplo: https://www.youtube.com/watch?v=...
-└ También puedes usar /ytmp3 o /ytmp4
-<b>🔟 MEGA / MediaFire / Google Drive</b>
+<b>9️⃣ MEGA / MediaFire / Google Drive</b>
 ├ Pega el enlace directamente o usa:
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
@@ -65,7 +61,7 @@ def register(app):
 ├ 📁 /drive_sync — Guardar para sincronización Android
 └ Después envía un documento, foto, video o audio
 
-<b>1️⃣1️⃣ Torrents</b>
+<b>🔟 Torrents</b>
 ├ Pega un enlace magnet directamente
 ├ Responde a un archivo .torrent con /torrent
 └ Requiere aria2 instalado en Termux
@@ -74,7 +70,7 @@ def register(app):
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣2️⃣ Mejorar Imagen con IA</b>
+<b>🔟 Mejorar Imagen con IA</b>
 ├ /enhance, /hd o /remini
 ├ Envía la foto con el comando como caption
 ├ O responde a una foto con el comando
@@ -85,7 +81,7 @@ def register(app):
 🔔 <b>NOTIFICACIONES DE ANIME</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣3️⃣ Notificaciones de Streaming</b>
+<b>1️⃣1️⃣ Notificaciones de Streaming</b>
 ├ /notify on           — Activar notificaciones
 ├ /notify off          — Desactivar
 ├ /notify status       — Ver estado actual
@@ -100,7 +96,7 @@ def register(app):
 🔍 <b>BÚSQUEDA</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>1️⃣4️⃣ Buscar Anime</b>
+<b>1️⃣2️⃣ Buscar Anime</b>
 ├ /anime &lt;nombre&gt;
 ├ Info completa: estudio, géneros, sinopsis traducida
 └ Ejemplo: /anime Berserk

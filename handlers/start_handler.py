@@ -34,7 +34,7 @@ Puedo ayudarte con todo esto:
 /press          — Codificar un video respondido
 /press2         — Codificar en dos pasadas
 /up2            — Enviar codificados pendientes
-Pega cualquier enlace compatible directamente (yt-dlp, MEGA, MediaFire o Drive)
+Pega un enlace de MEGA o MediaFire directamente
 
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>

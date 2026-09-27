@@ -185,7 +185,6 @@ if __name__ == "__main__":
         "FFprobe": "ffprobe",
         "Megatools": "megadl",
         "Wget": "wget",
-        "yt-dlp": "yt-dlp",
     }
     for name, command in tools.items():
         available = shutil.which(command) is not None

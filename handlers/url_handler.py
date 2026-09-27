@@ -9,7 +9,6 @@ from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from downloaders import MEGADownloader, MediaFireDownloader
-from downloaders.ytdlp_downloader import YtDlpDownloader
 from downloaders.drive_downloader import DriveDownloader, take_video_screenshots
 from utils import VideoProcessor
 
@@ -39,19 +38,18 @@ def register(app, download_dir):
         is_mega      = MEGADownloader.is_mega_url(url)
         is_mediafire = MediaFireDownloader.is_mediafire_url(url)
         is_drive     = DriveDownloader.is_drive_url(url)
-        # Fallback para cualquier enlace HTTP(S) compatible con yt-dlp.
-        is_ytdlp     = YtDlpDownloader.is_http_url(url) and not any([is_mega, is_mediafire, is_drive])
-        if not any([is_mega, is_mediafire, is_drive, is_ytdlp]):
-            logger.info("⏭️ URL ignorada (no es un enlace HTTP compatible)")
+
+        if not any([is_mega, is_mediafire, is_drive]):
+            logger.info("⏭️ URL ignorada (no es MEGA, MediaFire ni Drive)")
             return
+
         if is_mega:
             service = "MEGA"
         elif is_mediafire:
             service = "MediaFire"
-        elif is_drive:
-            service = "Google Drive"
         else:
-            service = "yt-dlp"
+            service = "Google Drive"
+
         logger.info(f"✅ Servicio: {service}")
 
         user_dir = download_dir / f"user_{user_id}"
@@ -75,10 +73,8 @@ def register(app, download_dir):
                 success, file_path, error = await MEGADownloader.download(url, user_dir, tg_progress)
             elif is_mediafire:
                 success, file_path, error = await MediaFireDownloader.download(url, user_dir, tg_progress)
-            elif is_drive:
-                success, file_path, error = await DriveDownloader.download(url, user_dir, tg_progress)
             else:
-                success, file_path, error, _info = await YtDlpDownloader.download(url, user_dir, tg_progress)
+                success, file_path, error = await DriveDownloader.download(url, user_dir, tg_progress)
 
             if not success:
                 await status_msg.edit_text(
@@ -128,7 +124,7 @@ def register(app, download_dir):
                     last_pct[0] = pct
 
             # ── Enviar archivo ────────────────────────────────────────────────
-            caption = f"✅ Descargado con {service}\n📄 {filename}"
+            caption = f"✅ Descargado de {service}\n📄 {filename}"
 
             try:
                 if file_ext in VIDEO_EXTS:

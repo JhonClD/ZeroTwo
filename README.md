@@ -28,12 +28,11 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Área | Función |
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
-| Descargas | Descargar contenido de MEGA, MediaFire y cualquier sitio compatible con yt-dlp pegando solo el enlace. |
+| Descargas | Descargar contenido de MEGA y MediaFire. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
-| yt-dlp | Descarga local con progreso, sin servicios externos intermediarios, y con playlists desactivadas por seguridad. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
@@ -304,21 +303,13 @@ python main.py
 
 En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en `Download/ZeroTwo`; una aplicación de sincronización, como FolderSync, puede transferir esa carpeta a Google Drive. Esta modalidad no requiere `drive_credentials.json`, `drive_token.json` ni credenciales de Google.
 
-## Descargar pegando solo el enlace
-
-Envía al bot un enlace `https://...` compatible con [yt-dlp](https://github.com/yt-dlp/yt-dlp). ZeroTwo lo descarga, muestra el progreso y lo envía a Telegram. Esto funciona para YouTube y muchos otros sitios soportados por yt-dlp.
-
-También puedes usar `/ytmp3 <url>` para audio o `/ytmp4 <url>` para video. Los enlaces de MEGA, MediaFire y Google Drive siguen usando sus descargadores específicos.
-
-> Descarga únicamente contenido que tengas derecho a guardar y respeta los términos de uso de cada sitio.
-
 ## Comandos disponibles
 
 | Comando o acción | Descripción |
 | --- | --- |
 | `/start` | Inicia el bot. |
 | `/help` | Muestra la ayuda detallada. |
-| `/download` | Muestra cómo pegar enlaces para descargar con yt-dlp, MEGA, MediaFire o Drive. |
+| `/download` | Inicia una descarga desde MEGA o MediaFire. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo con aria2c; los enlaces `magnet:` se pueden pegar directamente. |

@@ -59,12 +59,6 @@ for tool in "${tools[@]}"; do
     fi
 done
 
-if python -c "import yt_dlp" &> /dev/null; then
-    echo -e "${GREEN}✅ yt-dlp instalado${NC}"
-else
-    echo -e "${RED}❌ yt-dlp NO instalado${NC}"
-    all_ok=false
-fi
 echo ""
 if [ "$all_ok" = true ]; then
     echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"

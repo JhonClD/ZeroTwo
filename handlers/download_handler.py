@@ -17,7 +17,7 @@ def register(app):
             "Envíame un enlace de:\n"
             "🔷 MEGA (mega.nz)\n"
             "🔶 MediaFire (mediafire.com)\n\n"
-            "Ejemplo (solo pega el link):\n"
+            "Ejemplo:\n"
             "<code>https://mega.nz/file/abc123#xyz789</code>",
             parse_mode=enums.ParseMode.HTML
         )
