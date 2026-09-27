@@ -9,3 +9,6 @@ __all__ = ['MEGADownloader', 'MediaFireDownloader']
 from .drive_downloader import DriveDownloader, DriveUploader, take_video_screenshots
 
 __all__ = ['MEGADownloader', 'MediaFireDownloader', 'DriveDownloader', 'DriveUploader', 'take_video_screenshots']
+
+from .ytdlp_downloader import YtDlpDownloader
+__all__.append('YtDlpDownloader')

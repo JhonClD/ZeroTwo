@@ -42,6 +42,7 @@ El script instalará automáticamente:
 - ✅ Wget
 - ✅ Curl
 - ✅ Aria2c
+- ✅ yt-dlp
 - ✅ Pyrogram
 - ✅ TgCrypto
 
@@ -71,6 +72,11 @@ pkg install -y \
   aria2
 ```
 
+Instala también el descargador por enlace:
+```bash
+pip install -U yt-dlp
+```
+
 **Tiempo estimado:** 5-10 minutos
 
 ### Paso 3: Verificar Instalación de Herramientas
@@ -81,6 +87,7 @@ megadl --version      # Debe mostrar megatools
 wget --version        # Debe mostrar Wget
 curl --version        # Debe mostrar Curl
 aria2c --version      # Debe mostrar aria2c
+python -c "import yt_dlp; print(yt_dlp.version.__version__)"
 ```
 
 ### Paso 4: Actualizar pip

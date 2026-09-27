@@ -1,5 +1,7 @@
 # ZeroTwo - Dependencias Python
 
+# yt-dlp - Descarga directa desde sitios compatibles
+yt-dlp>=2025.1.15
 # Pyrogram - Cliente de Telegram MTProto
 pyrogram>=2.0.0
 
