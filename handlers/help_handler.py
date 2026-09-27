@@ -19,7 +19,7 @@ def register(app):
 🎬 <b>PROCESAMIENTO DE VIDEOS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-├ /sub — Responde a un video y luego envía .srt, .ass o .vtt
+├ /sub — Quema subtítulos y guarda el resultado en Download/ZeroTwo
 ├ /subsize &lt;MB&gt; — Quema subtítulos y apunta a un tamaño final
 └ Quema los subtítulos y agrega la marca ZeroTwo
 ├ /dw2 — Guarda localmente un video respondido

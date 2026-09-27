@@ -65,7 +65,16 @@ async def _burn(message, state):
     s = _settings(state)
     video = Path(state["video_path"])
     subtitle = Path(state["external_subtitle"]) if state.get("external_subtitle") else None
-    output = Path(state["job_dir"]) / f"{video.stem}_ZeroTwo.mp4"
+    output_dir = Path(os.getenv(
+        "ZERO_TWO_OUTPUT_DIR",
+        str(Path.home() / "storage" / "shared" / "Download" / "ZeroTwo"),
+    )).expanduser()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        output_dir = Path.home() / "Downloads" / "ZeroTwo"
+        output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / f"{video.stem}_ZeroTwo.mp4"
     status = state["status"]
     try:
         selected_font_label = FONTS.get(s["font"], FONTS["default"])[0]
@@ -91,11 +100,9 @@ async def _burn(message, state):
         output_mb = output.stat().st_size / (1024 * 1024)
         logger.info("📤 SUBTÍTULOS LISTOS | preparando subida archivo=%s tamaño=%.2f MB", output, output_mb)
         target_line = f"\n🎯 Objetivo: {state['target_size_mb']:g} MB" if state.get("target_size_mb") else ""
-        await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB{target_line}\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
         watermark_label = "ON" if s.get("watermark", True) else "OFF"
-        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}\n✦ Marca de agua: {watermark_label}{target_line}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
-        logger.info("✅ SUBIDA DE SUBTÍTULOS COMPLETADA | salida=%s", output)
-        await status.delete()
+        await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB{target_line}\n💾 Guardado en:\n<code>{output}</code>\n✦ Marca de agua: {watermark_label}", parse_mode=enums.ParseMode.HTML)
+        logger.info("✅ SUBTÍTULOS GUARDADOS LOCALMENTE | salida=%s tamaño=%.2f MB", output, output_mb)
     except Exception as error:
         logger.error("Error quemando subtítulos", exc_info=True)
         detail = html.escape(str(error)[:350])
