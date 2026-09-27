@@ -53,6 +53,8 @@ def register(app):
 
 <b>9️⃣ Descarga directa con yt-dlp</b>
 ├ Pega un enlace compatible y ZeroTwo lo descarga automáticamente
+├ YouTube y otros sitios compatibles
+├ LatAnime, TioAnime, JKAnime y AnimeDBS
 ├ Ejemplo: https://www.youtube.com/watch?v=...
 └ También puedes usar /ytmp3 o /ytmp4
 <b>🔟 MEGA / MediaFire / Google Drive</b>

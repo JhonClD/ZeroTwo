@@ -306,7 +306,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 
 ## Descargar pegando solo el enlace
 
-Envía al bot un enlace `https://...` compatible con [yt-dlp](https://github.com/yt-dlp/yt-dlp). ZeroTwo lo descarga, muestra el progreso y lo envía a Telegram. Esto funciona para YouTube y muchos otros sitios soportados por yt-dlp.
+Envía al bot un enlace `https://...` compatible con [yt-dlp](https://github.com/yt-dlp/yt-dlp). ZeroTwo lo descarga, muestra el progreso y lo envía a Telegram. Esto funciona para YouTube y muchos otros sitios soportados por yt-dlp. También reconoce páginas de episodios de **LatAnime, TioAnime, JKAnime y AnimeDBS**, extrae sus servidores y prueba las opciones disponibles automáticamente.
 
 También puedes usar `/ytmp3 <url>` para audio o `/ytmp4 <url>` para video. Los enlaces de MEGA, MediaFire y Google Drive siguen usando sus descargadores específicos.
 
