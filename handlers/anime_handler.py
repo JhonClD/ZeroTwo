@@ -235,15 +235,13 @@ def _estado_doblaje_regional(titulo_romaji: str, titulo_english: str, titulo_nat
     # disponibilidad en España; por eso solo completa México automáticamente.
     if regiones["mx"] is None:
         regiones["mx"] = _tiene_doblaje(*titulos)
-    if regiones["es"] is None:
-        regiones["es"] = False
 
     def marca(valor):
         if valor is True:
             return "✅"
         if valor is False:
             return "❌"
-        return "❔"
+        return "—"
 
     return f"🇪🇸 {marca(regiones['es'])} / 🇲🇽 {marca(regiones['mx'])}"
 
