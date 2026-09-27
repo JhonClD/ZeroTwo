@@ -24,14 +24,14 @@ def _safe_filename(value: str) -> str:
 
 
 async def _search_anime(query: str) -> list[dict]:
-    """Busca títulos y episodios en AnimeFLV como índice público."""
-    url = f"https://www3.animeflv.net/browse?q={quote_plus(query)}"
+    """Busca títulos usando VerAnimes como índice público."""
+    url = f"https://wwv.veranimes.net/animes?buscar={quote_plus(query)}"
     response = await asyncio.to_thread(requests.get, url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     results = []
-    for card in soup.select("ul.ListAnimes li, article.Anime, .Anime")[:12]:
-        anchor = card.select_one("a[href*='/anime/']")
+    for card in soup.select("a[href*='/ver/'], a[href*='/media/'], article, .Anime")[:20]:
+        anchor = card if card.name == "a" else card.select_one("a[href]")
         if not anchor:
             continue
         results.append({"title": anchor.get("title") or anchor.get_text(" ", strip=True), "url": urljoin(url, anchor["href"])})
@@ -86,7 +86,7 @@ def register(app, download_dir):
                 "<code>/animedl URL_DEL_EPISODIO</code>\n"
                 "<code>/animedl URL_DEL_ANIME 1</code>\n"
                 "<code>/animedl nombre del anime 1</code>\n\n"
-                "Fuentes: TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos.",
+                "Fuentes: VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos.",
                 parse_mode=enums.ParseMode.HTML,
             )
             return

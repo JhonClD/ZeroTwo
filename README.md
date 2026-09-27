@@ -29,7 +29,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
 | Descargas | Descargar contenido de MEGA y MediaFire. |
-| Anime | Descarga de episodios por URL o búsqueda en TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
+| Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
