@@ -5,6 +5,7 @@ import html
 import logging
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -34,6 +35,25 @@ def _cleanup(state):
     folder = Path(state["job_dir"])
     if folder.exists():
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def _download_progress(label):
+    started = time.monotonic()
+    last = [0.0]
+
+    async def callback(current, total):
+        now = time.monotonic()
+        if current < total and now - last[0] < 3:
+            return
+        last[0] = now
+        pct = (current / total * 100) if total else 0
+        elapsed = max(now - started, 0.001)
+        speed = current / elapsed / (1024 * 1024)
+        current_mb = current / (1024 * 1024)
+        total_mb = total / (1024 * 1024) if total else 0
+        logger.info("📥 DESCARGA | %s | %.1f%% | %.1f/%.1f MB | %.2f MB/s", label, pct, current_mb, total_mb, speed)
+
+    return callback
 
 
 def _settings(state):
@@ -140,7 +160,7 @@ def register(app, user_states, work_dir: Path):
         state = {"action": "burn_subtitles", "video_path": str(video_path), "job_dir": str(job_dir), "status": status, "user_id": user_id, "user_states": user_states, "cancel_event": asyncio.Event(), "process_holder": {}, "timeout": int(os.getenv("SUBTITLE_TIMEOUT", "7200")), "target_size_mb": target_size_mb}
         user_states[user_id] = state
         try:
-            await reply.download(file_name=str(video_path))
+            await reply.download(file_name=str(video_path), progress=_download_progress("video"))
             info = await asyncio.to_thread(VideoProcessor.probe_media, video_path)
             tracks = (info or {}).get("subtitle", [])
             if tracks:
@@ -179,7 +199,10 @@ def register(app, user_states, work_dir: Path):
         if state.get("action") != "burn_subtitles" or not state.get("awaiting_external"): return
         name = safe_filename(getattr(message.document, "file_name", "subtitles.srt")); ext = Path(name).suffix.lower()
         if ext not in _SUBTITLE_EXTENSIONS: return await message.reply_text("❌ Solo se admiten .srt, .ass o .vtt.")
-        path = Path(state["job_dir"]) / name; await message.download(file_name=str(path)); state["external_subtitle"] = str(path); state["track_label"] = name; state["awaiting_external"] = False; await _show_config(message, state, "✅ Subtítulo recibido")
+        path = Path(state["job_dir"]) / name
+        await message.download(file_name=str(path), progress=_download_progress(f"subtítulo {name}"))
+        state["external_subtitle"] = str(path); state["track_label"] = name; state["awaiting_external"] = False
+        await _show_config(message, state, "✅ Subtítulo recibido")
 
     @app.on_callback_query(filters.regex(r"^submenu:(align|font|preset|crf|bitrate|translate):\d+$"))
     async def submenu(client, query):
