@@ -37,7 +37,7 @@ def _cleanup(state):
 
 
 def _settings(state):
-    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "alignment": "bottom", "font": "default", "translated": False, "language": "es"})
+    return state.setdefault("settings", {"crf": "23", "preset": "veryfast", "alignment": "bottom", "font": "default", "translated": False, "language": "es", "watermark": True})
 
 
 def _config_keyboard(user_id, state):
@@ -46,7 +46,7 @@ def _config_keyboard(user_id, state):
         [InlineKeyboardButton(f"📝 Pista: {state.get('track_label', 'externa')}", callback_data=f"submenu:track:{user_id}")],
         [InlineKeyboardButton(f"↕️ Alineación: {alignment_label(s['alignment'])}", callback_data=f"submenu:align:{user_id}")],
         [InlineKeyboardButton(f"⚡ Preset: {s['preset']}", callback_data=f"submenu:preset:{user_id}")],
-        [InlineKeyboardButton(f"🔠 Fuente: {FONTS.get(s['font'], FONTS['dejavu'])[0]}", callback_data=f"submenu:font:{user_id}"), InlineKeyboardButton("✦ Marca: Jap Anime TX", callback_data=f"watermark_info:{user_id}")],
+        [InlineKeyboardButton(f"🔠 Fuente: {FONTS.get(s['font'], FONTS['dejavu'])[0]}", callback_data=f"submenu:font:{user_id}"), InlineKeyboardButton(f"✦ Marca: {'ON' if s.get('watermark', True) else 'OFF'}", callback_data=f"watermark_toggle:{user_id}")],
         [InlineKeyboardButton(f"🎚 CRF: {s['crf']}", callback_data=f"submenu:crf:{user_id}"), InlineKeyboardButton("📊 Bitrate: automático", callback_data=f"submenu:bitrate:{user_id}")],
     ]
     if translation_configured() and state.get("external_subtitle"):
@@ -78,6 +78,7 @@ async def _burn(message, state):
             crf=s["crf"], preset=s["preset"], subtitle_color="white",
             subtitle_alignment=s["alignment"], subtitle_size=20,
             subtitle_font=s["font"], watermark_color="pink", watermark_size=28,
+            add_watermark=s.get("watermark", True),
             cancel_event=state["cancel_event"], process_holder=state["process_holder"],
             timeout=state["timeout"],
             target_size_mb=state.get("target_size_mb"),
@@ -91,7 +92,8 @@ async def _burn(message, state):
         logger.info("📤 SUBTÍTULOS LISTOS | preparando subida archivo=%s tamaño=%.2f MB", output, output_mb)
         target_line = f"\n🎯 Objetivo: {state['target_size_mb']:g} MB" if state.get("target_size_mb") else ""
         await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB{target_line}\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
-        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}{target_line}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
+        watermark_label = "ON" if s.get("watermark", True) else "OFF"
+        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}\n✦ Marca de agua: {watermark_label}{target_line}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
         logger.info("✅ SUBIDA DE SUBTÍTULOS COMPLETADA | salida=%s", output)
         await status.delete()
     except Exception as error:
@@ -135,7 +137,8 @@ def register(app, user_states, work_dir: Path):
             info = await asyncio.to_thread(VideoProcessor.probe_media, video_path)
             tracks = (info or {}).get("subtitle", [])
             if tracks:
-                buttons = [[InlineKeyboardButton(t.get("label", f"Pista {t['index']}")[:fifty], callback_data=f"sub_track:{user_id}:{t['index']}")] for t in tracks[:20]]
+                buttons = [[InlineKeyboardButton(t.get("label", f"Pista {t['index']}")[:64], callback_data=f"sub_track:{user_id}:{t['index']}")] for t in tracks[:20]]
+                state["subtitle_tracks"] = tracks
                 buttons.append([InlineKeyboardButton("📎 Usar archivo externo", callback_data=f"sub_external:{user_id}")])
                 await status.edit_text("🎞 <b>Elige la pista de subtítulos</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
             else:
@@ -152,7 +155,10 @@ def register(app, user_states, work_dir: Path):
     async def track(client, query):
         user_id = query.from_user.id; _, uid, index = query.data.split(":"); state = user_states.get(user_id)
         if not state or int(uid) != user_id: return await query.answer("Sesión expirada", show_alert=True)
-        state["sub_idx"] = int(index); state["track_label"] = f"pista interna {index}"; await query.answer("Pista seleccionada"); await _show_config(query.message, state)
+        state["sub_idx"] = int(index)
+        tracks = state.get("subtitle_tracks", [])
+        state["track_label"] = next((t.get("label") for t in tracks if t.get("index") == int(index)), f"Pista {index}")
+        await query.answer("Pista seleccionada"); await _show_config(query.message, state)
 
     @app.on_callback_query(filters.regex(r"^sub_external:\d+$"))
     async def external(client, query):
@@ -184,6 +190,16 @@ def register(app, user_states, work_dir: Path):
     @app.on_callback_query(filters.regex(r"^watermark_info:\d+$"))
     async def watermark_info(client, query):
         await query.answer("Jap Anime TX: Oleo Script Regular, blanco, tamaño 34 px, borde azul de 2 px, fondo transparente y desvanecido durante 6 segundos.", show_alert=True)
+
+    @app.on_callback_query(filters.regex(r"^watermark_toggle:\d+$"))
+    async def watermark_toggle(client, query):
+        uid = int(query.data.split(":")[1]); state = user_states.get(query.from_user.id)
+        if not state or uid != query.from_user.id:
+            return await query.answer("Sesión expirada", show_alert=True)
+        settings = _settings(state)
+        settings["watermark"] = not settings.get("watermark", True)
+        await query.answer("Marca activada" if settings["watermark"] else "Marca desactivada")
+        await _show_config(query.message, state)
 
     @app.on_callback_query(filters.regex(r"^subset:(alignment|font|preset|crf|language):[^:]+:\d+$"))
     async def subset(client, query):

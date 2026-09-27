@@ -22,6 +22,13 @@ _LANG_FLAGS = {
     'GER': '🇩🇪', 'DEU': '🇩🇪', 'POR': '🇧🇷', 'ITA': '🇮🇹',
     'KOR': '🇰🇷', 'CHI': '🇨🇳', 'ZHO': '🇨🇳', 'RUS': '🇷🇺', 'UND': '🏳️',
 }
+_LANG_NAMES = {
+    'SPA': 'Español', 'ESP': 'Español', 'LAT': 'Latino', 'LAA': 'Latino',
+    'CAS': 'Castellano', 'ES': 'Español', 'JPN': 'Japonés', 'JAP': 'Japonés',
+    'ENG': 'Inglés', 'EN': 'Inglés', 'POR': 'Portugués', 'FRA': 'Francés',
+    'GER': 'Alemán', 'ITA': 'Italiano', 'KOR': 'Coreano', 'CHI': 'Chino',
+    'ZHO': 'Chino', 'UND': 'Sin idioma',
+}
 
 
 class VideoProcessor:
@@ -63,7 +70,8 @@ class VideoProcessor:
 
                 lang_code = tags.get('language', 'UND').upper()
                 flag      = _LANG_FLAGS.get(lang_code, '🏳️')
-                title     = tags.get('title', 'Pista')
+                title     = (tags.get('title') or '').strip()
+                language  = _LANG_NAMES.get(lang_code, lang_code.title())
                 is_forced = stream.get('disposition', {}).get('forced', 0) == 1
                 suffix    = ' (FORZADO)' if is_forced else ''
 
@@ -73,9 +81,10 @@ class VideoProcessor:
                         'label': f"{flag} {lang_code} - {title}",
                     })
                 elif s_type == 'subtitle':
+                    label_name = title if title and title.lower() not in {'pista', 'subtitle', 'subtitles'} else language
                     info['subtitle'].append({
                         'index': sub_count,
-                        'label': f"{flag} [{sub_count}] {lang_code}{suffix}",
+                        'label': f"{flag} {label_name} — {language}{suffix}",
                     })
                     sub_count += 1
 
