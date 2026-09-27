@@ -80,6 +80,7 @@ async def _burn(message, state):
             subtitle_font=s["font"], watermark_color="pink", watermark_size=28,
             cancel_event=state["cancel_event"], process_holder=state["process_holder"],
             timeout=state["timeout"],
+            target_size_mb=state.get("target_size_mb"),
         )
         if state["cancel_event"].is_set():
             await status.edit_text("❌ Proceso cancelado.", parse_mode=enums.ParseMode.HTML)
@@ -88,8 +89,9 @@ async def _burn(message, state):
             raise RuntimeError("FFmpeg no pudo generar el video final.")
         output_mb = output.stat().st_size / (1024 * 1024)
         logger.info("📤 SUBTÍTULOS LISTOS | preparando subida archivo=%s tamaño=%.2f MB", output, output_mb)
-        await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
-        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
+        target_line = f"\n🎯 Objetivo: {state['target_size_mb']:g} MB" if state.get("target_size_mb") else ""
+        await status.edit_text(f"✅ <b>Procesamiento terminado</b>\n📦 {output_mb:.1f} MB{target_line}\n📤 Subiendo el video a Telegram…", parse_mode=enums.ParseMode.HTML)
+        await message.reply_video(video=str(output), caption=f"✅ Subtítulos quemados\n🔠 Fuente: {selected_font_label}{target_line}\n🎚 CRF {s['crf']} · ⚡ {s['preset']}\n🎨 Blanco fijo · ↕️ {alignment_label(s['alignment'])}", supports_streaming=True)
         logger.info("✅ SUBIDA DE SUBTÍTULOS COMPLETADA | salida=%s", output)
         await status.delete()
     except Exception as error:
@@ -103,13 +105,22 @@ async def _burn(message, state):
 
 
 def register(app, user_states, work_dir: Path):
-    @app.on_message(filters.command("sub"))
+    @app.on_message(filters.command(["sub", "subsize"]))
     async def subtitle_command(client, message):
         reply = message.reply_to_message
         if not reply or not (reply.video or reply.document):
             await message.reply_text("📝 Responde a un video con /sub.")
             return
         user_id = _user_id(message)
+        target_size_mb = None
+        if message.command[0].lower() == "subsize":
+            try:
+                target_size_mb = float(message.command[1])
+                if not 10 <= target_size_mb <= 2048:
+                    raise ValueError
+            except (IndexError, ValueError, TypeError):
+                await message.reply_text("Uso: responde a un video con /subsize 1750\nEl objetivo debe estar entre 10 y 2048 MB.")
+                return
         if user_states.get(user_id):
             await message.reply_text("⏳ Ya tienes un trabajo de subtítulos activo. Cancélalo antes de iniciar otro.")
             return
@@ -117,7 +128,7 @@ def register(app, user_states, work_dir: Path):
         job_dir.mkdir(parents=True, exist_ok=True)
         video_path = job_dir / safe_filename(_media_name(reply))
         status = await message.reply_text("⏳ Descargando y analizando pistas…")
-        state = {"action": "burn_subtitles", "video_path": str(video_path), "job_dir": str(job_dir), "status": status, "user_id": user_id, "user_states": user_states, "cancel_event": asyncio.Event(), "process_holder": {}, "timeout": int(os.getenv("SUBTITLE_TIMEOUT", "7200"))}
+        state = {"action": "burn_subtitles", "video_path": str(video_path), "job_dir": str(job_dir), "status": status, "user_id": user_id, "user_states": user_states, "cancel_event": asyncio.Event(), "process_holder": {}, "timeout": int(os.getenv("SUBTITLE_TIMEOUT", "7200")), "target_size_mb": target_size_mb}
         user_states[user_id] = state
         try:
             await reply.download(file_name=str(video_path))

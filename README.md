@@ -326,6 +326,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo con aria2c; los enlaces `magnet:` se pueden pegar directamente. |
 | `/anime <nombre>` | Busca información de un anime. |
 | `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. |
+| `/subsize <MB>` | Quema subtítulos y codifica en dos pasadas apuntando al tamaño indicado sin crear un video intermedio, por ejemplo `/subsize 1750`. |
 | `/dw2` | Guarda localmente el video o archivo respondido para codificación. |
 | `/press [-crf N]` | Codifica un video respondido con FFmpeg y marca ZeroTwo. |
 | `/compre1`, `/compress1` | Alias de `/press`. |

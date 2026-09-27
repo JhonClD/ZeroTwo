@@ -5,6 +5,7 @@ VideoProcessor - Clase para procesar videos con FFmpeg
 import re
 import json
 import os
+import asyncio
 import logging
 import subprocess
 import inspect
@@ -219,6 +220,7 @@ class VideoProcessor:
         cancel_event=None,
         timeout=None,
         process_holder=None,
+        target_size_mb=None,
     ):
         """
         Quema subtítulos en el video con estilo personalizado y marca Jap Anime TX.
@@ -241,7 +243,19 @@ class VideoProcessor:
         logger.info("📝 Iniciando quemado de subtítulos")
         logger.info(f"📁 Video:      {video_path}")
         logger.info(f"📁 Subtítulos: {subtitle_path or external_sub_path}")
-        logger.info(f"📁 Salida:     {output_path}")
+        logger.info(f"📦 Salida:     {output_path}")
+
+        if target_size_mb:
+            duration_probe = subprocess.run(
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', str(video_path)],
+                capture_output=True, text=True, check=True, timeout=30,
+            )
+            duration_seconds = float(duration_probe.stdout.strip())
+            total_kbps = (float(target_size_mb) * 1024 * 8 * 0.98) / duration_seconds
+            target_bitrate = max(100, int(total_kbps - 128))
+            bitrate = f"{target_bitrate}k"
+            logger.info("🎯 TAMAÑO OBJETIVO SUBTÍTULOS | %.2f MB | duración=%.2fs | video=%s | audio=128k", target_size_mb, duration_seconds, bitrate)
 
         # ── Origen de los subtítulos ──────────────────────────────────────────
         ext_path = external_sub_path or subtitle_path   # compatibilidad
@@ -400,6 +414,19 @@ class VideoProcessor:
 
             logger.info("⏳ Quemando subtítulos...")
 
+            passlog = Path(output_path).with_suffix(".subsize-passlog") if target_size_mb else None
+            if passlog:
+                first_pass = list(cmd[:-1])
+                first_pass[first_pass.index('-c:a'):first_pass.index('-c:a') + 4] = ['-an']
+                first_pass.extend(['-pass', '1', '-passlogfile', str(passlog), '-f', 'null', '/dev/null'])
+                logger.info("⏳ Primera pasada con subtítulos y bitrate objetivo…")
+                first_result = await asyncio.to_thread(subprocess.run, first_pass, capture_output=True, text=True)
+                if first_result.returncode != 0:
+                    logger.error("❌ Primera pasada falló: %s", (first_result.stderr or '')[-800:])
+                    return False
+                cmd[-1:-1] = ['-pass', '2', '-passlogfile', str(passlog)]
+                logger.info("⏳ Segunda pasada con subtítulos…")
+
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -410,7 +437,6 @@ class VideoProcessor:
                 process_holder["process"] = process
 
             # ── Leer stderr en thread para no bloquear el event loop ────────
-            import asyncio
             import threading
 
             last_tg_pct = [-10]
@@ -501,6 +527,9 @@ class VideoProcessor:
                 normalized_ass_path.unlink(missing_ok=True)
             if extracted_ass_path:
                 extracted_ass_path.unlink(missing_ok=True)
+            if passlog:
+                for suffix in ("", "-0.log", ".log"):
+                    Path(str(passlog) + suffix).unlink(missing_ok=True)
 
             cancelled = cancel_event is not None and cancel_event.is_set()
             if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:

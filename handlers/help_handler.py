@@ -20,6 +20,7 @@ def register(app):
 ━━━━━━━━━━━━━━━━━━━━
 
 ├ /sub — Responde a un video y luego envía .srt, .ass o .vtt
+├ /subsize &lt;MB&gt; — Quema subtítulos y apunta a un tamaño final
 └ Quema los subtítulos y agrega la marca ZeroTwo
 ├ /dw2 — Guarda localmente un video respondido
 ├ /press — Abre botones de resolución, audio, subtítulos y modo
