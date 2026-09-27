@@ -234,7 +234,8 @@ def _estado_doblaje_regional(titulo_romaji: str, titulo_english: str, titulo_nat
     # La lista histórica de Crunchyroll confirma doblaje latino, pero no necesariamente
     # disponibilidad en España; por eso solo completa México automáticamente.
     if regiones["mx"] is None:
-        regiones["mx"] = _tiene_doblaje(*titulos)
+        if _tiene_doblaje(*titulos):
+            regiones["mx"] = True
 
     def marca(valor):
         if valor is True:
