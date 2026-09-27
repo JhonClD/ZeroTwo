@@ -177,6 +177,18 @@ DUB_ALIASES = {
 DUB_REGION_OVERRIDES = {
     "oshi no ko": {"es": True, "mx": True},
     "hana kimi": {"es": False, "mx": True},
+    # Crunchyroll — anuncio oficial de doblajes de otoño 2026 (15/09/2026).
+    "a returners magic should be special": {"es": False, "mx": True},
+    "aoashi": {"es": False, "mx": True},
+    "black clover": {"es": True, "mx": True},
+    "firefly wedding": {"es": True, "mx": True},
+    "the apothecary diaries": {"es": True, "mx": True},
+    "magic knight rayearth": {"es": True, "mx": False},
+    "overgeared": {"es": True, "mx": True},
+    "psyren": {"es": False, "mx": True},
+    "the detective is already dead": {"es": False, "mx": True},
+    "the iceblade sorcerer shall rule the world ii": {"es": False, "mx": True},
+    "uncle s obsession with cute things": {"es": False, "mx": True},
 }
 
 
