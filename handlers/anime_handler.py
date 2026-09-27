@@ -172,6 +172,12 @@ DUB_ALIASES = {
     "jujutsu kaisen": "jujutsu kaisen",
 }
 
+# Verificaciones regionales respaldadas por catálogos/anuncios públicos.
+# No se marca un país como disponible si solo conocemos que existe un doblaje.
+DUB_REGION_OVERRIDES = {
+    "oshi no ko": {"es": True, "mx": True},
+}
+
 
 def _normalizar_titulo_doblaje(titulo: str) -> str:
     """Normaliza un título para comparar alias sin depender de formato o tildes."""
@@ -213,6 +219,28 @@ def _tiene_doblaje(titulo_romaji: str, titulo_english: str, titulo_native: str) 
             ):
                 return True
     return False
+
+
+def _estado_doblaje_regional(titulo_romaji: str, titulo_english: str, titulo_native: str) -> str:
+    """Devuelve el estado por región; ❔ significa que la región aún no fue verificada."""
+    titulos = (titulo_romaji, titulo_english, titulo_native)
+    claves = {_clave_doblaje(titulo) for titulo in titulos if titulo}
+    regiones = {"es": None, "mx": None}
+    for clave in claves:
+        if clave in DUB_REGION_OVERRIDES:
+            regiones.update(DUB_REGION_OVERRIDES[clave])
+
+    # La lista histórica de Crunchyroll confirma doblaje latino, pero no necesariamente
+    # disponibilidad en España; por eso solo completa México automáticamente.
+    if regiones["mx"] is None:
+        regiones["mx"] = _tiene_doblaje(*titulos)
+    if regiones["es"] is None:
+        regiones["es"] = False
+
+    def marca(valor):
+        return "✅" if valor else "❔"
+
+    return f"🇪🇸 {marca(regiones['es'])} / 🇲🇽 {marca(regiones['mx'])}"
 
 
 def _curl_post_json(url: str, payload: dict, timeout: int = 15) -> dict | None:
@@ -825,23 +853,17 @@ def register(app, user_states, work_dir):
             source_raw = anime.get('source') or ''
             src_emoji, src_label = FUENTES.get(source_raw, ('📦', source_raw or 'Desconocido'))
 
-            # ── 4. Doblaje Crunchyroll ────────────────────────────────────
-            titulo_original = titulo
-            tiene_dub = _tiene_doblaje(titulo_original, titulo_ingles, titulo_nativo)
-            doblaje_txt = (
-                "🟢 Confirmado en Crunchyroll"
-                if tiene_dub else "⚪ No figura en la lista verificada"
-            )
+            # ── 4. Doblaje regional ───────────────────────────────────────
+            doblaje_txt = _estado_doblaje_regional(titulo, titulo_ingles, titulo_nativo)
 
             # ── 5. Bloques opcionales de título ───────────────────────────
             titulo = _escapar(titulo)
             titulo_ingles = _escapar(titulo_ingles)
             titulo_nativo = _escapar(titulo_nativo)
-            titulo_bloque = ""
-            if titulo_ingles and titulo_ingles.strip() != titulo.strip():
-                titulo_bloque += f"\n<b>🔤 Título inglés:</b> <b>{titulo_ingles}</b>"
-            if titulo_nativo and titulo_nativo.strip() != titulo.strip():
-                titulo_bloque += f"\n<b>🈯 Título nativo:</b> <b>{titulo_nativo}</b>"
+            titulo_bloque = (
+                f"\n🔤 <b>Título inglés:</b> {titulo_ingles or 'N/A'}"
+                f"\n🈯 <b>Título nativo:</b> {titulo_nativo or 'N/A'}"
+            )
 
             info = (
                 f"<b>🌸 {titulo}</b>\n"
@@ -852,7 +874,7 @@ def register(app, user_states, work_dir):
                 f"🎞 {_escapar(episodios)} episodios  ·  ⏱ {_escapar(duracion_txt)}\n"
                 f"🏢 {_escapar(estudios)}\n"
                 f"🏷 {_escapar(generos)}\n"
-                f"🎙 <b>Doblaje latino:</b> {_escapar(doblaje_txt)}\n\n"
+                f"🎙 <b>Doblaje:</b> {_escapar(doblaje_txt)}\n\n"
                 f"<b>📖 Sinopsis</b>\n"
                 f"<blockquote>{sinopsis}</blockquote>\n"
                 f"<i>{src_emoji} Datos de {_escapar(src_label)}</i>"
