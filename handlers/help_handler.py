@@ -32,26 +32,32 @@ def register(app):
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-<b>5️⃣ YouTube</b>
+<b>5️⃣ Descargas del ZIP migradas</b>
+├ /animedl &lt;url&gt; — Episodio de anime
+├ /animedl &lt;nombre&gt; &lt;episodio&gt; — Buscar episodio
+├ /hdl &lt;nombre&gt; &lt;episodio&gt; — HentaiLA
+├ /get &lt;url&gt; — Descargar recurso
+└ /ssweb &lt;url&gt; — Captura de página
+<b>6️⃣ YouTube</b>
 ├ /play &lt;nombre&gt; — Audio MP3
 ├ /play2 &lt;nombre&gt; — Video MP4
 ├ /playaudio &lt;nombre&gt; — Nota de voz
 ├ /ytmp3 &lt;url&gt; — Audio desde URL
 └ /ytmp4 &lt;url&gt; — Video desde URL
 
-<b>6️⃣ Facebook</b>
+<b>7️⃣ Facebook</b>
 ├ /fb &lt;url&gt;
 └ Ejemplo: /fb https://facebook.com/watch/?v=12345
 
-<b>7️⃣ Twitter / X</b>
+<b>8️⃣ Twitter / X</b>
 ├ /x &lt;url&gt;
 └ Descarga videos y fotos
 
-<b>8️⃣ TikTok</b>
+<b>9️⃣ TikTok</b>
 ├ /tiktok &lt;url&gt; — Sin marca de agua, calidad HD
 └ Alias: /ttdl /tt /tiktoknowm
 
-<b>9️⃣ MEGA / MediaFire / Google Drive</b>
+<b>🔟 MEGA / MediaFire / Google Drive</b>
 ├ Pega el enlace directamente o usa:
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
@@ -61,7 +67,7 @@ def register(app):
 ├ 📁 /drive_sync — Guardar para sincronización Android
 └ Después envía un documento, foto, video o audio
 
-<b>🔟 Torrents</b>
+<b>1️⃣1️⃣ Torrents</b>
 ├ Pega un enlace magnet directamente
 ├ Responde a un archivo .torrent con /torrent
 └ Requiere aria2 instalado en Termux

@@ -21,6 +21,10 @@ Puedo ayudarte con todo esto:
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 /play           — YouTube audio
+/animedl        — Descargar episodios de anime
+/hdl            — Descargar HentaiLA
+/get            — Descargar un recurso por URL
+/ssweb          — Captura de una página web
 /play2          — YouTube video
 /fb             — Facebook video
 /x              — Twitter/X video

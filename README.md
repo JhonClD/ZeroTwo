@@ -29,6 +29,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
 | Descargas | Descargar contenido de MEGA y MediaFire. |
+| Anime | Descarga de episodios por URL o búsqueda en TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
+| Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
@@ -302,6 +304,15 @@ python main.py
 ```
 
 En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en `Download/ZeroTwo`; una aplicación de sincronización, como FolderSync, puede transferir esa carpeta a Google Drive. Esta modalidad no requiere `drive_credentials.json`, `drive_token.json` ni credenciales de Google.
+
+## Comandos migrados desde anime-dl
+
+- `/animedl <url>` o `/animedl <nombre> <episodio>` descarga episodios de anime.
+- `/hdl <nombre> <episodio>` descarga desde HentaiLA.
+- `/get <url>` descarga recursos HTTP/HTTPS de hasta 200 MB.
+- `/ssweb <url>` genera una captura de página.
+
+Las credenciales opcionales deben configurarse mediante variables de entorno; no se guardan tokens en el código.
 
 ## Comandos disponibles
 
