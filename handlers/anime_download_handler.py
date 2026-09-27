@@ -8,7 +8,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -40,12 +40,24 @@ async def _search_anime(query: str, site_key: str = "veranimes") -> list[dict]:
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     results, seen = [], set()
-    for anchor in soup.select("a[href*='/anime/'], a[href*='/media/'], a[href*='/ver/'], a[href*='/post/']"):
+    query_terms = [term for term in re.findall(r"[a-z0-9]+", query.lower()) if len(term) > 2]
+    anchors = soup.select("a[href]") if site_key in {"jkanime", "evangelion"} else soup.select("a[href*='/anime/'], a[href*='/media/'], a[href*='/ver/'], a[href*='/post/']")
+    for anchor in anchors:
         href = urljoin(url, anchor.get("href", ""))
+        path = urlparse(href).path
+        if site_key == "jkanime" and not re.fullmatch(r"/[^/]+/?", path):
+            continue
+        if site_key == "evangelion" and not re.match(r"^/20\d{2}/", path):
+            continue
+        if any(part in path.lower() for part in ("/dash/", "/search", "/label/", "/login", "/p/", "/usuario", "/notificaciones", "/guardado", "/historial", "/directorio", "/horario", "/comunidad", "/pedidos", "/aplicacion", "/salir")):
+            continue
         if href in seen:
             continue
         title = anchor.get("title") or anchor.get_text(" ", strip=True)
         if not title or href.rstrip("/").endswith(("/animes", "/catalogo", "/buscar")):
+            continue
+        haystack = re.sub(r"[-_]+", " ", f"{title} {href}".lower())
+        if query_terms and not any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in query_terms):
             continue
         seen.add(href)
         results.append({"title": title, "url": href})
@@ -70,6 +82,11 @@ async def _episodes_for_anime(anime_url: str) -> list[dict]:
             number = re.search(r"-(\d+)(?:/)?$", href)
             if number and number.group(1) not in episodes:
                 episodes.append(number.group(1))
+    source = source_for_url(anime_url)
+    if not episodes:
+        return [{"number": "1", "url": anime_url}] if source else []
+    if source and source["name"] == "JKAnime":
+        return [{"number": number, "url": urljoin(anime_url, f"/{slug}/{number}")} for number in episodes[:100]]
     return [{"number": number, "url": urljoin(anime_url, f"/ver/{slug}-{number}")} for number in episodes[:100]]
 
 
