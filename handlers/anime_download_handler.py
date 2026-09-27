@@ -16,25 +16,36 @@ from pyrogram import enums, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from downloaders import MEGADownloader, MediaFireDownloader
-from utils.anime_sources import order_servers, scrape_servers, source_for_url
+from utils.anime_sources import SOURCES, order_servers, scrape_servers, source_for_url
 
 logger = logging.getLogger(__name__)
 _SESSIONS: dict[str, dict] = {}
+_SITE_SEARCH = {
+    "veranimes": "https://wwv.veranimes.net/animes?buscar={query}",
+    "animeav1": "https://animeav1.com/catalogo?search={query}",
+    "tioanime": "https://tioanime.com/directorio?q={query}",
+    "latanime": "https://latanime.org/buscar?q={query}",
+    "jkanime": "https://jkanime.net/buscar/{query}/",
+    "animedbs": "https://www.animedbs.online/?s={query}",
+    "monoschinos": "https://monoschinos.st/?s={query}",
+    "evangelion": "https://www.evangelion-ec.net/search?q={query}",
+    "katanime": "https://katanime.net/search?keyword={query}",
+}
 
 
-async def _search_anime(query: str) -> list[dict]:
-    """Busca títulos en VerAnimes."""
-    url = f"https://wwv.veranimes.net/animes?buscar={quote_plus(query)}"
+async def _search_anime(query: str, site_key: str = "veranimes") -> list[dict]:
+    """Busca títulos en el sitio seleccionado."""
+    url = _SITE_SEARCH.get(site_key, _SITE_SEARCH["veranimes"]).format(query=quote_plus(query))
     response = await asyncio.to_thread(requests.get, url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     results, seen = [], set()
-    for anchor in soup.select("a[href*='/anime/']"):
+    for anchor in soup.select("a[href*='/anime/'], a[href*='/media/'], a[href*='/ver/'], a[href*='/post/']"):
         href = urljoin(url, anchor.get("href", ""))
         if href in seen:
             continue
         title = anchor.get("title") or anchor.get_text(" ", strip=True)
-        if not title or href.rstrip("/").endswith("/animes"):
+        if not title or href.rstrip("/").endswith(("/animes", "/catalogo", "/buscar")):
             continue
         seen.add(href)
         results.append({"title": title, "url": href})
@@ -119,14 +130,10 @@ def register(app, download_dir):
         if not raw.startswith(("http://", "https://")) and not raw.rsplit(maxsplit=1)[-1].isdigit():
             status = await message.reply_text("🔎 <b>Buscando resultados…</b>", parse_mode=enums.ParseMode.HTML)
             try:
-                results = await _search_anime(raw)
-                if not results:
-                    await status.edit_text("❌ No encontré ese anime en VerAnimes.")
-                    return
                 token = uuid.uuid4().hex[:10]
-                _SESSIONS[token] = {"user_id": message.from_user.id, "results": results}
-                buttons = [[InlineKeyboardButton(item["title"][:50], callback_data=f"adsel:{token}:{i}")] for i, item in enumerate(results)]
-                await status.edit_text("🎌 <b>Resultados encontrados:</b>\nSelecciona un anime:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+                _SESSIONS[token] = {"user_id": message.from_user.id, "query": raw}
+                buttons = [[InlineKeyboardButton(source["name"], callback_data=f"adsite:{token}:{key}")] for key, source in SOURCES.items()]
+                await status.edit_text("🌐 <b>Elige dónde quieres buscar y ver el anime:</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
             except Exception as error:
                 await status.edit_text(f"❌ Error buscando: {html.escape(str(error)[:250])}", parse_mode=enums.ParseMode.HTML)
             return
@@ -173,6 +180,26 @@ def register(app, download_dir):
             await query.message.edit_text(f"🎌 <b>{html.escape(item['title'])}</b>\nSelecciona un episodio:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
         except Exception as error:
             await query.message.edit_text(f"❌ Error obteniendo episodios: {html.escape(str(error)[:250])}", parse_mode=enums.ParseMode.HTML)
+
+    @app.on_callback_query(filters.regex(r"^adsite:"))
+    async def site_select(client, query):
+        parts = query.data.split(":")
+        session = _SESSIONS.get(parts[1])
+        if not session or query.from_user.id != session["user_id"]:
+            await query.answer("Esta selección no es tuya o ya expiró.", show_alert=True)
+            return
+        await query.answer("Buscando en el sitio elegido…")
+        try:
+            results = await _search_anime(session["query"], parts[2])
+            if not results:
+                await query.message.edit_text("❌ No encontré ese anime en esa página. Pulsa /animedl para elegir otra.")
+                return
+            session["site"] = parts[2]
+            session["results"] = results
+            buttons = [[InlineKeyboardButton(item["title"][:50], callback_data=f"adsel:{parts[1]}:{i}")] for i, item in enumerate(results)]
+            await query.message.edit_text(f"🎌 <b>Resultados en {html.escape(SOURCES[parts[2]]['name'])}:</b>\nSelecciona un anime:", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+        except Exception as error:
+            await query.message.edit_text(f"❌ Error buscando en esa página: {html.escape(str(error)[:250])}", parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^adep:"))
     async def episode_select(client, query):
