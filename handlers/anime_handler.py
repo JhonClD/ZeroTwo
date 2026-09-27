@@ -312,6 +312,7 @@ def _buscar_anilist(anime_name: str) -> dict | None:
         if data and not data.get('errors'):
             resultado = data.get('data', {}).get('Media')
             if resultado:
+                resultado['_source'] = 'anilist'
                 return resultado
 
     logger.info(f"AniList: no encontrado → {anime_name}")
@@ -319,9 +320,15 @@ def _buscar_anilist(anime_name: str) -> dict | None:
 
 
 def _candidatos_imagen(anime: dict) -> list[str]:
-    """Prioriza el banner horizontal de AniList y conserva portadas de respaldo."""
+    """Prioriza la tarjeta social oficial de AniList y conserva imágenes de respaldo."""
     cover = anime.get('coverImage') or {}
+    social = (
+        f"https://img.anili.st/media/{anime['id']}"
+        if anime.get('_source') == 'anilist' and anime.get('id')
+        else None
+    )
     candidatos = [
+        social,
         anime.get('bannerImage'),
         cover.get('extraLarge'),
         cover.get('large'),
