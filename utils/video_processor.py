@@ -198,6 +198,28 @@ class VideoProcessor:
     # ─── Quemado de subtítulos (mejorado) ─────────────────────────────────────
 
     @staticmethod
+    def _run_ffmpeg_logged(command, stage):
+        """Ejecuta una pasada FFmpeg sin ocultar su progreso en el log."""
+        logger.info("🔧 %s | %s", stage, " ".join(str(part) for part in command))
+        process = subprocess.Popen(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            text=True, universal_newlines=True, bufsize=1,
+        )
+        last_report = 0
+        for raw_line in process.stderr:
+            line = raw_line.strip()
+            if not line:
+                continue
+            frame = re.search(r"frame=\s*(\d+)", line)
+            if frame:
+                last_report += 1
+                if last_report == 1 or last_report % 10 == 0:
+                    logger.info("⚙️ %s | %s", stage, line[-220:])
+            elif "error" in line.lower() or "failed" in line.lower():
+                logger.error("❌ %s | %s", stage, line[-500:])
+        return process.wait()
+
+    @staticmethod
     async def burn_subtitles(
         video_path,
         subtitle_path,
@@ -420,9 +442,11 @@ class VideoProcessor:
                 first_pass[first_pass.index('-c:a'):first_pass.index('-c:a') + 4] = ['-an']
                 first_pass.extend(['-pass', '1', '-passlogfile', str(passlog), '-f', 'null', '/dev/null'])
                 logger.info("⏳ Primera pasada con subtítulos y bitrate objetivo…")
-                first_result = await asyncio.to_thread(subprocess.run, first_pass, capture_output=True, text=True)
-                if first_result.returncode != 0:
-                    logger.error("❌ Primera pasada falló: %s", (first_result.stderr or '')[-800:])
+                first_result = await asyncio.to_thread(
+                    VideoProcessor._run_ffmpeg_logged, first_pass, "Primera pasada"
+                )
+                if first_result != 0:
+                    logger.error("❌ Primera pasada falló con código %s", first_result)
                     return False
                 cmd[-1:-1] = ['-pass', '2', '-passlogfile', str(passlog)]
                 logger.info("⏳ Segunda pasada con subtítulos…")
