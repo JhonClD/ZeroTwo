@@ -188,7 +188,7 @@ DUB_REGION_OVERRIDES = {
     "psyren": {"es": False, "mx": True},
     "the detective is already dead": {"es": False, "mx": True},
     "the iceblade sorcerer shall rule the world ii": {"es": False, "mx": True},
-    "uncle s obsession with cute things": {"es": False, "mx": True},
+    "uncles obsession with cute things": {"es": False, "mx": True},
 }
 
 
