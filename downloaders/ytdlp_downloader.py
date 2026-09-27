@@ -86,23 +86,12 @@ class YtDlpDownloader:
             # LatAnime publica una página /ver/ que no es un medio descargable.
             # Sus enlaces de servidores sí pueden descargarse con nuestros
             # extractores existentes o, en algunos casos, con yt-dlp.
-            site = urlparse(url).netloc.lower().removeprefix("www.")
-            scraper_config = {
-                "latanime.org": ("LatAnime", "handlers.tioanime_notify_handler", "scrape_servidores_latanime"),
-                "tioanime.com": ("TioAnime", "handlers.tioanime_notify_handler", "scrape_servidores"),
-                "jkanime.net": ("JKAnime", "handlers.jkanime_notify_handler", "scrape_servers"),
-                "www.animedbs.online": ("AnimeDBS", "handlers.animedbs_notify_handler", "scrape_servers"),
-                "animedbs.online": ("AnimeDBS", "handlers.animedbs_notify_handler", "scrape_servers"),
-            }
-            if site in scraper_config:
+            if "latanime.org" in urlparse(url).netloc.lower():
                 try:
-                    import importlib
-                    site_name, module_name, function_name = scraper_config[site]
-                    scraper_module = importlib.import_module(module_name)
-                    scraper = getattr(scraper_module, function_name)
+                    from handlers.tioanime_notify_handler import scrape_servidores_latanime
                     from .mega_downloader import MEGADownloader
                     from .mediafire_downloader import MediaFireDownloader
-                    servers = await scraper(url)
+                    servers = await scrape_servidores_latanime(url)
                     servers.sort(key=lambda item: (not item.get("directo", False)))
                     for server in servers:
                         server_url = server.get("url", "")
@@ -112,22 +101,22 @@ class YtDlpDownloader:
                         if "mega" in name or "mega.nz" in server_url:
                             ok, path, detail = await MEGADownloader.download(server_url, output_dir, progress_callback)
                             if ok:
-                                return True, path, None, {"title": path.stem, "extractor": f"{site_name}/MEGA"}
+                                return True, path, None, {"title": path.stem, "extractor": "LatAnime/MEGA"}
                             continue
                         if "mediafire" in name or "mediafire.com" in server_url:
                             ok, path, detail = await MediaFireDownloader.download(server_url, output_dir, progress_callback)
                             if ok:
-                                return True, path, None, {"title": path.stem, "extractor": f"{site_name}/MediaFire"}
+                                return True, path, None, {"title": path.stem, "extractor": "LatAnime/MediaFire"}
                             continue
                         try:
                             file_path, info = await asyncio.to_thread(download_sync, server_url)
                             return True, file_path, None, info
                         except yt_dlp.utils.DownloadError:
                             logger.warning("Servidor LatAnime no compatible con yt-dlp: %s", server_url[:120])
-                    return False, None, f"No se pudo descargar ningún servidor disponible de {site_name}", None
+                    return False, None, "No se pudo descargar ningún servidor disponible de LatAnime", None
                 except Exception as fallback_error:
-                    logger.exception("Falló el fallback de %s: %s", site_name, fallback_error)
-                    return False, None, f"{site_name} no pudo resolverse: {fallback_error}", None
+                    logger.exception("Falló el fallback de LatAnime: %s", fallback_error)
+                    return False, None, f"LatAnime no pudo resolverse: {fallback_error}", None
             return False, None, str(error).strip()[:500], None
         except Exception as error:
             logger.exception("Error inesperado en yt-dlp")
