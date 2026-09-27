@@ -176,6 +176,7 @@ DUB_ALIASES = {
 # No se marca un país como disponible si solo conocemos que existe un doblaje.
 DUB_REGION_OVERRIDES = {
     "oshi no ko": {"es": True, "mx": True},
+    "hana kimi": {"es": False, "mx": True},
 }
 
 
@@ -238,7 +239,11 @@ def _estado_doblaje_regional(titulo_romaji: str, titulo_english: str, titulo_nat
         regiones["es"] = False
 
     def marca(valor):
-        return "✅" if valor else "❔"
+        if valor is True:
+            return "✅"
+        if valor is False:
+            return "❌"
+        return "❔"
 
     return f"🇪🇸 {marca(regiones['es'])} / 🇲🇽 {marca(regiones['mx'])}"
 
