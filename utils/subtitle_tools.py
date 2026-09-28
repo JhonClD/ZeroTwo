@@ -30,16 +30,23 @@ ALIGNMENTS = {
 LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés"}
 FONTS = {
     "default": ("Predeterminada / conservar", ""),
-    "jkanime": ("JK anime", "Roboto"),
+    "jkanime": ("JK anime — Roboto Bold", "Roboto"),
     "dejavu": ("Noto Sans", "Noto Sans"),
     "montserrat": ("Montserrat — limpia", "Montserrat"),
     "oswald": ("Oswald — compacta", "Oswald"),
     "mplus": ("M PLUS 1p — anime", "M PLUS 1p"),
     "rosario": ("Rosario Bold", "Rosario"),
-    "comicsans": ("Comic Sans MS — sistema", "Comic Sans MS"),
-    "liberation": ("Liberation Sans", "Liberation Sans"),
-    "serif": ("DejaVu Serif", "DejaVu Serif"),
-    "mono": ("DejaVu Sans Mono", "DejaVu Sans Mono"),
+}
+
+# Cada familia seleccionable, excepto "default", tiene un archivo dentro de
+# fonts/. No dependemos de las fuentes instaladas en Android/Termux.
+BUNDLED_FONT_FILES = {
+    "jkanime": "Roboto-Bold.ttf",
+    "dejavu": "NotoSans-Regular.ttf",
+    "montserrat": "Montserrat-Variable.ttf",
+    "oswald": "Oswald-Variable.ttf",
+    "mplus": "MPLUS1p-Bold.ttf",
+    "rosario": "Rosario-Variable.ttf",
 }
 
 
@@ -197,4 +204,4 @@ def log_translation_error(error):
     return str(error)
 
 
-__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "ass_style", "ass_font_style", "normalize_ass_font", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]
+__all__ = ["COLORS", "ALIGNMENTS", "LANGUAGES", "FONTS", "BUNDLED_FONT_FILES", "ass_style", "ass_font_style", "normalize_ass_font", "translate_subtitle_file", "language_label", "color_label", "alignment_label", "translation_configured", "safe_filename", "escape_filter_path", "format_size", "clean_caption", "log_translation_error"]

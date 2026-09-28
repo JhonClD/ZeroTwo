@@ -11,7 +11,7 @@ import subprocess
 import inspect
 from pathlib import Path
 
-from utils.subtitle_tools import FONTS, ass_font_style, ass_style, normalize_ass_font
+from utils.subtitle_tools import BUNDLED_FONT_FILES, FONTS, ass_font_style, ass_style, normalize_ass_font
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +358,11 @@ class VideoProcessor:
         if bundled_fonts.is_dir():
             sub_filter += f":fontsdir={VideoProcessor._escape_path(bundled_fonts)}"
             logger.info("🔤 Fuentes incluidas activadas: %s", bundled_fonts)
+            bundled_file = BUNDLED_FONT_FILES.get(subtitle_font)
+            if bundled_file and not (bundled_fonts / bundled_file).is_file():
+                raise FileNotFoundError(f"Falta la fuente incluida: {bundled_file}")
+            if bundled_file:
+                logger.info("🔤 Fuente física verificada: %s", bundled_file)
         if original_size:
             sub_filter += f":original_size={original_size}"
 
