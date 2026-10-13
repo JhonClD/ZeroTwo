@@ -69,19 +69,31 @@ def _describir_fuente(valor):
 
 
 def _detectar_fuente(anime: dict) -> str:
-    """Usa una fuente explícita de una relación si AniList solo indica OTHER."""
+    """Usa la fuente explícita en la cadena de relaciones si AniList indica OTHER."""
     fuente = str(anime.get('source') or '').strip().upper()
     if fuente not in ('', 'OTHER'):
         return fuente
 
-    for edge in (anime.get('relations') or {}).get('edges', []):
-        relacionado = edge.get('node') or {}
-        relacionada = str(relacionado.get('source') or '').strip().upper()
-        if relacionada == 'WEB_NOVEL':
-            return 'WEB_NOVEL'
-        descripcion = relacionado.get('description') or ''
-        if re.search(r'\bsource:\s*web[\s-]*novel\b', descripcion, re.IGNORECASE):
-            return 'WEB_NOVEL'
+    pendientes = [(anime, 0)]
+    visitados = {anime.get('id')} if anime.get('id') else set()
+    while pendientes:
+        actual, nivel = pendientes.pop(0)
+        for edge in (actual.get('relations') or {}).get('edges', []):
+            relacionado = edge.get('node') or {}
+            relacionado_id = relacionado.get('id')
+            if relacionado_id and relacionado_id in visitados:
+                continue
+            if relacionado_id:
+                visitados.add(relacionado_id)
+
+            relacionada = str(relacionado.get('source') or '').strip().upper()
+            if relacionada == 'WEB_NOVEL':
+                return 'WEB_NOVEL'
+            descripcion = relacionado.get('description') or ''
+            if re.search(r'\bsource:\s*web[\s-]*novel\b', descripcion, re.IGNORECASE):
+                return 'WEB_NOVEL'
+            if nivel < 2:
+                pendientes.append((relacionado, nivel + 1))
     return fuente
 
 
@@ -404,7 +416,16 @@ def _buscar_anilist(anime_name: str) -> dict | None:
             averageScore
             popularity
             description
-            relations { edges { node { type source description } } }
+            relations {
+                edges {
+                    node {
+                        type
+                        source
+                        description
+                        relations { edges { node { type source description } } }
+                    }
+                }
+            }
             bannerImage
             coverImage { extraLarge large medium }
             externalLinks { url site type }
