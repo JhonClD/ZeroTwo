@@ -68,6 +68,23 @@ def _describir_fuente(valor):
     )
 
 
+def _detectar_fuente(anime: dict) -> str:
+    """Usa una fuente explícita de una relación si AniList solo indica OTHER."""
+    fuente = str(anime.get('source') or '').strip().upper()
+    if fuente not in ('', 'OTHER'):
+        return fuente
+
+    for edge in (anime.get('relations') or {}).get('edges', []):
+        relacionado = edge.get('node') or {}
+        relacionada = str(relacionado.get('source') or '').strip().upper()
+        if relacionada == 'WEB_NOVEL':
+            return 'WEB_NOVEL'
+        descripcion = relacionado.get('description') or ''
+        if re.search(r'\bsource:\s*web[\s-]*novel\b', descripcion, re.IGNORECASE):
+            return 'WEB_NOVEL'
+    return fuente
+
+
 def _dividir_texto(texto: str, limite: int = 3000) -> list[str]:
     """Divide texto largo cerca de espacios sin descartar caracteres."""
     restante = str(texto or '')
@@ -387,6 +404,7 @@ def _buscar_anilist(anime_name: str) -> dict | None:
             averageScore
             popularity
             description
+            relations { edges { node { type source description } } }
             bannerImage
             coverImage { extraLarge large medium }
             externalLinks { url site type }
@@ -745,7 +763,7 @@ def _mal_source(s: str | None) -> str:
         'Music': 'MUSIC',
         'Comic book': 'COMIC',
         '4-koma manga': 'MANGA',
-        'Web novel': 'NOVEL',
+        'Web novel': 'WEB_NOVEL',
         'Card game': 'OTHER',
         'Book': 'NOVEL',
         'Picture book': 'OTHER',
@@ -910,7 +928,7 @@ def register(app, user_states, work_dir):
             duracion  = anime.get('duration')
             duracion_txt = f"{duracion} min" if duracion else 'N/A'
             anio      = anime.get('seasonYear') or (anime.get('startDate') or {}).get('year') or 'N/A'
-            fuente_emoji, fuente_nombre = _describir_fuente(anime.get('source'))
+            fuente_emoji, fuente_nombre = _describir_fuente(_detectar_fuente(anime))
             ficha_url = anime.get('siteUrl') or anime.get('mal_url')
             if not (isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://'))):
                 ficha_url = None
