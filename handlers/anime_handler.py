@@ -875,7 +875,7 @@ def register(app, user_states, work_dir):
                 f"📅 <b>Año:</b> {_escapar(anio)}\n"
                 f"🎞️ <b>Episodios:</b> {_escapar(episodios)}\n"
                 f"⏱ <b>Duración:</b> {_escapar(duracion_txt)}\n"
-                f"🎧 <b>Audio:</b> \n"
+                f"🎧 <b>Audio:</b> Japonés 🇯🇵\n"
                 f"🎭 <b>Género:</b> {_escapar(generos)}\n"
                 f"🛠️ <b>Encoder:</b> CID\n"
                 f"👥 <b>Fansub:</b> \n"
