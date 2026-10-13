@@ -68,6 +68,21 @@ def _describir_fuente(valor):
     )
 
 
+def _dividir_texto(texto: str, limite: int = 3000) -> list[str]:
+    """Divide texto largo cerca de espacios sin descartar caracteres."""
+    restante = str(texto or '')
+    partes = []
+    while len(restante) > limite:
+        corte = restante.rfind(' ', 0, limite + 1)
+        if corte <= 0:
+            corte = limite
+        partes.append(restante[:corte])
+        restante = restante[corte:]
+    if restante or not partes:
+        partes.append(restante)
+    return partes
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Lista de animes con doblaje latino confirmado en Crunchyroll
 # Fuente: Crunchyroll Latinoamérica — Primavera 2026 + temporadas previas
@@ -873,7 +888,7 @@ def register(app, user_states, work_dir):
                 sinopsis = re.sub(r'\n?Nota:.*', '', sinopsis, flags=re.IGNORECASE | re.DOTALL).strip()
                 sinopsis = re.sub(r'\n?\[Escrito por.*?\]', '', sinopsis, flags=re.IGNORECASE).strip()
                 sinopsis = _traducir(sinopsis)
-            sinopsis = _escapar(sinopsis[:1400]) or 'No disponible'
+            sinopsis = (sinopsis or 'No disponible').strip() or 'No disponible'
 
             episodios = anime.get('episodes') or '¿?'
             duracion  = anime.get('duration')
@@ -899,7 +914,7 @@ def register(app, user_states, work_dir):
                 f"\n🔤 <b>Título nativo:</b> {titulo_nativo}"
             )
 
-            info = (
+            info_encabezado = (
                 f"<b>✨ {titulo}</b>\n"
                 f"{titulo_bloque}\n"
                 f"🏢 <b>Estudio:</b> {_escapar(estudios)}\n"
@@ -913,8 +928,17 @@ def register(app, user_states, work_dir):
                 f"👥 <b>Fansub:</b> \n"
                 f"📺 <b>Resolución:</b> 1280x720\n\n"
                 f"<b>📖 Sinopsis:</b>\n"
-                f"<blockquote>{sinopsis}</blockquote>"
             )
+            sinopsis_partes = _dividir_texto(sinopsis)
+            mensajes_info = []
+            for indice, parte in enumerate(sinopsis_partes):
+                encabezado = (
+                    info_encabezado if indice == 0
+                    else "<b>📖 Sinopsis (continuación):</b>\n"
+                )
+                mensajes_info.append(
+                    f"{encabezado}<blockquote>{_escapar(parte)}</blockquote>"
+                )
 
             # ── 6. Imagen de portada de la fuente que devolvió los datos ───
             # AniList, MAL/Tenrai/Jikan y Kitsu entregan portadas compatibles.
@@ -940,28 +964,13 @@ def register(app, user_states, work_dir):
             if img_bytes:
                 temp_img = _guardar_imagen_temporal(img_bytes, work_dir)
                 try:
-                    if len(info) > 1024:
-                        resumen_portada = (
-                            f"<b>✨ {titulo}</b>\n"
-                            f"📅 Año: {_escapar(anio)}  ·  🎞 Episodios: {_escapar(episodios)}"
-                        )
-                        await message.reply_photo(
-                            photo=str(temp_img),
-                            caption=resumen_portada,
-                            parse_mode=enums.ParseMode.HTML,
-                        )
+                    await message.reply_photo(photo=str(temp_img))
+                    for indice, texto_info in enumerate(mensajes_info):
                         await message.reply_text(
-                            info,
+                            texto_info,
                             parse_mode=enums.ParseMode.HTML,
                             disable_web_page_preview=True,
-                            reply_markup=teclado_ficha,
-                        )
-                    else:
-                        await message.reply_photo(
-                            photo=str(temp_img),
-                            caption=info,
-                            parse_mode=enums.ParseMode.HTML,
-                            reply_markup=teclado_ficha,
+                            reply_markup=teclado_ficha if indice == 0 else None,
                         )
                     await status_msg.delete()
                 finally:
@@ -970,11 +979,17 @@ def register(app, user_states, work_dir):
 
             # Sin imagen → solo texto
             await status_msg.edit_text(
-                info,
+                mensajes_info[0],
                 parse_mode=enums.ParseMode.HTML,
                 disable_web_page_preview=True,
                 reply_markup=teclado_ficha,
             )
+            for texto_info in mensajes_info[1:]:
+                await message.reply_text(
+                    texto_info,
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True,
+                )
 
         except Exception as e:
             logger.error(f"❌ Error en /anime: {e}", exc_info=True)
