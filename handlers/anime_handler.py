@@ -755,22 +755,32 @@ def _mal_source(s: str | None) -> str:
 
 
 def _traducir(texto: str) -> str:
-    """Traduce al español usando MyMemory (max 500 chars)."""
-    try:
-        cmd = [
-            'curl', '-s', '-G',
-            'https://api.mymemory.translated.net/get',
-            '--data-urlencode', f'q={texto[:500]}',
-            '--data-urlencode', 'langpair=en|es'
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if r.returncode == 0:
-            d = json.loads(r.stdout)
-            if d.get('responseStatus') == 200:
-                return d['responseData']['translatedText']
-    except Exception:
-        pass
-    return texto
+    """Traduce al español por fragmentos para no perder texto sobre 500 chars."""
+    if not texto:
+        return texto
+
+    traducidas = []
+    for parte in _dividir_texto(texto, limite=450):
+        prefijo = parte[:len(parte) - len(parte.lstrip())]
+        fragmento = parte[len(prefijo):]
+        traducido = fragmento
+        if fragmento:
+            try:
+                cmd = [
+                    'curl', '-s', '-G',
+                    'https://api.mymemory.translated.net/get',
+                    '--data-urlencode', f'q={fragmento}',
+                    '--data-urlencode', 'langpair=en|es'
+                ]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    data = json.loads(r.stdout)
+                    if data.get('responseStatus') == 200:
+                        traducido = data['responseData'].get('translatedText') or fragmento
+            except Exception:
+                pass
+        traducidas.append(prefijo + traducido)
+    return ''.join(traducidas)
 
 
 def register(app, user_states, work_dir):
@@ -884,8 +894,14 @@ def register(app, user_states, work_dir):
             if sinopsis not in ('No disponible', '', None):
                 sinopsis = re.sub(r'<[^>]+>', '', sinopsis).strip()
                 # Quitar líneas de fuente/nota que AniList agrega al final
-                sinopsis = re.sub(r'\n?\(Fuente:[^)]*\)', '', sinopsis, flags=re.IGNORECASE).strip()
-                sinopsis = re.sub(r'\n?Nota:.*', '', sinopsis, flags=re.IGNORECASE | re.DOTALL).strip()
+                sinopsis = re.sub(
+                    r'\s*\((?:Fuente|Source):\s*[^)]*\)',
+                    '', sinopsis, flags=re.IGNORECASE,
+                ).strip()
+                sinopsis = re.sub(
+                    r'(?im)^[ \t]*(?:Nota|Note):[^\n]*$',
+                    '', sinopsis,
+                ).strip()
                 sinopsis = re.sub(r'\n?\[Escrito por.*?\]', '', sinopsis, flags=re.IGNORECASE).strip()
                 sinopsis = _traducir(sinopsis)
             sinopsis = (sinopsis or 'No disponible').strip() or 'No disponible'
