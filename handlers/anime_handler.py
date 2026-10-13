@@ -38,6 +38,36 @@ def _escapar(texto) -> str:
     """Escapa valores externos antes de insertarlos en mensajes HTML."""
     return html.escape(str(texto if texto is not None else ""), quote=False)
 
+
+FUENTES_ORIGEN = {
+    'MANGA': ('📚', 'Manga'),
+    'LIGHT_NOVEL': ('📖', 'Novela ligera'),
+    'NOVEL': ('📕', 'Novela'),
+    'WEB_MANGA': ('🌐', 'Web manga'),
+    'WEB_NOVEL': ('🌐', 'Novela web'),
+    'VISUAL_NOVEL': ('🎮', 'Novela visual'),
+    'VIDEO_GAME': ('🕹️', 'Videojuego'),
+    'GAME': ('🕹️', 'Juego'),
+    'ANIME': ('📺', 'Anime'),
+    'ORIGINAL': ('✨', 'Original'),
+    'DOUJINSHI': ('📚', 'Dōjinshi'),
+    'COMIC': ('📓', 'Cómic'),
+    'MUSIC': ('🎵', 'Música'),
+    'OTHER': ('📦', 'Otro'),
+}
+
+
+def _describir_fuente(valor):
+    """Devuelve emoji y nombre legible del origen de una obra."""
+    fuente = str(valor or '').strip().upper()
+    if not fuente:
+        return '❓', 'Desconocido'
+    return FUENTES_ORIGEN.get(
+        fuente,
+        ('📦', fuente.replace('_', ' ').title()),
+    )
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Lista de animes con doblaje latino confirmado en Crunchyroll
 # Fuente: Crunchyroll Latinoamérica — Primavera 2026 + temporadas previas
@@ -849,6 +879,7 @@ def register(app, user_states, work_dir):
             duracion  = anime.get('duration')
             duracion_txt = f"{duracion} min" if duracion else 'N/A'
             anio      = anime.get('seasonYear') or (anime.get('startDate') or {}).get('year') or 'N/A'
+            fuente_emoji, fuente_nombre = _describir_fuente(anime.get('source'))
             ficha_url = anime.get('siteUrl') or anime.get('mal_url')
             if not (isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://'))):
                 ficha_url = None
@@ -877,6 +908,7 @@ def register(app, user_states, work_dir):
                 f"⏱ <b>Duración:</b> {_escapar(duracion_txt)}\n"
                 f"🎧 <b>Audio:</b> Japonés 🇯🇵\n"
                 f"🎭 <b>Género:</b> {_escapar(generos)}\n"
+                f"🧭 <b>Fuente:</b> {fuente_emoji} {_escapar(fuente_nombre)}\n"
                 f"🛠️ <b>Encoder:</b> CID\n"
                 f"👥 <b>Fansub:</b> \n"
                 f"📺 <b>Resolución:</b> 1280x720\n\n"
