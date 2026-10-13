@@ -44,7 +44,7 @@ FUENTES_ORIGEN = {
     'LIGHT_NOVEL': ('📖', 'Novela ligera'),
     'NOVEL': ('📕', 'Novela'),
     'WEB_MANGA': ('🌐', 'Web manga'),
-    'WEB_NOVEL': ('🌐', 'Novela web'),
+    'WEB_NOVEL': ('🌐', 'Web Novel'),
     'VISUAL_NOVEL': ('🎮', 'Novela visual'),
     'VIDEO_GAME': ('🕹️', 'Videojuego'),
     'GAME': ('🕹️', 'Juego'),
