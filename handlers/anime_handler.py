@@ -910,10 +910,8 @@ def register(app, user_states, work_dir):
                 try:
                     if len(info) > 1024:
                         resumen_portada = (
-                            f"<b>🌸 {titulo}</b>\n"
-                            f"⭐ {_escapar(puntuacion_txt)}  ·  {_escapar(formato)}\n"
-                            f"📅 {_escapar(estreno_txt)}  ·  🎞 {_escapar(episodios)} episodios\n"
-                            f"🎙 {_escapar(doblaje_txt)}"
+                            f"<b>✨ {titulo}</b>\n"
+                            f"📅 Año: {_escapar(anio)}  ·  🎞 Episodios: {_escapar(episodios)}"
                         )
                         await message.reply_photo(
                             photo=str(temp_img),
