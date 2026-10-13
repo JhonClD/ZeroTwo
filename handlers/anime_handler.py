@@ -830,10 +830,10 @@ def register(app, user_states, work_dir):
             titulo_nativo = anime.get('title', {}).get('native') or ''
 
             estudios_nodes = anime.get('studios', {}).get('nodes', [])
-            estudios = ', '.join([s.get('name', '') for s in estudios_nodes if s.get('name')]) if estudios_nodes else 'Desconocido'
+            estudios = ', '.join([s.get('name', '') for s in estudios_nodes if s.get('name')]) if estudios_nodes else ''
 
             generos_raw = anime.get('genres') or []
-            generos = ', '.join([GENEROS_TRAD.get(g, g) for g in generos_raw]) if generos_raw else 'N/A'
+            generos = ', '.join([GENEROS_TRAD.get(g, g) for g in generos_raw]) if generos_raw else ''
 
             sinopsis = anime.get('description') or 'No disponible'
             if sinopsis not in ('No disponible', '', None):
@@ -845,22 +845,10 @@ def register(app, user_states, work_dir):
                 sinopsis = _traducir(sinopsis)
             sinopsis = _escapar(sinopsis[:1400]) or 'No disponible'
 
-            episodios = anime.get('episodes') or 'En emisión'
+            episodios = anime.get('episodes') or '¿?'
             duracion  = anime.get('duration')
-            duracion_txt = f"{duracion} min" if duracion else 'N/A'
-            anio      = anime.get('seasonYear') or 'N/A'
-            formato   = FORMATOS.get(anime.get('format'), anime.get('format') or 'N/A')
-            temporada = TEMPORADAS.get(anime.get('season'), 'N/A')
-            estado    = ESTADOS.get(anime.get('status'), anime.get('status') or 'N/A')
-
-            # Puntuación normalizada: AniList usa 0-100 y Jikan/MAL usa 0-10.
-            puntuacion_raw = anime.get('averageScore')
-            if puntuacion_raw is not None:
-                puntuacion_txt = f"{float(puntuacion_raw) / 10:.1f}/10"
-            elif anime.get('score') is not None:
-                puntuacion_txt = f"{float(anime['score']):.1f}/10"
-            else:
-                puntuacion_txt = 'N/A'
+            duracion_txt = f"{duracion} min" if duracion else '24 min'
+            anio      = anime.get('seasonYear') or (anime.get('startDate') or {}).get('year') or 'N/A'
             ficha_url = anime.get('siteUrl') or anime.get('mal_url')
             if not (isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://'))):
                 ficha_url = None
@@ -871,77 +859,29 @@ def register(app, user_states, work_dir):
                 if ficha_url else None
             )
 
-            # Fecha de estreno completa (día/mes/año)
-            sd = anime.get('startDate') or {}
-            sd_year  = sd.get('year')
-            sd_month = sd.get('month')
-            sd_day   = sd.get('day')
-            MESES = {
-                1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
-                5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
-                9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
-            }
-            nombre_mes = MESES.get(sd_month) if isinstance(sd_month, int) else None
-            if sd_year and nombre_mes and sd_day:
-                estreno_txt = f"{sd_day} de {nombre_mes} de {sd_year}"
-            elif sd_year and nombre_mes:
-                estreno_txt = f"{nombre_mes.capitalize()} de {sd_year}"
-            elif sd_year:
-                estreno_txt = str(sd_year)
-            else:
-                estreno_txt = 'N/A'
-
-            # Fuente/origen con emoji
-            FUENTES = {
-                'ORIGINAL':      ('📝', 'Original'),
-                'MANGA':         ('📚', 'Manga'),
-                'LIGHT_NOVEL':   ('📖', 'Novela ligera'),
-                'NOVEL':         ('📕', 'Novela'),
-                'VISUAL_NOVEL':  ('🎮', 'Novela visual'),
-                'WEB_MANGA':     ('🌐', 'Web manga'),
-                'WEB_NOVEL':     ('🌐', 'Web novel'),
-                'VIDEO_GAME':    ('🕹', 'Videojuego'),
-                'GAME':          ('🕹', 'Juego'),
-                'COMIC':         ('📓', 'Cómic'),
-                'CARD_GAME':     ('🃏', 'Juego de cartas'),
-                'MUSIC':         ('🎵', 'Música'),
-                'OTHER':         ('📦', 'Otro'),
-                '':              ('❓', 'Desconocido'),
-            }
-            source_raw = anime.get('source') or ''
-            src_emoji, src_label = FUENTES.get(source_raw, ('📦', source_raw or 'Desconocido'))
-
-            # ── 4. Doblaje regional ───────────────────────────────────────
-            verificacion_doblaje = _buscar_doblaje_crunchyroll(anime)
-            doblaje_txt = _estado_doblaje_regional(
-                titulo,
-                titulo_ingles,
-                titulo_nativo,
-                verificacion=verificacion_doblaje,
-            )
-
             # ── 5. Bloques opcionales de título ───────────────────────────
             titulo = _escapar(titulo)
             titulo_ingles = _escapar(titulo_ingles)
             titulo_nativo = _escapar(titulo_nativo)
             titulo_bloque = (
-                f"\n🔤 <b>Título inglés:</b> {titulo_ingles or 'N/A'}"
-                f"\n🈯 <b>Título nativo:</b> {titulo_nativo or 'N/A'}"
+                f"\n🇺🇸 <b>Título inglés:</b> {titulo_ingles}"
+                f"\n🔤 <b>Título nativo:</b> {titulo_nativo}"
             )
 
             info = (
-                f"<b>🌸 {titulo}</b>\n"
+                f"<b>✨ {titulo}</b>\n"
                 f"{titulo_bloque}\n"
-                f"⭐ <b>{_escapar(puntuacion_txt)}</b>  ·  "
-                f"{_escapar(formato)}  ·  {_escapar(estado)}\n"
-                f"📅 {_escapar(estreno_txt)}  ·  🔅 {_escapar(temporada)}\n"
-                f"🎞 {_escapar(episodios)} episodios  ·  ⏱ {_escapar(duracion_txt)}\n"
-                f"🏢 {_escapar(estudios)}\n"
-                f"🏷 {_escapar(generos)}\n"
-                f"🎙 <b>Doblaje:</b> {_escapar(doblaje_txt)}\n\n"
-                f"<b>📖 Sinopsis</b>\n"
-                f"<blockquote>{sinopsis}</blockquote>\n"
-                f"<i>{src_emoji} Datos de {_escapar(src_label)}</i>"
+                f"🏢 <b>Estudio:</b> {_escapar(estudios)}\n"
+                f"📅 <b>Año:</b> {_escapar(anio)}\n"
+                f"🎞️ <b>Episodios:</b> {_escapar(episodios)}\n"
+                f"⏱ <b>Duración:</b> {_escapar(duracion_txt)}\n"
+                f"🎧 <b>Audio:</b> Japonés 🇯🇵\n"
+                f"🎭 <b>Género:</b> {_escapar(generos)}\n"
+                f"🛠️ <b>Encoder:</b> CID\n"
+                f"👥 <b>Fansub:</b> \n"
+                f"📺 <b>Resolución:</b> 1280x720\n\n"
+                f"<b>📖 Sinopsis:</b>\n"
+                f"<blockquote>{sinopsis}</blockquote>"
             )
 
             # ── 6. Imagen de portada de la fuente que devolvió los datos ───
