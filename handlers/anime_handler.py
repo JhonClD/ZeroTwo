@@ -847,7 +847,7 @@ def register(app, user_states, work_dir):
 
             episodios = anime.get('episodes') or '¿?'
             duracion  = anime.get('duration')
-            duracion_txt = f"{duracion} min" if duracion else '24 min'
+            duracion_txt = f"{duracion} min" if duracion else 'N/A'
             anio      = anime.get('seasonYear') or (anime.get('startDate') or {}).get('year') or 'N/A'
             ficha_url = anime.get('siteUrl') or anime.get('mal_url')
             if not (isinstance(ficha_url, str) and ficha_url.startswith(('https://', 'http://'))):
@@ -875,7 +875,7 @@ def register(app, user_states, work_dir):
                 f"📅 <b>Año:</b> {_escapar(anio)}\n"
                 f"🎞️ <b>Episodios:</b> {_escapar(episodios)}\n"
                 f"⏱ <b>Duración:</b> {_escapar(duracion_txt)}\n"
-                f"🎧 <b>Audio:</b> Japonés 🇯🇵\n"
+                f"🎧 <b>Audio:</b> \n"
                 f"🎭 <b>Género:</b> {_escapar(generos)}\n"
                 f"🛠️ <b>Encoder:</b> CID\n"
                 f"👥 <b>Fansub:</b> \n"
