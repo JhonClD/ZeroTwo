@@ -13,6 +13,7 @@ Bot de Telegram para descargar, procesar y enviar videos, además de consultar i
 - [Instalación rápida en Termux](#instalación-rápida-en-termux-android)
 - [Instalación manual en Termux](#instalación-manual-en-termux)
 - [Instalación en PC](#instalación-en-pc)
+- [Instalación en hosting Linux](INSTALACION_HOSTING.md)
 - [Configuración del token](#configuración-del-token)
 - [Ejecución y actualización](#ejecución-y-actualización)
 - [Google Drive](#google-drive-opcional)
