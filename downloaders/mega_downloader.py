@@ -4,6 +4,7 @@ mega_downloader.py - Descarga archivos de MEGA con barra de progreso en Telegram
 
 import re
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -32,9 +33,16 @@ class MEGADownloader:
         try:
             logger.info("🔷 Iniciando descarga desde MEGA")
 
-            # Verificar megatools
+            # Megatools es un ejecutable del sistema, no un paquete de Python.
+            if shutil.which('megadl') is None:
+                return False, None, (
+                    "❌ MEGA no está disponible: falta `megadl` (Megatools) en el hosting. "
+                    "En Ubuntu/Debian instala `megatools` con apt o pide al proveedor "
+                    "una imagen que incluya ese ejecutable."
+                )
+
             if subprocess.run(['megadl', '--version'], capture_output=True).returncode != 0:
-                return False, None, "❌ megatools no instalado.\nEjecuta: pkg install megatools"
+                return False, None, "❌ `megadl --version` falló; revisa la instalación de Megatools."
 
             if progress_callback:
                 await progress_callback(

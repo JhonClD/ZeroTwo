@@ -99,6 +99,20 @@ def _create_task(coro):
     return loop.create_task(coro)
 
 
+def _is_queued_item(item: dict) -> bool:
+    """Comprueba por identidad si un episodio sigue pendiente en la cola."""
+    return any(queued is item for queued in _episode_queue)
+
+
+def _remove_queued_item(item: dict) -> bool:
+    """Retira solo ese objeto, tolerando que /tioflush ya lo haya quitado."""
+    for index, queued in enumerate(_episode_queue):
+        if queued is item:
+            del _episode_queue[index]
+            return True
+    return False
+
+
 # ─── Persistencia ────────────────────────────────────────────────────────────
 
 def _load_json(path: Path) -> dict:
@@ -654,10 +668,12 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 # ─── Cola ─────────────────────────────────────────────────────────────────────
 
 async def procesar_cola() -> None:
-    global _queue_running
+    global _queue_running, _queue_task
     if _queue_running or not _episode_queue:
         return
     _queue_running = True
+    current_task = asyncio.current_task()
+    _queue_task = current_task
 
     try:
         while _episode_queue:
@@ -666,6 +682,8 @@ async def procesar_cola() -> None:
             intentos, exito = 0, False
 
             while intentos < MAX_REINTENTOS and not exito:
+                if not _is_queued_item(item):
+                    break
                 intentos += 1
                 client = _client
                 if not client:
@@ -674,8 +692,12 @@ async def procesar_cola() -> None:
                 try:
                     await enviar_episodio(chat_id, ep, client)
                     exito = True
-                    _episode_queue.pop(0)
+                    _remove_queued_item(item)
                 except Exception as err:
+                    # /tioflush puede quitar el elemento mientras la descarga
+                    # está suspendida en una operación asíncrona.
+                    if not _is_queued_item(item):
+                        break
                     msg = str(err).lower()
                     es_conexion = any(s in msg for s in [
                         'connection closed', 'stream errored', 'timed out', 'econnreset',
@@ -683,12 +705,12 @@ async def procesar_cola() -> None:
                     if es_conexion and intentos < MAX_REINTENTOS:
                         await asyncio.sleep(ESPERA_REINTENTO * intentos)
                     elif es_conexion:
-                        _episode_queue.pop(0)
-                        _episode_queue.append({'chat_id': chat_id, 'ep': ep})
+                        if _remove_queued_item(item):
+                            _episode_queue.append(item)
                         await asyncio.sleep(ESPERA_REQUEUE)
                         break
                     else:
-                        _episode_queue.pop(0)
+                        _remove_queued_item(item)
                         try:
                             if _client:
                                 await _client.send_message(
@@ -701,7 +723,9 @@ async def procesar_cola() -> None:
             if _episode_queue:
                 await asyncio.sleep(QUEUE_DELAY)
     finally:
-        _queue_running = False
+        if _queue_task is current_task:
+            _queue_task = None
+            _queue_running = False
 
 
 async def check_nuevos_episodios(chat_id: int, client) -> None:
@@ -969,21 +993,23 @@ def register(app, work_dir: Path):
 
     @app.on_message(filters.command('tiounblock'))
     async def tiounblock_cmd(client, message: Message):
-        global _queue_running
         if not await _guard_owner(message, 'tiounblock'):
             return
         estaba = _queue_running
-        _queue_running = False
-        if _episode_queue:
+        if estaba:
             await message.reply_text(
-                f"🔓 Cola desbloqueada{' (estaba trabada)' if estaba else ''}.\n"
+                "ℹ️ La cola ya está procesando. No iniciaré otro procesador en paralelo."
+            )
+        elif _episode_queue:
+            await message.reply_text(
+                "🔓 Cola reanudada.\n"
                 f"▶️ Reanudando {len(_episode_queue)} episodio(s)...",
                 parse_mode=enums.ParseMode.HTML
             )
             _create_task(procesar_cola())
         else:
             await message.reply_text(
-                f"🔓 Cola desbloqueada{' (estaba trabada)' if estaba else ''}.\nℹ️ No hay episodios pendientes.",
+                "🔓 Cola desbloqueada.\nℹ️ No hay episodios pendientes.",
                 parse_mode=enums.ParseMode.HTML
             )
 

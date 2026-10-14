@@ -91,7 +91,8 @@ Vuelve a iniciar el proceso desde el panel.
 ## Solución de problemas
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.
-- **`ffmpeg`, `ffprobe` o `megadl` no aparecen:** el entorno no incluye herramientas del sistema requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
+- **`megadl` no aparece (`No such file or directory`):** MEGA requiere el ejecutable del sistema **Megatools**; instalar dependencias de Python no lo añade. En Ubuntu/Debian ejecuta `sudo apt update && sudo apt install -y megatools` y comprueba `command -v megadl` y `megadl --version`. Si el panel no permite `apt`, pide al proveedor que lo incluya o usa una imagen Docker propia con `RUN apt-get update && apt-get install -y megatools`.
+- **`ffmpeg` o `ffprobe` no aparecen:** el entorno no incluye las herramientas de procesamiento requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.
 - **El panel reinicia el bot repetidamente:** revisa los registros y confirma token, dependencias, permisos y conectividad saliente a Telegram.
 - **Falta espacio o se pierden archivos al reiniciar:** revisa límites y persistencia del almacenamiento del proveedor.
