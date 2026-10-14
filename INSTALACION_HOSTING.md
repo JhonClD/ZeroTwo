@@ -108,6 +108,8 @@ git pull
 
 Vuelve a iniciar el proceso desde el panel.
 
+Una vez instalado este cambio, el propietario puede enviar `/gitpull` al bot para ejecutar una actualización segura de `origin/main` sin abrir la consola. El comando está limitado al ID configurado en `handlers/gitpull_handler.py` y solo acepta avances directos (`--ff-only`). Después de una actualización exitosa, reinicia el bot desde el panel para que el proceso cargue los archivos nuevos. Si el hosting no conserva una copia Git (por ejemplo, despliega desde un ZIP), el comando no podrá actualizarla.
+
 ## Solución de problemas
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.

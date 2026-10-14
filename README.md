@@ -341,6 +341,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/up2` | Envía los videos codificados pendientes. |
 | `/delete2` | Limpia subtítulos y logs temporales. |
 | `/dele2` | Limpia videos locales temporales. |
+| `/gitpull` | Actualiza `origin/main` con fast-forward; solo lo puede ejecutar el ID de Telegram del propietario configurado en `handlers/gitpull_handler.py`. Reinicia el proceso desde el panel para cargar el código nuevo. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 ### Flujo recomendado de subtítulos y codificación

@@ -5,6 +5,7 @@ Handlers - Manejadores de comandos del bot
 from . import (
     start_handler,
     help_handler,
+    gitpull_handler,
     download_handler,
     anime_handler,
     youtube_handler,
@@ -30,6 +31,7 @@ from . import (
 __all__ = [
     'start_handler',
     'help_handler',
+    'gitpull_handler',
     'download_handler',
     'anime_handler',
     'youtube_handler',
