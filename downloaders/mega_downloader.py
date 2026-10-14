@@ -7,6 +7,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from downloaders.portable_megatools import ensure_megatools
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +34,22 @@ class MEGADownloader:
         try:
             logger.info("🔷 Iniciando descarga desde MEGA")
 
-            # Megatools es un ejecutable del sistema, no un paquete de Python.
-            if shutil.which('megadl') is None:
-                return False, None, (
-                    "❌ MEGA no está disponible: falta `megadl` (Megatools) en el hosting. "
-                    "En Ubuntu/Debian instala `megatools` con apt o pide al proveedor "
-                    "una imagen que incluya ese ejecutable."
-                )
+            system_megadl = shutil.which('megadl')
+            if system_megadl:
+                command_prefix = [system_megadl]
+                version_command = [system_megadl, '--version']
+                tool_label = system_megadl
+            else:
+                # Hosting sin root: descarga bajo demanda el build estático
+                # oficial, lo verifica y lo guarda dentro del proyecto.
+                portable_binary = ensure_megatools()
+                command_prefix = [str(portable_binary), 'dl']
+                version_command = [str(portable_binary), 'dl', '--version']
+                tool_label = f"{portable_binary} dl"
+                logger.info("Megatools portable verificado y listo para usar")
 
-            if subprocess.run(['megadl', '--version'], capture_output=True).returncode != 0:
-                return False, None, "❌ `megadl --version` falló; revisa la instalación de Megatools."
+            if subprocess.run(version_command, capture_output=True, timeout=10).returncode != 0:
+                return False, None, "❌ Megatools está presente, pero su comprobación de versión falló."
 
             if progress_callback:
                 await progress_callback(
@@ -51,13 +58,13 @@ class MEGADownloader:
                 )
 
             cmd = [
-                'megadl',
+                *command_prefix,
                 '--path', str(output_dir),
                 '--print-names',
                 url,
             ]
 
-            logger.info(f"🔧 megadl → {output_dir} | URL: {url[:60]}…")
+            logger.info(f"🔧 {tool_label} → {output_dir} | URL: {url[:60]}…")
 
             process = subprocess.Popen(
                 cmd,
@@ -106,7 +113,7 @@ class MEGADownloader:
             process.wait()
 
             if process.returncode != 0:
-                return False, None, "❌ megadl terminó con error. Revisa la URL o la red."
+                return False, None, "❌ Megatools terminó con error. Revisa la URL o la conexión del hosting."
 
             files = sorted(output_dir.glob('*'), key=lambda p: p.stat().st_mtime, reverse=True)
             if not files:

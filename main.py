@@ -194,6 +194,9 @@ if __name__ == "__main__":
     }
     for name, command in tools.items():
         available = shutil.which(command) is not None
+        if name == "Megatools" and not available:
+            print_status(name, "fallback portable al primer uso de MEGA", ok=True)
+            continue
         version = "disponible" if available else "no disponible"
         print_status(name, version, ok=available)
 

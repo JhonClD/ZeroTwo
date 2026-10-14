@@ -25,3 +25,4 @@ telegram_downloads/
 .venv/
 venv/
 env/
+.runtime/

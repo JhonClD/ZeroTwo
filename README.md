@@ -40,6 +40,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
 
+En Linux, si no existe `megadl`, el descargador de MEGA puede usar una compilación portable oficial de Megatools (x86_64/ARM64), con verificación de integridad y sin permisos root. Consulta la [guía de hosting](INSTALACION_HOSTING.md#1-preparar-el-entorno) para conocer sus requisitos de red y almacenamiento.
+
 ## Requisitos
 
 Antes de instalar el proyecto, necesitas lo siguiente:

@@ -2,7 +2,7 @@
 
 Esta guía sirve para un VPS Ubuntu/Debian o un panel de hosting que ejecute procesos Python de forma continua. Los nombres de menús cambian según el proveedor. ZeroTwo usa Pyrogram con conexión saliente a Telegram y permanece ejecutándose; no es una aplicación web ni necesita un puerto HTTP/webhook.
 
-> El panel debe permitir mantener un proceso en ejecución y tener disponibles Python 3, FFmpeg/FFprobe, Megatools y utilidades de descarga. Si el panel no permite instalar paquetes del sistema, pide al proveedor una imagen/entorno que incluya estas herramientas o utiliza un VPS/Docker compatible.
+> El panel debe permitir mantener un proceso en ejecución y tener disponibles Python 3, FFmpeg/FFprobe y utilidades de descarga. Si `megadl` no está instalado, ZeroTwo puede descargar un build portable de Megatools al primer uso de MEGA, sin permisos root.
 
 ## 1. Preparar el entorno
 
@@ -25,7 +25,7 @@ curl --version
 aria2c --version
 ```
 
-En un panel, instala o selecciona Python 3.8 o superior. Si no hay acceso al sistema para instalar FFmpeg, Megatools, wget, curl y aria2, confirma con el proveedor cuáles están preinstalados. Algunas funciones de descargas o procesamiento pueden no funcionar si faltan.
+En un panel como BotKeep, selecciona el runtime Python requerido. El fallback portable de Megatools está preparado para Linux `x86_64` y `aarch64`; en el primer enlace MEGA descarga el ejecutable oficial, verifica sus hashes y lo guarda bajo `.runtime/` dentro del proyecto. Requiere conexión HTTPS saliente a `xff.cz`, permiso de escritura en el directorio del proyecto y unos 10 MB de espacio adicional. Si el panel bloquea descargas externas o ejecución de binarios del proyecto, el proveedor debe habilitar `megadl` en el runtime.
 
 ## 2. Descargar el proyecto e instalar Python
 
@@ -91,7 +91,7 @@ Vuelve a iniciar el proceso desde el panel.
 ## Solución de problemas
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.
-- **`megadl` no aparece (`No such file or directory`):** MEGA requiere el ejecutable del sistema **Megatools**; instalar dependencias de Python no lo añade. En Ubuntu/Debian ejecuta `sudo apt update && sudo apt install -y megatools` y comprueba `command -v megadl` y `megadl --version`. Si el panel no permite `apt`, pide al proveedor que lo incluya o usa una imagen Docker propia con `RUN apt-get update && apt-get install -y megatools`.
+- **MEGA no puede preparar Megatools portable:** el primer uso requiere acceso HTTPS a `xff.cz`, escritura dentro de `.runtime/` y permiso para ejecutar archivos del proyecto. Si BotKeep bloquea cualquiera de estos pasos, solicita al proveedor que incluya Megatools/`megadl` en el runtime. En un VPS Ubuntu/Debian, instala el paquete del sistema con `sudo apt update && sudo apt install -y megatools`.
 - **`ffmpeg` o `ffprobe` no aparecen:** el entorno no incluye las herramientas de procesamiento requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.
 - **El panel reinicia el bot repetidamente:** revisa los registros y confirma token, dependencias, permisos y conectividad saliente a Telegram.
