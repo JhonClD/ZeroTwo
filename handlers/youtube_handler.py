@@ -11,7 +11,7 @@ from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from utils import VideoProcessor
-from utils.cloudflare import CloudflareError, download_file
+from utils.media_download import MediaDownloadError, download_file
 from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _validate_audio_file(audio_path: Path) -> None:
     """Reject HTML/error bodies and incomplete files before Telegram upload."""
     if not audio_path.exists() or audio_path.stat().st_size < 1024:
-        raise CloudflareError("El archivo de audio descargado está vacío o incompleto")
+        raise MediaDownloadError("El archivo de audio descargado está vacío o incompleto")
     probe = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "a:0",
@@ -38,7 +38,7 @@ def _validate_audio_file(audio_path: Path) -> None:
     except (ValueError, TypeError, AttributeError):
         duration, has_audio = 0, False
     if not has_audio or duration <= 0:
-        raise CloudflareError(
+        raise MediaDownloadError(
             "loader.to no devolvió un audio reproducible; revisa la URL o el servicio de descarga"
         )
 
@@ -209,7 +209,7 @@ def register(app, download_dir):
 
                     duration, thumb = VideoProcessor.get_video_meta(tmp_video, tmp_thumb)
                     if not duration:
-                        raise CloudflareError(
+                        raise MediaDownloadError(
                             "loader.to devolvió un archivo que no es un video válido (FFprobe no pudo leer su duración)"
                         )
                     await message.reply_video(

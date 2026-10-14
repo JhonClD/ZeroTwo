@@ -123,7 +123,6 @@ user_states = {}
 from handlers import (
     start_handler,
     help_handler,
-    gitpull_handler,
     download_handler,
     anime_handler,
     youtube_handler,
@@ -150,7 +149,6 @@ from handlers import (
 # Registrar handlers
 start_handler.register(app)
 help_handler.register(app)
-gitpull_handler.register(app)
 download_handler.register(app)
 anime_handler.register(app, user_states, WORK_DIR)
 youtube_handler.register(app, DOWNLOAD_DIR)

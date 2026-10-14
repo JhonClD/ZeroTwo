@@ -40,8 +40,6 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
 
-La integración con FlareSolverr para desafíos de Cloudflare es opcional. Se activa con la variable `FLARESOLVERR_URL` y requiere que FlareSolverr esté instalado de forma independiente; consulta la [guía de hosting](INSTALACION_HOSTING.md#flaresolverr-opcional). No expongas su puerto directamente a Internet.
-
 ## Requisitos
 
 Antes de instalar el proyecto, necesitas lo siguiente:
@@ -341,7 +339,6 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/up2` | Envía los videos codificados pendientes. |
 | `/delete2` | Limpia subtítulos y logs temporales. |
 | `/dele2` | Limpia videos locales temporales. |
-| `/gitpull` | Actualiza `origin/main` con fast-forward; solo lo puede ejecutar el ID de Telegram del propietario configurado en `handlers/gitpull_handler.py`. Reinicia el proceso desde el panel para cargar el código nuevo. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 ### Flujo recomendado de subtítulos y codificación

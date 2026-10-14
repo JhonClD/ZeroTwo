@@ -71,26 +71,6 @@ python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt
 
 No ejecutes el bot dos veces a la vez con el mismo token. En un VPS sin panel, puedes iniciarlo en primer plano dentro de `tmux` o configurarlo como servicio `systemd`; el panel normalmente se encarga de mantener y reiniciar su proceso.
 
-### FlareSolverr opcional
-
-ZeroTwo puede intentar resolver un desafío de Cloudflare si el servidor de descarga devuelve una respuesta bloqueada. Este paso es opcional y solo se activa al definir `FLARESOLVERR_URL`. Instala/ejecuta FlareSolverr aparte según la [documentación oficial](https://github.com/FlareSolverr/FlareSolverr) y configura ZeroTwo con la URL privada del servicio, por ejemplo:
-
-```bash
-export FLARESOLVERR_URL="http://127.0.0.1:8191"
-./.venv/bin/python main.py
-```
-
-En un panel Docker, usa el nombre del servicio FlareSolverr y su puerto dentro de la red privada compartida, no `127.0.0.1`. El bot y FlareSolverr deben poder salir por la misma IP pública para reutilizar las cookies de Cloudflare. No expongas el puerto 8191 directamente a Internet. Sin `FLARESOLVERR_URL`, ZeroTwo conserva su flujo habitual y reporta el error si detecta un bloqueo.
-
-Si el panel tiene una sección de variables de entorno, agrega `FLARESOLVERR_URL` con el valor de la URL privada. Si el panel solo permite comandos de inicio, expórtala antes de ejecutar Python:
-
-```bash
-export FLARESOLVERR_URL="http://127.0.0.1:8191"
-exec ./.venv/bin/python main.py
-```
-
-FlareSolverr requiere recursos adicionales y no garantiza que todos los sitios puedan desbloquearse. Úsalo solo donde tengas autorización para acceder al contenido.
-
 ## 5. Verificar que está funcionando
 
 Inicia el servidor desde el panel. En los registros deberías ver el mensaje de conexión establecida y bot operativo. Después, abre Telegram y envía `/start` al bot.
@@ -108,15 +88,12 @@ git pull
 
 Vuelve a iniciar el proceso desde el panel.
 
-Una vez instalado este cambio, el propietario puede enviar `/gitpull` al bot para ejecutar una actualización segura de `origin/main` sin abrir la consola. El comando está limitado al ID configurado en `handlers/gitpull_handler.py` y solo acepta avances directos (`--ff-only`). Después de una actualización exitosa, reinicia el bot desde el panel para que el proceso cargue los archivos nuevos. Si el hosting no conserva una copia Git (por ejemplo, despliega desde un ZIP), el comando no podrá actualizarla.
-
 ## Solución de problemas
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.
 - **`ffmpeg`, `ffprobe` o `megadl` no aparecen:** el entorno no incluye herramientas del sistema requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.
 - **El panel reinicia el bot repetidamente:** revisa los registros y confirma token, dependencias, permisos y conectividad saliente a Telegram.
-- **Se detecta un desafío de Cloudflare:** configura `FLARESOLVERR_URL` y confirma que el servicio está accesible desde el bot por la red privada. La integración no resuelve errores de proveedor, URL vencidas ni archivos multimedia corruptos que no provengan de un desafío.
 - **Falta espacio o se pierden archivos al reiniciar:** revisa límites y persistencia del almacenamiento del proveedor.
 
 La interfaz y los campos del panel dependen del proveedor. Si el panel usa Docker, prepara una imagen con las dependencias del sistema y configura un volumen persistente para los datos y el token; no asumas que una plantilla genérica de Python ya incluye FFmpeg o Megatools.
