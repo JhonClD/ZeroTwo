@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from utils.cloudflare import get_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ def _normalise_formats(data: Any) -> list[dict[str, str]]:
 
 
 def _request_json(url: str, params: dict[str, Any], timeout: int = REQUEST_TIMEOUT) -> dict[str, Any]:
-    response = requests.get(
+    response = get_with_fallback(
         url,
         params=params,
         headers={"User-Agent": "ZeroTwoBot/1.0 (+https://github.com/JhonClD/ZeroTwo)"},

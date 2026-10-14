@@ -40,6 +40,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
 
+La integración con FlareSolverr para desafíos de Cloudflare es opcional. Se activa con la variable `FLARESOLVERR_URL` y requiere que FlareSolverr esté instalado de forma independiente; consulta la [guía de hosting](INSTALACION_HOSTING.md#flaresolverr-opcional). No expongas su puerto directamente a Internet.
+
 ## Requisitos
 
 Antes de instalar el proyecto, necesitas lo siguiente:

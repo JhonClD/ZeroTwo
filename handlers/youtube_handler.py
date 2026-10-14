@@ -11,9 +11,36 @@ from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from utils import VideoProcessor
+from utils.cloudflare import CloudflareError, download_file
 from utils.loader_to import LoaderToError, download_url as loader_download_url
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_audio_file(audio_path: Path) -> None:
+    """Reject HTML/error bodies and incomplete files before Telegram upload."""
+    if not audio_path.exists() or audio_path.stat().st_size < 1024:
+        raise CloudflareError("El archivo de audio descargado está vacío o incompleto")
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-select_streams", "a:0",
+            "-show_entries", "stream=codec_name", "-show_entries", "format=duration",
+            "-of", "json", str(audio_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    try:
+        metadata = json.loads(probe.stdout) if probe.returncode == 0 else {}
+        duration = float(metadata.get("format", {}).get("duration", 0))
+        has_audio = bool(metadata.get("streams"))
+    except (ValueError, TypeError, AttributeError):
+        duration, has_audio = 0, False
+    if not has_audio or duration <= 0:
+        raise CloudflareError(
+            "loader.to no devolvió un audio reproducible; revisa la URL o el servicio de descarga"
+        )
 
 async def safe_react(message: Message, emoji: str):
     """Envía una reacción de forma segura sin romper el flujo si falla"""
@@ -178,12 +205,13 @@ def register(app, download_dir):
                 
                 tmp_thumb = download_dir / f"yt_{message.from_user.id}_{message.id}_thumb.jpg"
                 try:
-                    dl_cmd = f'curl -sS -L --fail -o "{tmp_video}" "{download_url}"'
-                    result = subprocess.run(dl_cmd, shell=True, timeout=180)
-                    if result.returncode != 0 or not tmp_video.exists() or tmp_video.stat().st_size < 10_000:
-                        raise Exception("Error descargando video")
+                    download_file(download_url, tmp_video, timeout=(15, 180))
 
                     duration, thumb = VideoProcessor.get_video_meta(tmp_video, tmp_thumb)
+                    if not duration:
+                        raise CloudflareError(
+                            "loader.to devolvió un archivo que no es un video válido (FFprobe no pudo leer su duración)"
+                        )
                     await message.reply_video(
                         video=str(tmp_video),
                         caption=f"🎬 <b>{video_title}</b>",
@@ -203,8 +231,8 @@ def register(app, download_dir):
                 tmp_ogg = download_dir / f"tmp_{message.from_user.id}_{message.id}.ogg"
                 
                 try:
-                    dl_cmd = f'curl -s -L -o "{tmp_mp3}" "{download_url}"'
-                    subprocess.run(dl_cmd, shell=True, timeout=120)
+                    download_file(download_url, tmp_mp3, timeout=(15, 120))
+                    _validate_audio_file(tmp_mp3)
                     
                     convert_cmd = [
                         'ffmpeg', '-i', str(tmp_mp3),
@@ -212,9 +240,9 @@ def register(app, download_dir):
                         '-vbr', 'on', '-compression_level', '10',
                         '-application', 'voip', '-y', str(tmp_ogg)
                     ]
-                    subprocess.run(convert_cmd, capture_output=True, timeout=60)
+                    converted = subprocess.run(convert_cmd, capture_output=True, timeout=60)
                     
-                    if not tmp_ogg.exists():
+                    if converted.returncode != 0 or not tmp_ogg.exists() or tmp_ogg.stat().st_size < 1024:
                         raise Exception("Error convirtiendo a nota de voz")
                     
                     await message.reply_voice(voice=str(tmp_ogg))
@@ -228,8 +256,8 @@ def register(app, download_dir):
                 tmp_audio = download_dir / f"yt_{message.from_user.id}_{message.id}.mp3"
                 
                 try:
-                    dl_cmd = f'curl -s -L -o "{tmp_audio}" "{download_url}"'
-                    subprocess.run(dl_cmd, shell=True, timeout=120)
+                    download_file(download_url, tmp_audio, timeout=(15, 120))
+                    _validate_audio_file(tmp_audio)
                     
                     await message.reply_audio(
                         audio=str(tmp_audio),
