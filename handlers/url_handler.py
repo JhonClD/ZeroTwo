@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m4v'}
 AUDIO_EXTS = {'.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac'}
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
+
+
+def _extract_url(text: str | None) -> str | None:
+    """Obtiene el enlace del texto aunque venga precedido por `/mf` u otro comando."""
+    if not text:
+        return None
+    match = URL_RE.search(text)
+    if not match:
+        return None
+    return match.group(0).rstrip('.,;:)]}')
 
 
 def _progress_bar(pct: int, width: int = 10) -> str:
@@ -29,7 +40,9 @@ def register(app, download_dir):
 
     @app.on_message(filters.text & filters.regex(r'https?://'))
     async def handle_url(client, message: Message):
-        url      = message.text.strip()
+        url = _extract_url(message.text)
+        if not url:
+            return
         user_id  = message.from_user.id
         username = message.from_user.username or message.from_user.first_name
 
