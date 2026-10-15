@@ -39,9 +39,11 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth (opcional) o guardarlos en una carpeta compartida de Android. |
-| Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
+| Rendimiento | Usar aria2c cuando está disponible; los torrents descargan un aria2c portable si el hosting no lo trae. |
 
 En Linux, si no existe `megadl`, el descargador de MEGA puede usar una compilación portable oficial de Megatools (x86_64/ARM64), con verificación de integridad y sin permisos root. Consulta la [guía de hosting](INSTALACION_HOSTING.md#1-preparar-el-entorno) para conocer sus requisitos de red y almacenamiento.
+
+Para torrents en Linux, si no existe `aria2c`, ZeroTwo prepara automáticamente una compilación estática de aria2 1.37.0 para x86_64/ARM64/ARMv7, valida los hashes SHA-256 del archivo y del ejecutable y la guarda bajo `.runtime/`, sin permisos root. El binario proviene del [proyecto comunitario aria2-static-build](https://github.com/abcfy2/aria2-static-build/releases/tag/1.37.0); el hosting necesita HTTPS saliente a GitHub y permiso para ejecutar archivos del proyecto. Esto no evita restricciones del proveedor sobre tráfico BitTorrent.
 
 ## Requisitos
 
@@ -53,7 +55,7 @@ Antes de instalar el proyecto, necesitas lo siguiente:
 | Git | `git` desde Termux | Git |
 | FFmpeg/FFprobe | `ffmpeg` | FFmpeg |
 | Descargas MEGA | `megatools` | Megatools; en Windows se recomienda WSL |
-| Descargas rápidas | `aria2` | aria2; opcional pero recomendado |
+| Torrents/descargas rápidas | `aria2` | aria2 opcional; en Linux, `/torrent` prepara un ejecutable portable si falta |
 | Credenciales | Token creado con [@BotFather](https://t.me/BotFather) | Token creado con [@BotFather](https://t.me/BotFather) |
 
 El bot necesita acceso a Internet mientras está en ejecución. En Termux, se recomienda utilizar una versión actualizada instalada desde [F-Droid](https://f-droid.org/packages/com.termux/) o desde la fuente oficial de Termux; no mezcles paquetes de instalaciones diferentes.
@@ -330,7 +332,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/gdrive <enlace_o_id>` | Descarga un archivo público de Google Drive, sin OAuth/API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
-| `/torrent` | Responde a un archivo `.torrent` para descargarlo con aria2c; los enlaces `magnet:` se pueden pegar directamente. |
+| `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
 | `/anime <nombre>` | Busca información de un anime. |
 | `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. El resultado se guarda localmente en `Download/ZeroTwo` y no se sube automáticamente a Telegram. |
 | `/subsize <MB>` | Quema subtítulos y codifica en dos pasadas apuntando al tamaño indicado sin crear un video intermedio, por ejemplo `/subsize 1750`. |

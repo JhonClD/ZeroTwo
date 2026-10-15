@@ -1,24 +1,43 @@
-"""Descargas BitTorrent mediante aria2c, compatible con Termux."""
+"""Descargas BitTorrent con aria2c del sistema o una copia portable para Linux."""
 
 import shutil
 import subprocess
 from pathlib import Path
+
+from downloaders.portable_aria2 import ensure_aria2c
 
 
 class TorrentDownloader:
     """Wrapper seguro para aria2c sin ejecutar shell."""
 
     @staticmethod
+    def _aria2_binary():
+        system_binary = shutil.which("aria2c")
+        if system_binary:
+            return system_binary
+        return str(ensure_aria2c())
+
+    @staticmethod
     def available():
-        return shutil.which("aria2c") is not None
+        try:
+            TorrentDownloader._aria2_binary()
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def download(source, output_dir: Path, timeout=None):
-        if not TorrentDownloader.available():
-            return False, [], "No se encontró aria2c. Instálalo con: pkg install aria2"
+        try:
+            aria2_binary = TorrentDownloader._aria2_binary()
+        except Exception as error:
+            return False, [], (
+                "No se encontró aria2c y no se pudo preparar el ejecutable portable. "
+                "El hosting necesita acceso HTTPS a GitHub y permiso para ejecutar "
+                f"archivos en .runtime/: {error}"
+            )
         output_dir.mkdir(parents=True, exist_ok=True)
         command = [
-            "aria2c", "--dir", str(output_dir), "--continue=true",
+            aria2_binary, "--dir", str(output_dir), "--continue=true",
             "--seed-time=0", "--follow-torrent=true", "--bt-enable-lpd=true",
             "--enable-dht=true", "--summary-interval=5", "--console-log-level=warn",
             "--file-allocation=none", str(source),

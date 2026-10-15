@@ -6,7 +6,9 @@ pyrogram>=2.0.0
 # TgCrypto - Aceleración de cifrado para Pyrogram
 tgcrypto
 
-# Nota: Las siguientes herramientas se instalan vía sistema operativo
+# Nota: Las herramientas siguientes son opcionales cuando el hosting ofrece
+# alternativas portables; aria2c se descarga bajo demanda para /torrent en Linux.
+# En Termux se recomienda instalar aria2 con pkg; en VPS puede instalarse con apt.
 # 
 # En Termux (Android):
 #   pkg install python ffmpeg megatools wget curl aria2
