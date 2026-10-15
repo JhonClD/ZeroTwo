@@ -29,7 +29,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Área | Función |
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
-| Descargas | Descargar contenido de MEGA y MediaFire. |
+| Descargas | Descargar archivos de MEGA, MediaFire y enlaces públicos de Google Drive. |
+| Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar capturas del inicio, cuartos, mitad y final antes del video. |
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
@@ -37,7 +38,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
-| Almacenamiento | Subir archivos a Google Drive mediante OAuth o guardarlos en una carpeta compartida de Android. |
+| Almacenamiento | Subir archivos a Google Drive mediante OAuth (opcional) o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible y wget/curl como alternativas. |
 
 En Linux, si no existe `megadl`, el descargador de MEGA puede usar una compilación portable oficial de Megatools (x86_64/ARM64), con verificación de integridad y sin permisos root. Consulta la [guía de hosting](INSTALACION_HOSTING.md#1-preparar-el-entorno) para conocer sus requisitos de red y almacenamiento.
@@ -273,7 +274,9 @@ En Termux, utiliza `python` en lugar de `python3` si ambos comandos no apuntan a
 
 ## Google Drive (opcional)
 
-ZeroTwo admite dos formas de guardar archivos en Google Drive. La primera utiliza la API oficial de Google Drive con OAuth 2.0; la segunda guarda el archivo en el almacenamiento compartido de Android para que una aplicación de sincronización lo transfiera.
+Las descargas de archivos compartidos como **Cualquier persona con el enlace** usan HTTP directo y no requieren API, credenciales ni servicios de Google. Los archivos privados o restringidos no se pueden descargar sin autenticación. Los videos públicos descargados reciben la misma vista previa de capturas que los videos de MEGA y MediaFire.
+
+OAuth/API se necesita para la **subida directa** de archivos a tu Google Drive. Como alternativa de subida sin API, ZeroTwo puede guardar archivos en el almacenamiento compartido de Android para que una aplicación de sincronización los transfiera.
 
 ### API oficial de Google Drive
 
@@ -296,9 +299,9 @@ También puedes indicar una carpeta para una subida concreta:
 /gdrive_upload ID_DE_LA_CARPETA
 ```
 
-### Sin configurar la API de Google
+### Sin API de Google
 
-En Termux, habilita el almacenamiento compartido y utiliza `/drive_sync`:
+Puedes descargar enlaces públicos de Drive directamente con `/gdrive <enlace>` sin configurar nada en Google Cloud. Para guardar archivos en una carpeta de Termux sin subirlos directamente, habilita el almacenamiento compartido y utiliza `/drive_sync`:
 
 ```bash
 termux-setup-storage
@@ -324,6 +327,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/start` | Inicia el bot. |
 | `/help` | Muestra la ayuda detallada. |
 | `/download` | Inicia una descarga desde MEGA o MediaFire. |
+| `/gdrive <enlace_o_id>` | Descarga un archivo público de Google Drive, sin OAuth/API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo con aria2c; los enlaces `magnet:` se pueden pegar directamente. |

@@ -33,9 +33,10 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
         if len(args) < 2:
             await message.reply_text(
                 "☁️ <b>Google Drive Downloader</b>\n\n"
-                "Envía el enlace o ID del archivo:\n"
+                "Envía el enlace o ID de un archivo compartido públicamente (no requiere API):\n"
                 "<code>/gdrive https://drive.google.com/file/d/XXXX/view</code>\n"
-                "<code>/gdrive 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms</code>",
+                "<code>/gdrive 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms</code>\n\n"
+                "⚠️ Para archivos privados, activa el acceso «Cualquier persona con el enlace».",
                 parse_mode=enums.ParseMode.HTML
             )
             return

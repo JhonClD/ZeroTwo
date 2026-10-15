@@ -1,17 +1,22 @@
 """
-drive_downloader.py - Descarga y subida a Google Drive con progreso y screenshots
-Requiere: google-auth-oauthlib google-api-python-client
+drive_downloader.py - Descargas públicas de Drive y subidas OAuth con progreso.
+Las dependencias de Google OAuth/API solo se requieren para subir archivos.
 """
 
-import io
-import json
+import asyncio
 import logging
-import os
+import mimetypes
+import re
 import subprocess
-import time
+from email.message import Message as EmailMessage
 from pathlib import Path
 
+import requests
+from bs4 import BeautifulSoup
+
 logger = logging.getLogger(__name__)
+DRIVE_DOWNLOAD_URL = 'https://drive.google.com/uc'
+DRIVE_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36'}
 
 # ── Importación opcional de las librerías de Google ───────────────────────────
 try:
@@ -19,12 +24,11 @@ try:
     from google.auth.transport.requests import Request
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+    from googleapiclient.http import MediaFileUpload
     GOOGLE_AVAILABLE = True
 except ImportError:
     GOOGLE_AVAILABLE = False
-    logger.warning("⚠️ google-api-python-client no instalado. "
-                   "Ejecuta: pip install google-auth-oauthlib google-api-python-client")
+    logger.debug("Dependencias de Google ausentes; OAuth solo se necesita para subir a Drive.")
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
@@ -63,7 +67,7 @@ def _extract_file_id(url_or_id: str) -> str:
     """Extrae el ID de archivo de una URL de Drive o lo devuelve tal cual."""
     import re
     patterns = [
-        r'/file/d/([a-zA-Z0-9_-]+)',
+        r'/(?:file|document|spreadsheets|presentation)/d/([a-zA-Z0-9_-]+)',
         r'id=([a-zA-Z0-9_-]+)',
         r'^([a-zA-Z0-9_-]{25,})$',
     ]
@@ -72,6 +76,107 @@ def _extract_file_id(url_or_id: str) -> str:
         if m:
             return m.group(1)
     return url_or_id
+
+
+def _open_public_drive_response(session: requests.Session, file_id: str):
+    """Abre la descarga de un archivo compartido públicamente, sin OAuth/API."""
+    params = {'export': 'download', 'id': file_id}
+    response = session.get(
+        DRIVE_DOWNLOAD_URL, params=params, headers=DRIVE_HEADERS,
+        stream=True, timeout=(20, 60), allow_redirects=True,
+    )
+    if response.status_code == 403:
+        response.close()
+        raise requests.HTTPError('Google Drive respondió HTTP 403; revisa que el archivo sea público.', response=response)
+    response.raise_for_status()
+
+    content_type = response.headers.get('Content-Type', '').lower()
+    # Los archivos HTML compartidos también pueden ser descargables; la página
+    # intermedia de confirmación/permisos normalmente no trae Content-Disposition.
+    if 'text/html' in content_type and not response.headers.get('Content-Disposition'):
+        html = response.text
+        token = next(
+            (value for key, value in session.cookies.items() if key.startswith('download_warning')),
+            None,
+        )
+        if not token:
+            soup = BeautifulSoup(html, 'html.parser')
+            confirm = soup.select_one('input[name="confirm"][value]')
+            token = confirm.get('value') if confirm else None
+        if not token:
+            match = re.search(r'[?&]confirm=([\w-]+)', html)
+            token = match.group(1) if match else None
+        response.close()
+        if not token:
+            raise PermissionError(
+                'No se pudo descargar el archivo sin iniciar sesión. '
+                'En Google Drive, compártelo como «Cualquier persona con el enlace». '
+                'Los documentos de Google (Docs/Sheets) requieren exportación.'
+            )
+
+        params['confirm'] = token
+        response = session.get(
+            DRIVE_DOWNLOAD_URL, params=params, headers=DRIVE_HEADERS,
+            stream=True, timeout=(20, 60), allow_redirects=True,
+        )
+        if response.status_code == 403:
+            response.close()
+            raise requests.HTTPError('Google Drive respondió HTTP 403 al confirmar la descarga.', response=response)
+        response.raise_for_status()
+        if ('text/html' in response.headers.get('Content-Type', '').lower()
+                and not response.headers.get('Content-Disposition')):
+            response.close()
+            raise PermissionError(
+                'Google Drive no entregó el archivo. Comprueba que el enlace sea público '
+                'y que permita descargarlo.'
+            )
+    return response
+
+
+def _drive_filename(response, file_id: str) -> str:
+    disposition = response.headers.get('Content-Disposition', '')
+    filename = None
+    if disposition:
+        header = EmailMessage()
+        header['Content-Disposition'] = disposition
+        filename = header.get_filename()
+    if not filename:
+        filename = f'drive_file_{file_id}'
+        extension = mimetypes.guess_extension(
+            response.headers.get('Content-Type', '').split(';', 1)[0].strip()
+        )
+        if extension:
+            filename += extension
+    filename = Path(filename).name
+    filename = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '_', filename).strip(' .')
+    return filename or f'drive_file_{file_id}'
+
+
+def _download_public_drive_file(file_id: str, output_dir: Path, progress_update=None) -> Path:
+    """Descarga un enlace público de Drive por HTTP y guarda el nombre real."""
+    session = requests.Session()
+    response = _open_public_drive_response(session, file_id)
+    output_path = output_dir / _drive_filename(response, file_id)
+    total = int(response.headers.get('Content-Length') or 0)
+    downloaded = 0
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with output_path.open('wb') as output:
+            for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                if not chunk:
+                    continue
+                output.write(chunk)
+                downloaded += len(chunk)
+                if progress_update:
+                    progress_update(downloaded, total)
+        if downloaded == 0:
+            raise ValueError('Google Drive devolvió un archivo vacío.')
+        return output_path
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+    finally:
+        response.close()
 
 
 def _take_screenshot(video_path: Path, timestamp: str, output_path: Path) -> bool:
@@ -157,18 +262,25 @@ class DriveDownloader:
 
     @staticmethod
     async def get_file_info(url_or_id: str) -> dict | None:
-        """Retorna metadatos del archivo: id, name, mimeType, size."""
+        """Retorna metadatos básicos de un archivo público, sin usar la API."""
+        response = None
         try:
-            service = _get_service()
             file_id = _extract_file_id(url_or_id)
-            meta = service.files().get(
-                fileId=file_id,
-                fields='id,name,mimeType,size,webViewLink'
-            ).execute()
-            return meta
+            session = requests.Session()
+            response = await asyncio.to_thread(_open_public_drive_response, session, file_id)
+            return {
+                'id': file_id,
+                'name': _drive_filename(response, file_id),
+                'mimeType': response.headers.get('Content-Type', '').split(';', 1)[0],
+                'size': response.headers.get('Content-Length'),
+                'webViewLink': f'https://drive.google.com/file/d/{file_id}/view',
+            }
         except Exception as e:
             logger.error(f"❌ Error obteniendo info de Drive: {e}")
             return None
+        finally:
+            if response is not None:
+                response.close()
 
     @staticmethod
     async def download(url_or_id: str, output_dir: Path, progress_callback=None) -> tuple[bool, Path | None, str | None]:
@@ -179,55 +291,55 @@ class DriveDownloader:
         Retorna (success, file_path, error_msg).
         """
         try:
-            service = _get_service()
             file_id = _extract_file_id(url_or_id)
-
-            # Obtener metadatos
-            meta = service.files().get(
-                fileId=file_id,
-                fields='id,name,size'
-            ).execute()
-            filename  = meta.get('name', 'drive_file')
-            total_bytes = int(meta.get('size', 0))
-            total_mb    = total_bytes / (1024 * 1024) if total_bytes else 0
-
-            logger.info(f"📥 Drive: descargando '{filename}' ({total_mb:.1f} MB)")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            progress_state = [0, 0]
             if progress_callback:
-                await progress_callback(
-                    f"📥 <b>Descargando de Drive</b>\n"
-                    f"📄 {filename}\n"
-                    f"📦 {total_mb:.1f} MB\n"
-                    f"⏳ Iniciando..."
-                )
+                try:
+                    await progress_callback(
+                        "📥 <b>Descargando enlace público de Drive</b>\n"
+                        "🔓 No se requiere API para archivos compartidos públicamente.\n"
+                        "⏳ Iniciando…"
+                    )
+                except Exception:
+                    pass
 
-            output_path = output_dir / filename
-            request = service.files().get_media(fileId=file_id)
-            fh = io.FileIO(str(output_path), 'wb')
-            downloader = MediaIoBaseDownload(fh, request, chunksize=8 * 1024 * 1024)
+            def progress_update(downloaded, total):
+                progress_state[:] = [downloaded, total]
 
+            task = asyncio.create_task(asyncio.to_thread(
+                _download_public_drive_file, file_id, output_dir, progress_update
+            ))
             last_reported = -10
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                if status:
-                    pct = int(status.progress() * 100)
-                    downloaded_mb = (status.resumable_progress or 0) / (1024 * 1024)
-
-                    logger.info(f"📥 Drive {pct}% — {downloaded_mb:.1f}/{total_mb:.1f} MB")
-
+            while not task.done():
+                await asyncio.sleep(0.5)
+                downloaded, total = progress_state
+                if total > 0:
+                    pct = min(100, int(downloaded * 100 / total))
                     if pct - last_reported >= 10 and progress_callback:
-                        bar = _progress_bar(pct)
-                        await progress_callback(
-                            f"📥 <b>Descargando de Drive</b>\n"
-                            f"📄 {filename}\n"
-                            f"{bar} {pct}%\n"
-                            f"💾 {downloaded_mb:.1f} / {total_mb:.1f} MB"
-                        )
+                        downloaded_mb = downloaded / (1024 * 1024)
+                        total_mb = total / (1024 * 1024)
+                        logger.info(f"📥 Drive {pct}% — {downloaded_mb:.1f}/{total_mb:.1f} MB")
+                        try:
+                            await progress_callback(
+                                f"📥 <b>Descargando de Drive</b>\n"
+                                f"{_progress_bar(pct)} {pct}%\n"
+                                f"💾 {downloaded_mb:.1f} / {total_mb:.1f} MB"
+                            )
+                        except Exception:
+                            pass
                         last_reported = pct
 
-            fh.close()
+            output_path = await task
             file_size = output_path.stat().st_size / (1024 * 1024)
-            logger.info(f"✅ Drive descargado: {filename} ({file_size:.1f} MB)")
+            logger.info(f"✅ Drive descargado: {output_path.name} ({file_size:.1f} MB)")
+            if progress_callback:
+                try:
+                    await progress_callback(
+                        f"✅ <b>Drive descargado</b>\n📄 {output_path.name}\n📦 {file_size:.1f} MB"
+                    )
+                except Exception:
+                    pass
             return True, output_path, None
 
         except Exception as e:
