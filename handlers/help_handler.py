@@ -98,6 +98,12 @@ def register(app):
 ├ /notify now          — Revisar episodios ahora
 ├ 📡 Fuente: LiveChart.me
 └ ⏱ Revisión automática cada 10 minutos
+<b>1️⃣2️⃣ Avisos de Crunchyroll</b>
+├ /crset — Suscribir este chat (solo propietario)
+├ /crrem — Quitar este chat
+├ /crstatus — Ver estado del monitor
+├ /crlist — Mostrar los 10 episodios recientes
+└ /crnotify — Revisar y enviar avisos nuevos ahora
 
 ━━━━━━━━━━━━━━━━━━━━
 🔍 <b>BÚSQUEDA</b>

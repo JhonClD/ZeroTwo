@@ -37,6 +37,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
+| Notificaciones | Avisos de episodios recientes de Crunchyroll con enlaces oficiales; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth (opcional) o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible; los torrents descargan un aria2c portable si el hosting no lo trae. |
@@ -333,6 +334,8 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
+| `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
+| `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
 | `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. El resultado se guarda localmente en `Download/ZeroTwo` y no se sube automáticamente a Telegram. |
 | `/subsize <MB>` | Quema subtítulos y codifica en dos pasadas apuntando al tamaño indicado sin crear un video intermedio, por ejemplo `/subsize 1750`. |

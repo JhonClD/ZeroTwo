@@ -29,6 +29,8 @@ En un panel como BotKeep, selecciona el runtime Python requerido. El fallback po
 
 Para torrents, si `aria2c` no existe en el sistema, ZeroTwo descarga automáticamente aria2 1.37.0 estático para Linux `x86_64`, `aarch64` o `ARMv7` desde el [release comunitario aria2-static-build](https://github.com/abcfy2/aria2-static-build/releases/tag/1.37.0). Comprueba SHA-256 tanto del ZIP como del ejecutable y lo guarda en `.runtime/aria2-*`; requiere HTTPS saliente a GitHub, espacio temporal de unos 20 MB y permiso para ejecutar binarios del proyecto. No necesita `apt`, `pkg` ni root. Si el panel bloquea descargas externas o ejecución de binarios, pide al proveedor que habilite `aria2c`.
 
+El notificador de Crunchyroll consulta metadatos del catálogo en modo anónimo y publica enlaces oficiales; no descarga videos ni requiere una cuenta. El endpoint de catálogo no está documentado públicamente y puede cambiar. Los comandos `/crset`, `/crrem`, `/crstatus`, `/crlist` y `/crnotify` requieren que el ID del propietario esté en `CRUNCHYROLL_OWNER_IDS` o en la variable existente `TIOANIME_OWNER_IDS` (lista de IDs separados por comas). `CR_MINUTES` controla el intervalo en minutos y por defecto es 5. No envíes contraseñas, cookies ni tokens de Crunchyroll al bot.
+
 MediaFire puede usar `aria2c`, `wget` o `curl` si están instalados. Si no hay ninguno, ZeroTwo usa `requests` de Python, incluido en `requirements.txt`; no requiere instalar otro ejecutable. Si MediaFire devuelve HTTP 403 desde el hosting, el sitio/CDN está rechazando esa solicitud y el fallback no puede quitar ese bloqueo.
 
 ## 2. Descargar el proyecto e instalar Python
