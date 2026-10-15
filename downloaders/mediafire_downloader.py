@@ -2,12 +2,18 @@
 mediafire_downloader.py - Descarga archivos de MediaFire con barra de progreso en Telegram y terminal
 """
 
+import asyncio
 import re
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 
+import requests
+from bs4 import BeautifulSoup
+
 logger = logging.getLogger(__name__)
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
 
 def _progress_bar(pct: int, width: int = 10) -> str:
@@ -19,6 +25,47 @@ class MediaFireDownloader:
     """Descarga archivos de MediaFire con progreso en tiempo real."""
 
     @staticmethod
+    def _download_with_requests(url: str, output_path: Path, referer: str) -> int:
+        """Descarga sin binarios externos, útil en contenedores de hosting restringidos."""
+        headers = {'User-Agent': UA, 'Referer': referer}
+        with requests.get(url, headers=headers, stream=True, timeout=(20, 60), allow_redirects=True) as response:
+            if response.status_code == 403:
+                raise requests.HTTPError(
+                    'MediaFire devolvió HTTP 403 al hosting; el sitio/CDN rechazó la solicitud.',
+                    response=response,
+                )
+            response.raise_for_status()
+            content_type = response.headers.get('Content-Type', '').lower()
+            if 'text/html' in content_type:
+                raise ValueError('MediaFire devolvió una página HTML en vez del archivo.')
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            written = 0
+            first_chunk = True
+            with output_path.open('wb') as output:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    if first_chunk:
+                        first_chunk = False
+                        if chunk.lstrip()[:20].lower().startswith((b'<!doctype html', b'<html')):
+                            raise ValueError('MediaFire entregó una página HTML, no el archivo solicitado.')
+                    output.write(chunk)
+                    written += len(chunk)
+            if written == 0:
+                raise ValueError('MediaFire devolvió un archivo vacío.')
+            return written
+
+    @staticmethod
+    def _is_html_file(path: Path) -> bool:
+        try:
+            with path.open('rb') as source:
+                sample = source.read(1024).lstrip().lower()
+            return sample.startswith((b'<!doctype html', b'<html'))
+        except OSError:
+            return True
+
+    @staticmethod
     def is_mediafire_url(url: str) -> bool:
         return bool(re.search(r'mediafire\.com', url, re.IGNORECASE))
 
@@ -27,27 +74,27 @@ class MediaFireDownloader:
         """Extrae el enlace directo y nombre del archivo desde la página de MediaFire."""
         try:
             logger.info("🌐 Parseando página de MediaFire…")
-            cmd = [
-                'curl', '-s', '-L',
-                '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                url,
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                return None, None
+            response = await asyncio.to_thread(
+                requests.get, url, headers={'User-Agent': UA}, timeout=(15, 30), allow_redirects=True
+            )
+            if response.status_code == 403:
+                raise requests.HTTPError(
+                    'MediaFire devolvió HTTP 403 al hosting; el sitio rechazó la solicitud.',
+                    response=response,
+                )
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
 
-            html = result.stdout
-
-            # Enlace directo
-            direct_url = None
-            for pattern in [
-                r'<a[^>]*id="downloadButton"[^>]*href="([^"]+)"',
-                r'href="(https://download\d+\.mediafire\.com[^"]+)"',
-            ]:
-                m = re.search(pattern, html)
-                if m:
-                    direct_url = m.group(1)
-                    break
+            # El botón de descarga es el selector principal; conservar los
+            # enlaces de CDN como alternativa por cambios menores del HTML.
+            button = soup.select_one('#downloadButton[href]')
+            direct_url = button.get('href').strip() if button else None
+            if not direct_url:
+                for anchor in soup.select('a[href]'):
+                    href = anchor.get('href', '').strip()
+                    if re.match(r'https?://download\d+\.mediafire\.com/', href, re.I):
+                        direct_url = href
+                        break
 
             if not direct_url:
                 logger.error("❌ No se encontró enlace de descarga en MediaFire")
@@ -60,10 +107,12 @@ class MediaFireDownloader:
                 r'<div[^>]*class="[^"]*filename[^"]*"[^>]*>([^<]+)',
                 r'/file/[^/]+/([^/]+)/',
             ]:
-                m = re.search(pattern, html)
+                m = re.search(pattern, response.text)
                 if m:
                     filename = m.group(1).strip()
                     break
+            if not filename and button:
+                filename = button.get('aria-label') or button.get('title')
 
             if not filename:
                 filename = 'mediafire_file'
@@ -85,6 +134,8 @@ class MediaFireDownloader:
             logger.info(f"✅ Enlace y nombre obtenidos: {filename}")
             return direct_url, filename
 
+        except requests.HTTPError:
+            raise
         except Exception as e:
             logger.error(f"❌ Error parseando MediaFire: {e}")
             return None, None
@@ -104,6 +155,7 @@ class MediaFireDownloader:
             if not direct_url:
                 return False, None, "❌ No se pudo obtener el enlace de descarga de MediaFire."
 
+            output_dir.mkdir(parents=True, exist_ok=True)
             output_path = output_dir / filename
             logger.info(f"📥 MediaFire: descargando '{filename}'")
             logger.info(f"   URL: {direct_url[:80]}…")
@@ -115,18 +167,36 @@ class MediaFireDownloader:
                     f"⏳ Iniciando…"
                 )
 
-            # Elegir herramienta de descarga
-            UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            async def _requests_fallback():
+                try:
+                    size = await asyncio.to_thread(
+                        MediaFireDownloader._download_with_requests,
+                        direct_url, output_path, url,
+                    )
+                except Exception:
+                    output_path.unlink(missing_ok=True)
+                    raise
+                size_mb = size / (1024 * 1024)
+                logger.info(f"✅ MediaFire descargado: {filename} ({size_mb:.1f} MB) con requests")
+                if progress_callback:
+                    await progress_callback(
+                        f"🔶 <b>MediaFire</b>\n📄 {filename}\n✅ Descarga completa ({size_mb:.1f} MB)"
+                    )
+                return True, output_path, None
 
-            def _has(cmd):
-                return subprocess.run([cmd, '--version'], capture_output=True).returncode == 0
+            # Priorizar clientes del sistema, pero no exigir herramientas que
+            # algunos paneles Python (incluido BotKeep) no permiten instalar.
+            aria2c = shutil.which('aria2c')
+            wget = shutil.which('wget')
+            curl = shutil.which('curl')
 
-            if _has('aria2c'):
+            if aria2c:
                 cmd = [
-                    'aria2c',
+                    aria2c,
                     '-x', '16', '-s', '16', '-k', '1M',
                     '--file-allocation=none',
                     f'--user-agent={UA}',
+                    f'--referer={url}',
                     '--allow-overwrite=true',
                     '--auto-file-renaming=false',
                     '--show-console-readout=true',
@@ -135,25 +205,29 @@ class MediaFireDownloader:
                     direct_url,
                 ]
                 tool = 'aria2c'
-            elif _has('wget'):
+            elif wget:
                 cmd = [
-                    'wget', '-O', str(output_path),
+                    wget, '-O', str(output_path),
                     '--progress=dot:mega',
                     f'--user-agent={UA}',
-                    '--no-check-certificate',
+                    f'--referer={url}',
                     '--timeout=30', '--tries=3', '--continue',
                     direct_url,
                 ]
                 tool = 'wget'
-            else:
+            elif curl:
                 cmd = [
-                    'curl', '-L', '-C', '-',
+                    curl, '-L', '-C', '-',
                     '-A', UA,
+                    '-e', url,
                     '-o', str(output_path),
                     '--progress-bar',
                     direct_url,
                 ]
                 tool = 'curl'
+            else:
+                logger.info('🚀 Usando requests de Python para descargar MediaFire')
+                return await _requests_fallback()
 
             logger.info(f"🚀 Usando {tool} para descargar MediaFire")
 
@@ -222,12 +296,21 @@ class MediaFireDownloader:
 
             process.wait()
 
-            if process.returncode == 0 and output_path.exists():
+            if (process.returncode == 0 and output_path.exists()
+                    and output_path.stat().st_size > 0
+                    and not MediaFireDownloader._is_html_file(output_path)):
                 size_mb = output_path.stat().st_size / (1024 * 1024)
                 logger.info(f"✅ MediaFire descargado: {filename} ({size_mb:.1f} MB)")
                 return True, output_path, None
-            else:
-                return False, None, f"❌ {tool} terminó con error (código {process.returncode})"
+            logger.warning("⚠️ %s no produjo un archivo válido; probando fallback HTTP de Python", tool)
+            output_path.unlink(missing_ok=True)
+            try:
+                return await _requests_fallback()
+            except Exception as fallback_error:
+                return False, None, (
+                    f"❌ {tool} no completó la descarga y el fallback de Python también falló: "
+                    f"{fallback_error}"
+                )
 
         except Exception as e:
             logger.error(f"❌ Error MediaFire: {e}", exc_info=True)

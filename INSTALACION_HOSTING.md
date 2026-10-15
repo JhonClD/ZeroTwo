@@ -27,6 +27,8 @@ aria2c --version
 
 En un panel como BotKeep, selecciona el runtime Python requerido. El fallback portable de Megatools está preparado para Linux `x86_64` y `aarch64`; en el primer enlace MEGA descarga el ejecutable oficial, verifica sus hashes y lo guarda bajo `.runtime/` dentro del proyecto. Requiere conexión HTTPS saliente a `xff.cz`, permiso de escritura en el directorio del proyecto y unos 10 MB de espacio adicional. Si el panel bloquea descargas externas o ejecución de binarios del proyecto, el proveedor debe habilitar `megadl` en el runtime.
 
+MediaFire puede usar `aria2c`, `wget` o `curl` si están instalados. Si no hay ninguno, ZeroTwo usa `requests` de Python, incluido en `requirements.txt`; no requiere instalar otro ejecutable. Si MediaFire devuelve HTTP 403 desde el hosting, el sitio/CDN está rechazando esa solicitud y el fallback no puede quitar ese bloqueo.
+
 ## 2. Descargar el proyecto e instalar Python
 
 Desde la terminal del servidor o la consola del panel, sitúate en el directorio persistente del bot y ejecuta:
@@ -92,6 +94,7 @@ Vuelve a iniciar el proceso desde el panel.
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.
 - **MEGA no puede preparar Megatools portable:** el primer uso requiere acceso HTTPS a `xff.cz`, escritura dentro de `.runtime/` y permiso para ejecutar archivos del proyecto. Si BotKeep bloquea cualquiera de estos pasos, solicita al proveedor que incluya Megatools/`megadl` en el runtime. En un VPS Ubuntu/Debian, instala el paquete del sistema con `sudo apt update && sudo apt install -y megatools`.
+- **MediaFire no descarga:** tras actualizar, el bot puede recurrir a `requests` si faltan `aria2c`, `wget` y `curl`. Si el registro indica HTTP 403, el hosting está recibiendo una denegación de MediaFire/CDN; confirma si funciona desde otra red y consulta al proveedor por la conexión saliente.
 - **`ffmpeg` o `ffprobe` no aparecen:** el entorno no incluye las herramientas de procesamiento requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.
 - **El panel reinicia el bot repetidamente:** revisa los registros y confirma token, dependencias, permisos y conectividad saliente a Telegram.
