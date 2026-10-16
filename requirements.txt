@@ -6,10 +6,6 @@ pyrogram>=2.0.0
 # TgCrypto - Aceleración de cifrado para Pyrogram
 tgcrypto
 
-# yt-dlp para descargas públicas de YouTube; default incluye yt-dlp-ejs.
-# Requiere además Deno 2.3+ o Node.js 22+ y los binarios FFmpeg/FFprobe.
-yt-dlp[default]
-
 # Nota: Las herramientas siguientes son opcionales cuando el hosting ofrece
 # alternativas portables; aria2c se descarga bajo demanda para /torrent en Linux.
 # En Termux se recomienda instalar aria2 con pkg; en VPS puede instalarse con apt.

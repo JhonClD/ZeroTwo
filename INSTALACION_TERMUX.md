@@ -42,7 +42,6 @@ El script instalará automáticamente:
 - ✅ Wget
 - ✅ Curl
 - ✅ Aria2c
-- ✅ Node.js LTS (runtime JavaScript para yt-dlp)
 - ✅ Pyrogram
 - ✅ TgCrypto
 
@@ -69,16 +68,14 @@ pkg install -y \
   megatools \
   wget \
   curl \
-  aria2 \
-  nodejs-lts
+  aria2
 ```
 
 **Tiempo estimado:** 5-10 minutos
 
 ### Paso 3: Verificar Instalación de Herramientas
 ```bash
-python --version      # Debe mostrar Python 3.x
-node --version        # Debe mostrar Node.js 22 o superior
+python --version      # Debe mostrar Python 3.9 o superior
 ffmpeg -version       # Debe mostrar FFmpeg
 megadl --version      # Debe mostrar megatools
 wget --version        # Debe mostrar Wget
@@ -106,10 +103,10 @@ pip install -r requirements.txt
 Esto instalará:
 - ✅ `pyrogram>=2.0.0` - Cliente de Telegram
 - ✅ `tgcrypto` - Aceleración de cifrado
-- ✅ `yt-dlp[default]` - Descargas de YouTube y scripts EJS
+- ✅ `requests` - Conexiones HTTP y descargas
 - ✅ `Pillow` - Portadas visuales de `/anime`
 
-Para que YouTube resuelva los desafíos JavaScript actuales, confirma que `node --version` muestre Node.js 22 o superior. El instalador añade `nodejs-lts` mediante Termux; en hosting se puede usar Deno 2.3+ en su lugar.
+Las descargas de YouTube usan Loader.to para obtener el archivo y no requieren Node.js, Deno ni credenciales de Google.
 
 Las librerías de Google Drive son opcionales. Solo si vas a usar `/gdrive_upload`, instala también:
 

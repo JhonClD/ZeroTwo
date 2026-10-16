@@ -1,28 +1,201 @@
-"""Manejador de descargas de YouTube con yt-dlp."""
+"""Manejador de YouTube: búsqueda por requests y descarga mediante Loader.to."""
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import re
 import subprocess
 from html import escape
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
+import requests
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
-from downloaders.youtube_downloader import YouTubeDownloadError, YouTubeDownloader
 from utils import VideoProcessor
-from utils.media_download import MediaDownloadError
+from utils.loader_to import LoaderToError, download_url as loader_download_url
+from utils.media_download import MediaDownloadError, download_file
 
 logger = logging.getLogger(__name__)
 
+_YOUTUBE_HOSTS = {
+    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+    "youtu.be", "www.youtu.be",
+}
+_YOUTUBE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "es-419,es;q=0.9,en;q=0.7",
+}
+
+
+def _video_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.hostname in {"youtu.be", "www.youtu.be"}:
+        candidate = parsed.path.strip("/").split("/", 1)[0]
+    else:
+        candidate = parse_qs(parsed.query).get("v", [None])[0]
+        if not candidate and parsed.path.startswith("/shorts/"):
+            candidate = parsed.path.split("/", 2)[2].split("/", 1)[0]
+    return candidate if candidate and re.fullmatch(r"[A-Za-z0-9_-]{11}", candidate) else None
+
+
+def _extract_balanced_json(page: str) -> dict | None:
+    """Extrae ytInitialData respetando llaves dentro de strings JSON."""
+    markers = ("var ytInitialData =", "let ytInitialData =", 'window["ytInitialData"] =')
+    for marker in markers:
+        marker_pos = page.find(marker)
+        if marker_pos < 0:
+            continue
+        start = page.find("{", marker_pos + len(marker))
+        if start < 0:
+            continue
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(page)):
+            char = page[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        value = json.loads(page[start:index + 1])
+                    except ValueError:
+                        break
+                    return value if isinstance(value, dict) else None
+    return None
+
+
+def _iter_video_renderers(value):
+    if isinstance(value, dict):
+        renderer = value.get("videoRenderer")
+        if isinstance(renderer, dict):
+            yield renderer
+        for child in value.values():
+            yield from _iter_video_renderers(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_video_renderers(child)
+
+
+def _text_value(value) -> str:
+    if not isinstance(value, dict):
+        return ""
+    if isinstance(value.get("simpleText"), str):
+        return value["simpleText"].strip()
+    runs = value.get("runs")
+    if isinstance(runs, list):
+        return "".join(str(run.get("text", "")) for run in runs if isinstance(run, dict)).strip()
+    return ""
+
+
+def _oembed_info(video_url: str) -> dict:
+    """Obtiene título/canal/miniatura sin API key; si falla, conserva la URL."""
+    info = {
+        "url": video_url,
+        "title": "Video de YouTube",
+        "channel": "YouTube",
+        "thumbnail": None,
+    }
+    video_id = _video_id(video_url)
+    if video_id:
+        info["thumbnail"] = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    try:
+        response = requests.get(
+            "https://www.youtube.com/oembed",
+            params={"url": video_url, "format": "json"},
+            headers=_YOUTUBE_HEADERS,
+            timeout=(8, 15),
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict):
+            info["title"] = str(data.get("title") or info["title"])
+            info["channel"] = str(data.get("author_name") or info["channel"])
+            info["thumbnail"] = data.get("thumbnail_url") or info["thumbnail"]
+    except (requests.RequestException, ValueError) as error:
+        logger.info("No se pudieron consultar metadatos oEmbed de YouTube: %s", error)
+    return info
+
+
+def _resolve_video(query: str) -> dict:
+    """Resuelve una URL o busca el primer video público en YouTube."""
+    parsed = urlparse(query)
+    if parsed.scheme.lower() in {"http", "https"}:
+        if (parsed.hostname or "").lower() not in _YOUTUBE_HOSTS:
+            raise LoaderToError("El enlace debe pertenecer a YouTube o youtu.be.")
+        return _oembed_info(query)
+
+    try:
+        response = requests.get(
+            "https://www.youtube.com/results",
+            params={"search_query": query},
+            headers=_YOUTUBE_HEADERS,
+            timeout=(10, 20),
+        )
+        response.raise_for_status()
+        page = response.text
+    except requests.RequestException as error:
+        raise LoaderToError(
+            "No se pudo buscar en YouTube desde el hosting. Prueba enviando el enlace directo del video."
+        ) from error
+
+    initial_data = _extract_balanced_json(page)
+    renderer = next(_iter_video_renderers(initial_data), None) if initial_data else None
+    video_id = renderer.get("videoId") if renderer else None
+    if not video_id:
+        match = re.search(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"', page)
+        video_id = match.group(1) if match else None
+
+    if not video_id or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        raise LoaderToError(
+            "YouTube no devolvió resultados de búsqueda. Intenta con otra consulta o pega la URL del video."
+        )
+
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    result = {
+        "url": video_url,
+        "title": _text_value(renderer.get("title")) if renderer else "",
+        "channel": "",
+        "thumbnail": None,
+    }
+    if renderer:
+        result["channel"] = (
+            _text_value(renderer.get("ownerText"))
+            or _text_value(renderer.get("longBylineText"))
+            or _text_value(renderer.get("shortBylineText"))
+        )
+        thumbnails = renderer.get("thumbnail", {}).get("thumbnails", [])
+        if thumbnails and isinstance(thumbnails[-1], dict):
+            result["thumbnail"] = thumbnails[-1].get("url")
+    fallback_info = _oembed_info(video_url)
+    result["title"] = result["title"] or fallback_info["title"]
+    result["channel"] = result["channel"] or fallback_info["channel"]
+    result["thumbnail"] = result["thumbnail"] or fallback_info["thumbnail"]
+    return result
+
 
 def _validate_audio_file(audio_path: Path) -> None:
-    """Rechaza respuestas HTML, archivos incompletos y medios sin audio."""
+    """Rechaza páginas HTML, archivos parciales y audio no reproducible."""
     if not audio_path.exists() or audio_path.stat().st_size < 1024:
-        raise MediaDownloadError("yt-dlp no produjo un archivo de audio válido.")
-
+        raise MediaDownloadError("Loader.to no produjo un archivo de audio válido.")
     probe = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "a:0",
@@ -40,11 +213,12 @@ def _validate_audio_file(audio_path: Path) -> None:
     except (ValueError, TypeError, AttributeError):
         duration, has_audio = 0, False
     if not has_audio or duration <= 0:
-        raise MediaDownloadError("El archivo descargado no contiene una pista de audio reproducible.")
+        raise MediaDownloadError(
+            "Loader.to devolvió un archivo sin una pista de audio reproducible."
+        )
 
 
 def _convert_to_voice_note(source: Path, destination: Path) -> None:
-    """Convierte un MP3 a OGG/Opus para enviarlo como nota de voz."""
     result = subprocess.run(
         [
             "ffmpeg", "-v", "error", "-i", str(source), "-vn",
@@ -61,7 +235,6 @@ def _convert_to_voice_note(source: Path, destination: Path) -> None:
 
 
 async def safe_react(message: Message, emoji: str) -> None:
-    """Envía una reacción sin interrumpir la descarga si Telegram la rechaza."""
     try:
         await message.react(emoji)
     except Exception:
@@ -69,8 +242,6 @@ async def safe_react(message: Message, emoji: str) -> None:
 
 
 def register(app, download_dir: Path) -> None:
-    """Registra los comandos de descarga de YouTube."""
-
     @app.on_message(filters.command(["play", "play2", "ytmp3", "ytmp4", "playaudio"]))
     async def youtube_command(client, message: Message) -> None:
         args = (message.text or "").split(maxsplit=1)
@@ -79,8 +250,8 @@ def register(app, download_dir: Path) -> None:
             await message.reply_text(
                 "🎵 <b>YouTube Downloader</b>\n\n"
                 "Escribe el nombre o la URL de un video público de YouTube:\n\n"
-                "/play &lt;búsqueda&gt; — Descargar audio MP3\n"
-                "/play2 &lt;búsqueda&gt; — Descargar video hasta 720p\n"
+                "/play &lt;búsqueda&gt; — Audio MP3 mediante Loader.to\n"
+                "/play2 &lt;búsqueda&gt; — Video hasta 720p\n"
                 "/playaudio &lt;búsqueda&gt; — Enviar como nota de voz\n"
                 "/ytmp3 &lt;URL&gt; — Descargar audio\n"
                 "/ytmp4 &lt;URL&gt; — Descargar video\n\n"
@@ -92,113 +263,98 @@ def register(app, download_dir: Path) -> None:
         query = args[1].strip()
         is_video = command in {"play2", "ytmp4"}
         is_voice_note = command == "playaudio"
-        logger.info("YouTube | consulta=%s | comando=%s", query[:80], command)
-
-        status_msg = await message.reply_text("🔎 Buscando y descargando con yt-dlp…")
+        status_msg = await message.reply_text("🔎 Buscando video en YouTube…")
         chat_id = message.chat.id if message.chat else 0
         output_base = Path(download_dir) / f"yt_{chat_id}_{message.id}"
+        extension = ".mp4" if is_video else ".mp3"
+        media_path = Path(f"{output_base}{extension}")
         thumbnail_path = Path(f"{output_base}_thumb.jpg")
         voice_path = Path(f"{output_base}_voice.ogg")
-        success = False
 
         try:
-            downloaded = await asyncio.to_thread(
-                YouTubeDownloader.download,
-                query,
-                output_base,
-                is_video,
-            )
-            title = downloaded.title[:300]
-            channel = downloaded.channel[:150]
-            media_type = "VIDEO" if is_video else "AUDIO"
+            info = await asyncio.to_thread(_resolve_video, query)
+            video_url = info["url"]
+            title = str(info.get("title") or "Video de YouTube")
+            channel = str(info.get("channel") or "YouTube")
+            media_format = "720" if is_video else "mp3"
+            await status_msg.edit_text("⏳ Loader.to está preparando la descarga…")
+            direct_url, loader_title = await loader_download_url(video_url, media_format)
+            title = loader_title or title
+
             caption_info = (
-                f"╭━━━〔 🎵 YOUTUBE {media_type} 〕━━━⬣\n"
-                f"┃ 📌 <b>Título:</b> {escape(title)}\n"
-                f"┃ 👤 <b>Canal:</b> {escape(channel)}\n"
-                f"┃ 🔗 <a href=\"{escape(downloaded.url, quote=True)}\">Ver en YouTube</a>\n"
+                f"╭━━━〔 🎵 YOUTUBE {'VIDEO' if is_video else 'AUDIO'} 〕━━━⬣\n"
+                f"┃ 📌 <b>Título:</b> {escape(title[:300])}\n"
+                f"┃ 👤 <b>Canal:</b> {escape(channel[:150])}\n"
+                f"┃ 🔗 <a href=\"{escape(video_url, quote=True)}\">Ver en YouTube</a>\n"
                 "╰━━━━━━━━━━━━━━━━⬣"
             )
-
-            if downloaded.thumbnail:
+            if info.get("thumbnail"):
                 try:
                     await message.reply_photo(
-                        photo=downloaded.thumbnail,
+                        photo=info["thumbnail"],
                         caption=caption_info,
                         parse_mode=enums.ParseMode.HTML,
                     )
                 except Exception as error:
                     logger.info("No se pudo enviar la miniatura de YouTube: %s", error)
-                    await status_msg.edit_text(caption_info, parse_mode=enums.ParseMode.HTML)
-            else:
-                await status_msg.edit_text(caption_info, parse_mode=enums.ParseMode.HTML)
 
             await safe_react(message, "⚡")
+            timeout = (20, 180) if is_video else (15, 120)
+            await asyncio.to_thread(download_file, direct_url, media_path, timeout)
 
             if is_video:
                 duration, thumb = await asyncio.to_thread(
                     VideoProcessor.get_video_meta,
-                    downloaded.path,
+                    media_path,
                     thumbnail_path,
                 )
                 if not duration:
                     raise MediaDownloadError(
-                        "yt-dlp terminó, pero FFprobe no pudo reconocer el video descargado."
+                        "Loader.to terminó la descarga, pero FFprobe no reconoció un video válido."
                     )
-                caption = f"🎬 <b>{escape(title)}</b>"
-                if downloaded.path.suffix.lower() == ".mp4":
-                    await message.reply_video(
-                        video=str(downloaded.path),
-                        caption=caption,
-                        parse_mode=enums.ParseMode.HTML,
-                        supports_streaming=True,
-                        duration=duration,
-                        thumb=thumb,
-                    )
-                else:
-                    await message.reply_document(
-                        document=str(downloaded.path),
-                        caption=f"🎬 {escape(title)} (formato {downloaded.path.suffix.lower()})",
-                        parse_mode=enums.ParseMode.HTML,
-                        thumb=thumb,
-                    )
+                await message.reply_video(
+                    video=str(media_path),
+                    caption=f"🎬 <b>{escape(title[:300])}</b>",
+                    parse_mode=enums.ParseMode.HTML,
+                    supports_streaming=True,
+                    duration=duration,
+                    thumb=thumb,
+                )
             elif is_voice_note:
-                await asyncio.to_thread(_validate_audio_file, downloaded.path)
-                await asyncio.to_thread(_convert_to_voice_note, downloaded.path, voice_path)
+                await asyncio.to_thread(_validate_audio_file, media_path)
+                await asyncio.to_thread(_convert_to_voice_note, media_path, voice_path)
                 await message.reply_voice(voice=str(voice_path))
             else:
-                await asyncio.to_thread(_validate_audio_file, downloaded.path)
+                await asyncio.to_thread(_validate_audio_file, media_path)
                 await message.reply_audio(
-                    audio=str(downloaded.path),
+                    audio=str(media_path),
                     title=title[:64] or "Audio de YouTube",
                     performer=channel[:64] or "YouTube",
                 )
-
             await safe_react(message, "👍")
-            success = True
         except subprocess.TimeoutExpired:
             logger.error("Timeout durante la descarga/procesamiento de YouTube")
             await safe_react(message, "👎")
-            await message.reply_text("⏱️ La operación tardó demasiado. Intenta con un video más corto.")
-        except (YouTubeDownloadError, MediaDownloadError) as error:
-            logger.warning("Descarga de YouTube fallida: %s", error)
+            await message.reply_text("⏱️ La operación tardó demasiado. Prueba un video más corto o una URL directa.")
+        except (LoaderToError, MediaDownloadError) as error:
+            logger.warning("Descarga de YouTube con Loader.to fallida: %s", error)
             await safe_react(message, "👎")
             await message.reply_text(
-                f"❌ <b>Error de YouTube:</b> {escape(str(error)[:700])}",
+                f"❌ <b>Error de descarga:</b> {escape(str(error)[:700])}",
                 parse_mode=enums.ParseMode.HTML,
             )
         except Exception as error:
-            logger.error("Error en la descarga de YouTube: %s", error, exc_info=True)
+            logger.error("Error en descarga de YouTube con Loader.to: %s", error, exc_info=True)
             await safe_react(message, "👎")
             await message.reply_text(
                 f"❌ <b>Error:</b> {escape(str(error)[:700])}",
                 parse_mode=enums.ParseMode.HTML,
             )
         finally:
-            YouTubeDownloader.cleanup(output_base)
+            media_path.unlink(missing_ok=True)
             thumbnail_path.unlink(missing_ok=True)
             voice_path.unlink(missing_ok=True)
-            if success:
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass

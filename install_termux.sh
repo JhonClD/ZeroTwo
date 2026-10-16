@@ -18,7 +18,7 @@ pkg update -y && pkg upgrade -y
 
 echo ""
 echo -e "${BLUE}📦 Paso 2/5: Instalando dependencias del sistema...${NC}"
-pkg install -y git python ffmpeg megatools wget curl aria2 nodejs-lts
+pkg install -y git python ffmpeg megatools wget curl aria2
 
 echo ""
 echo -e "${BLUE}📦 Paso 3/5: Instalando dependencias Python...${NC}"
@@ -47,7 +47,7 @@ echo ""
 echo -e "${BLUE}📦 Paso 5/5: Verificando instalación...${NC}"
 
 # Verificar herramientas
-tools=("python" "ffmpeg" "megadl" "wget" "curl" "aria2c" "node")
+tools=("python" "ffmpeg" "megadl" "wget" "curl" "aria2c")
 all_ok=true
 
 for tool in "${tools[@]}"; do
@@ -58,16 +58,6 @@ for tool in "${tools[@]}"; do
         all_ok=false
     fi
 done
-
-if command -v node &> /dev/null; then
-    node_major=$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)
-    if [ "$node_major" -ge 22 ]; then
-        echo -e "${GREEN}✅ Node.js $node_major satisface el mínimo 22+ de yt-dlp${NC}"
-    else
-        echo -e "${RED}❌ yt-dlp requiere Node.js 22+ (versión detectada: $node_major)${NC}"
-        all_ok=false
-    fi
-fi
 
 echo ""
 if [ "$all_ok" = true ]; then

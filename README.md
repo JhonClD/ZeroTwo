@@ -36,7 +36,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
-| Descargas sociales | YouTube mediante yt-dlp (búsqueda, audio MP3 y video hasta 720p); también enlaces públicos de Facebook, X/Twitter y TikTok. |
+| Descargas sociales | YouTube con búsqueda y descarga mediante Loader.to (audio MP3 y video hasta 720p); también enlaces públicos de Facebook, X/Twitter y TikTok. |
 | Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth (opcional) o guardarlos en una carpeta compartida de Android. |
@@ -52,12 +52,12 @@ Antes de instalar el proyecto, necesitas lo siguiente:
 
 | Requisito | Termux | PC |
 | --- | --- | --- |
-| Python | `python` desde Termux | Python 3.10 o superior |
+| Python | `python` desde Termux | Python 3.9 o superior |
 | Git | `git` desde Termux | Git |
 | FFmpeg/FFprobe | `ffmpeg` | FFmpeg |
 | Descargas MEGA | `megatools` | Megatools; en Windows se recomienda WSL |
 | Torrents/descargas rápidas | `aria2` | aria2 opcional; en Linux, `/torrent` prepara un ejecutable portable si falta |
-| YouTube | `nodejs-lts` o Deno 2.3+ | Deno 2.3+ o Node.js 22+; FFmpeg/FFprobe |
+| YouTube | Loader.to; FFmpeg/FFprobe | Loader.to; FFmpeg/FFprobe |
 | Credenciales | Token creado con [@BotFather](https://t.me/BotFather) | Token creado con [@BotFather](https://t.me/BotFather) |
 
 El bot necesita acceso a Internet mientras está en ejecución. En Termux, se recomienda utilizar una versión actualizada instalada desde [F-Droid](https://f-droid.org/packages/com.termux/) o desde la fuente oficial de Termux; no mezcles paquetes de instalaciones diferentes.
