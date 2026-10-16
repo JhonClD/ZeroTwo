@@ -9,6 +9,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from pyrogram import filters
@@ -18,7 +21,58 @@ logger = logging.getLogger(__name__)
 _VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
 
 
-def register(app, work_dir: Path) -> None:
+def _send_video_by_file_id(bot_token: str, payload: dict) -> dict:
+    """Llama sendVideo con IDs existentes; no transfiere bytes del video."""
+    url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
+    data = urllib.parse.urlencode(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        try:
+            result = json.loads(error.read().decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise RuntimeError("Telegram Bot API rechazó el envío del video.") from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise RuntimeError("No se pudo conectar con Telegram Bot API para enviar el video.") from None
+    if not isinstance(result, dict) or not result.get("ok"):
+        description = result.get("description", "error sin detalle") if isinstance(result, dict) else "respuesta no válida"
+        raise RuntimeError(f"Telegram no pudo reutilizar el video con portada: {description}")
+    return result
+
+
+def _bot_api_entities(entities) -> str | None:
+    """Serializa entidades Pyrogram al JSON de Bot API, conservando formato del caption."""
+    if not entities:
+        return None
+    serialized = []
+    for entity in entities:
+        item = {
+            "type": getattr(entity.type, "name", str(entity.type)).lower(),
+            "offset": entity.offset,
+            "length": entity.length,
+        }
+        for name in ("url", "language", "custom_emoji_id"):
+            value = getattr(entity, name, None)
+            if value is not None:
+                item[name] = str(value) if name == "custom_emoji_id" else value
+        user = getattr(entity, "user", None)
+        if user is not None:
+            item["user"] = {
+                "id": user.id,
+                "is_bot": bool(getattr(user, "is_bot", False)),
+                "first_name": getattr(user, "first_name", "Usuario") or "Usuario",
+            }
+            for name in ("last_name", "username", "language_code"):
+                value = getattr(user, name, None)
+                if value is not None:
+                    item["user"][name] = value
+        serialized.append(item)
+    return json.dumps(serialized, ensure_ascii=False)
+
+
+def register(app, work_dir: Path, bot_token: str) -> None:
     """Registra el flujo de portada; la base local solo guarda Telegram file_id."""
     root = Path(work_dir) / "video_covers"
     root.mkdir(parents=True, exist_ok=True)
@@ -116,8 +170,45 @@ def register(app, work_dir: Path) -> None:
         ):
             return
         reported_size = int(getattr(media, "file_size", 0) or 0)
-        if reported_size > max_video_mb * 1024 * 1024:
+        if not message.video and reported_size > max_video_mb * 1024 * 1024:
             await message.reply_text(f"El video supera el límite de {max_video_mb} MB para añadir una miniatura en este hosting.")
+            return
+
+        # Con Bot API actual, video y cover pueden enviarse por file_id: Telegram
+        # reutiliza ambos archivos en sus servidores; no descargamos ni resubimos el MP4.
+        if message.video:
+            status = await message.reply_text("🖼 Aplicando portada al video en Telegram…")
+            payload = {
+                "chat_id": message.chat.id,
+                "video": media.file_id,
+                "cover": file_id,
+                "supports_streaming": "true",
+                "reply_parameters": json.dumps({"message_id": message.id}),
+                "protect_content": "true" if message.has_protected_content else "false",
+            }
+            if getattr(media, "duration", None):
+                payload["duration"] = media.duration
+            if getattr(media, "width", None):
+                payload["width"] = media.width
+            if getattr(media, "height", None):
+                payload["height"] = media.height
+            if message.caption:
+                payload["caption"] = message.caption
+            entities = _bot_api_entities(message.caption_entities)
+            if entities:
+                payload["caption_entities"] = entities
+            try:
+                await asyncio.to_thread(_send_video_by_file_id, bot_token, payload)
+                try:
+                    await status.delete()
+                except Exception:
+                    pass
+            except Exception as error:
+                logger.warning("Bot API no pudo enviar el video reutilizando file_id: %s", error)
+                try:
+                    await status.edit_text(f"No se pudo poner la portada sin descargar el video: {str(error)[:400]}")
+                except Exception:
+                    pass
             return
 
         lock = user_locks.setdefault(int(key), asyncio.Lock())

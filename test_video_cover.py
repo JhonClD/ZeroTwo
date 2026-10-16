@@ -1,13 +1,12 @@
 """Pruebas del guardado de portadas y del reenvío Pyrogram con miniatura."""
 
 import json
-import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from handlers.video_cover_handler import register
+from handlers.video_cover_handler import _send_video_by_file_id, register
 
 
 class FakeApp:
@@ -61,7 +60,7 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="zerotwo-cover-test-")
         self.work = Path(self.temp.name)
         self.app = FakeApp()
-        register(self.app, self.work)
+        register(self.app, self.work, "test-token")
 
     async def asyncTearDown(self):
         self.temp.cleanup()
@@ -74,7 +73,7 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(db.read_text())["123"], "cover-file-id")
 
         new_app = FakeApp()
-        register(new_app, self.work)
+        register(new_app, self.work, "test-token")
         show_message = FakeMessage()
         await new_app.handlers["show_cover"](None, show_message)
         self.assertEqual(show_message.photos[0][0], "cover-file-id")
@@ -82,53 +81,63 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         await new_app.handlers["delete_cover"](None, FakeMessage())
         self.assertEqual(json.loads(db.read_text()), {})
 
-    async def test_video_is_resent_with_normalized_thumb(self):
-        if not shutil.which("ffmpeg"):
-            self.skipTest("FFmpeg no instalado")
-        with tempfile.TemporaryDirectory(prefix="zerotwo-cover-assets-") as asset_dir:
-            asset = Path(asset_dir)
-            video = asset / "source.mp4"
-            cover = asset / "cover.png"
-            make_video = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=red:s=160x120:r=10", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(video)],
-                capture_output=True, timeout=30,
-            )
-            self.assertEqual(make_video.returncode, 0, make_video.stderr.decode(errors="replace"))
-            make_cover = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=green:s=640x480", "-frames:v", "1", str(cover)],
-                capture_output=True, timeout=30,
-            )
-            self.assertEqual(make_cover.returncode, 0, make_cover.stderr.decode(errors="replace"))
+    async def test_video_reuses_file_ids_without_downloading_or_reuploading(self):
+        photo_message = FakeMessage()
+        photo_message.photo = [type("Photo", (), {"file_id": "cover-file-id"})()]
+        await self.app.handlers["save_cover"](None, photo_message)
 
-            photo_message = FakeMessage()
-            photo_message.photo = [type("Photo", (), {"file_id": "cover-file-id"})()]
-            await self.app.handlers["save_cover"](None, photo_message)
+        media = type("Video", (), {
+            "file_id": "video-file-id", "file_size": 4_000_000,
+            "file_name": "test.mp4", "duration": 12, "width": 640, "height": 360,
+        })()
+        message = FakeMessage()
+        message.video = media
+        payloads = []
 
-            media = type("Video", (), {"file_size": video.stat().st_size, "file_name": "test.mp4", "duration": 1, "width": 160, "height": 120})()
-            message = FakeMessage()
-            message.video = media
-            sent = {}
+        def fake_bot_api(token, payload):
+            payloads.append((token, payload))
+            return {"ok": True, "result": {"message_id": 1}}
 
-            class FakeClient:
-                async def download_media(self, source, file_name):
-                    from shutil import copyfile
-                    origin = video if source is message else cover
-                    target = Path(file_name)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    copyfile(origin, target)
-                    return str(target)
+        class NoDownloadClient:
+            async def download_media(self, *args, **kwargs):
+                raise AssertionError("El flujo video normal no debe descargar el video")
 
-                async def send_video(self, **kwargs):
-                    sent.update(kwargs)
-                    sent["thumb_bytes"] = Path(kwargs["thumb"]).read_bytes()
+        with patch("handlers.video_cover_handler._send_video_by_file_id", side_effect=fake_bot_api):
+            await self.app.handlers["add_cover"](NoDownloadClient(), message)
+        self.assertTrue(message.status.deleted)
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(payloads[0][0], "test-token")
+        payload = payloads[0][1]
+        self.assertEqual(payload["video"], "video-file-id")
+        self.assertEqual(payload["cover"], "cover-file-id")
+        self.assertEqual(payload["caption"], "caption example")
+        self.assertEqual(payload["chat_id"], 456)
 
-            await self.app.handlers["add_cover"](FakeClient(), message)
-            self.assertTrue(message.status.deleted)
-            self.assertEqual(sent["caption"], "caption example")
-            self.assertEqual(sent["thumb_bytes"][:2], b"\xff\xd8")
-            self.assertLessEqual(len(sent["thumb_bytes"]), 200 * 1024)
-            self.assertEqual(sent["duration"], 1)
-            self.assertEqual(list((self.work / "video_covers").glob("cover_*/")), [])
+    async def test_bot_api_receives_only_file_ids(self):
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self: b'{"ok":true,"result":{"message_id":9}}',
+        })()
+        captured = {}
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["body"] = request.data.decode()
+            captured["timeout"] = timeout
+            return response
+
+        with patch("handlers.video_cover_handler.urllib.request.urlopen", side_effect=fake_urlopen):
+            result = _send_video_by_file_id("test-token", {
+                "chat_id": 456, "video": "video-id", "cover": "cover-id",
+            })
+        self.assertTrue(result["ok"])
+        self.assertTrue(captured["url"].endswith("/sendVideo"))
+        from urllib.parse import parse_qs
+        body = parse_qs(captured["body"])
+        self.assertEqual(body["video"], ["video-id"])
+        self.assertEqual(body["cover"], ["cover-id"])
+        self.assertNotIn(b"video bytes", captured["body"].encode())
 
 
 if __name__ == "__main__":

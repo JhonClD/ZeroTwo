@@ -47,7 +47,8 @@ def register(app):
 ├ Envía una foto para guardarla como tu miniatura
 ├ Al enviar un video, se reenviará con esa miniatura
 ├ /show_cover — Ver tu portada guardada
-└ /del_cover — Eliminarla
+├ /del_cover — Eliminarla
+└ Video normal: sin descargarlo; como documento puede requerir descarga y reenvío
 
 <b>8️⃣ Twitter / X</b>
 ├ /x &lt;url&gt;

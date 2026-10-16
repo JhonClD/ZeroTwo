@@ -175,7 +175,7 @@ jkanime_notify_handler.register(app, WORK_DIR)
 torrent_handler.register(app, DOWNLOAD_DIR)
 crunchyroll_notify_handler.register(app, WORK_DIR)
 video_processing_handler.register(app, user_states, DOWNLOAD_DIR)
-video_cover_handler.register(app, WORK_DIR)
+video_cover_handler.register(app, WORK_DIR, BOT_TOKEN)
 
 
 if __name__ == "__main__":
