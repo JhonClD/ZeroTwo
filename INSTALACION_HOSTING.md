@@ -83,7 +83,7 @@ Si el panel exige un comando para instalar dependencias al crear o reconstruir e
 python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt
 ```
 
-No ejecutes el bot dos veces a la vez con el mismo token. En un VPS sin panel, puedes iniciarlo en primer plano dentro de `tmux` o configurarlo como servicio `systemd`; el panel normalmente se encarga de mantener y reiniciar su proceso.
+No ejecutes el bot dos veces a la vez con el mismo token. En Linux, ZeroTwo usa un bloqueo en `~/telegram_bot_files/.zerotwo.lock` para detener una segunda instancia si ambas comparten ese almacenamiento. Este bloqueo no coordina instalaciones en hosts/dispositivos distintos: apaga cualquier copia adicional (por ejemplo, Termux) para evitar respuestas duplicadas. En un VPS sin panel, puedes iniciarlo en primer plano dentro de `tmux` o configurarlo como servicio `systemd`; el panel normalmente se encarga de mantener y reiniciar su proceso.
 
 ## 5. Verificar que está funcionando
 

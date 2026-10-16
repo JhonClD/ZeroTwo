@@ -10,6 +10,11 @@ import logging
 import shutil
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # Windows no ofrece flock; Pterodactyl/Termux son Linux.
+    fcntl = None
+
 # Parche de compatibilidad: Python 3.12+ (incluido Termux) ya no crea
 # automáticamente un event loop en el hilo principal. Pyrogram lo necesita
 # antes de importarse, así que lo creamos aquí manualmente.
@@ -103,6 +108,20 @@ SYNC_DIR = Path(os.getenv("ZERO_TWO_SYNC_DIR", str(DEFAULT_SYNC_DIR))).expanduse
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None
 WORK_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
+_instance_lock_file = None
+if fcntl is not None:
+    _instance_lock_file = (WORK_DIR / ".zerotwo.lock").open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(_instance_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        logger.error("Ya hay otra instancia de ZeroTwo activa en este almacenamiento; se detiene esta copia para evitar respuestas duplicadas.")
+        raise SystemExit(1)
+    _instance_lock_file.seek(0)
+    _instance_lock_file.truncate()
+    _instance_lock_file.write(f"pid={os.getpid()}\n")
+    _instance_lock_file.flush()
+else:
+    logger.warning("No se pudo activar el bloqueo de instancia única en este sistema.")
 try:
     SYNC_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:

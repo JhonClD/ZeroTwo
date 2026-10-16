@@ -141,6 +141,10 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"video bytes", captured["body"].encode())
 
     async def test_thumoff_persists_and_thumon_reactivates(self):
+        cover_message = FakeMessage()
+        cover_message.photo = type("Photo", (), {"file_id": "cover-id"})()
+        await self.app.handlers["save_cover"](None, cover_message)
+
         message = FakeMessage()
         await self.app.handlers["disable_cover"](None, message)
         settings = self.work / "video_covers" / "settings.json"
@@ -158,6 +162,12 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         with patch("handlers.video_cover_handler._send_video_by_file_id") as send_video:
             await after_restart.handlers["add_cover"](NoDownloadClient(), video_message)
             send_video.assert_not_called()
+
+        new_photo = FakeMessage()
+        new_photo.photo = type("Photo", (), {"file_id": "new-cover-id"})()
+        await after_restart.handlers["save_cover"](None, new_photo)
+        self.assertIn("DESACTIVADA", new_photo.responses[0])
+        self.assertIn("/thumon", new_photo.responses[0])
 
         enabled_message = FakeMessage()
         await after_restart.handlers["enable_cover"](None, enabled_message)

@@ -119,11 +119,24 @@ def register(app, work_dir: Path, bot_token: str) -> None:
             await asyncio.to_thread(temp_path.write_text, data, encoding="utf-8")
             await asyncio.to_thread(temp_path.replace, settings_path)
 
+    async def refresh_settings() -> None:
+        """Sincroniza la preferencia si hay más de un proceso en el mismo volumen."""
+        try:
+            raw_settings = await asyncio.to_thread(
+                lambda: json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+            )
+            current = set(map(str, raw_settings.get("disabled_users", []))) if isinstance(raw_settings, dict) else set()
+            disabled_users.clear()
+            disabled_users.update(current)
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError) as error:
+            logger.warning("No se pudo actualizar la configuración de portadas: %s", error)
+
     def owner_key(message: Message) -> str | None:
         return str(message.from_user.id) if message.from_user else None
 
     @app.on_message(filters.command("thumon"), group=10)
     async def enable_cover(client, message: Message):
+        await refresh_settings()
         key = owner_key(message)
         if not key:
             await message.reply_text("No pude identificar tu cuenta de Telegram.")
@@ -143,6 +156,7 @@ def register(app, work_dir: Path, bot_token: str) -> None:
 
     @app.on_message(filters.command("thumoff"), group=10)
     async def disable_cover(client, message: Message):
+        await refresh_settings()
         key = owner_key(message)
         if not key:
             await message.reply_text("No pude identificar tu cuenta de Telegram.")
@@ -187,6 +201,7 @@ def register(app, work_dir: Path, bot_token: str) -> None:
 
     @app.on_message(filters.photo, group=10)
     async def save_cover(client, message: Message):
+        await refresh_settings()
         key = owner_key(message)
         if not key:
             await message.reply_text("No pude identificar tu cuenta de Telegram.")
@@ -210,10 +225,20 @@ def register(app, work_dir: Path, bot_token: str) -> None:
             logger.exception("No se pudo guardar la portada")
             await message.reply_text(f"No se pudo guardar la portada en el almacenamiento del hosting: {error}")
             return
-        await message.reply_text("Portada guardada. Cuando envíes un video, lo reenviaré con esa miniatura. Usa /show_cover o /del_cover.")
+        if key in disabled_users:
+            await message.reply_text(
+                "Portada guardada, pero la aplicación automática está DESACTIVADA. "
+                "No se aplicará hasta que uses /thumon. Usa /show_cover o /del_cover."
+            )
+        else:
+            await message.reply_text(
+                "Portada guardada. Se aplicará a tus videos mientras esté activada. "
+                "Usa /thumoff para pausarla, /show_cover para verla o /del_cover para borrarla."
+            )
 
     @app.on_message(filters.video | filters.document, group=10)
     async def add_cover(client, message: Message):
+        await refresh_settings()
         key = owner_key(message)
         if not key or key in disabled_users:
             return
