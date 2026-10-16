@@ -23,6 +23,7 @@ from . import (
     monoschinos_notify_handler,
     jkanime_notify_handler,
     crunchyroll_notify_handler,
+    video_processing_handler,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     'monoschinos_notify_handler',
     'jkanime_notify_handler',
     'crunchyroll_notify_handler',
+    'video_processing_handler',
 ]

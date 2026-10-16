@@ -36,6 +36,14 @@ Puedo ayudarte con todo esto:
 Pega un enlace de MEGA o MediaFire directamente
 
 ━━━━━━━━━━━━━━━━━━━━
+🎞 <b>PROCESAMIENTO DE VIDEO</b>
+━━━━━━━━━━━━━━━━━━━━
+/process        — Elegir compresión o quemar subtítulos
+/compress       — Comprimir con perfil o tamaño objetivo
+/subtitles      — Quemar subtítulos internos o externos
+/processstatus  — Ver estado · /cancelprocess para cancelar
+
+━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━
 /hd             — Mejorar imagen con IA (upscale 4x)

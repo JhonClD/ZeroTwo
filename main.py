@@ -142,6 +142,7 @@ from handlers import (
     jkanime_notify_handler,
     torrent_handler,
     crunchyroll_notify_handler,
+    video_processing_handler,
 )
 
 # Registrar handlers
@@ -172,6 +173,7 @@ monoschinos_notify_handler.register(app, WORK_DIR)
 jkanime_notify_handler.register(app, WORK_DIR)
 torrent_handler.register(app, DOWNLOAD_DIR)
 crunchyroll_notify_handler.register(app, WORK_DIR)
+video_processing_handler.register(app, user_states, DOWNLOAD_DIR)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,10 @@ Esta guía sirve para un VPS Ubuntu/Debian o un panel de hosting que ejecute pro
 
 Las descargas de YouTube se solicitan a Loader.to; no requieren Node.js, Deno ni credenciales de Google. El bot busca metadatos públicos en YouTube y luego pide a Loader.to el MP3 o video (hasta 720p). FFmpeg/FFprobe se utilizan para validar el audio/video y convertir notas de voz. El servicio externo puede limitar o rechazar solicitudes desde algunas redes de hosting.
 
+Para procesar videos, responde al archivo con `/process`, `/compress` o `/subtitles`. La compresión usa FFmpeg/FFprobe existentes. Quemar subtítulos necesita una build de FFmpeg con el filtro `subtitles` y libass; no añade dependencias Python y el bot avisa si el build del hosting no lo incluye. `/compress 700` intenta acercarse a 700 MB en dos pasadas, mientras que los perfiles son de una pasada y normalmente consumen menos CPU. En paneles restringidos, el bot usa un trabajador FFmpeg por defecto, limita el tamaño a 1800 MB y elimina la carpeta temporal al finalizar.
+
+Se pueden ajustar los límites en las variables del panel: `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (100–4096), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (60–21600 segundos). Mantén un trabajador y pocos hilos en BotKeep para no agotar CPU/RAM; no se requiere `sudo` para estas opciones.
+
 ## 1. Preparar el entorno
 
 En un VPS Ubuntu/Debian con acceso SSH y permisos `sudo`:
@@ -103,6 +107,7 @@ Vuelve a iniciar el proceso desde el panel.
 - **MediaFire no descarga:** tras actualizar, el bot puede recurrir a `requests` si faltan `aria2c`, `wget` y `curl`. Si el registro indica HTTP 403, el hosting está recibiendo una denegación de MediaFire/CDN; confirma si funciona desde otra red y consulta al proveedor por la conexión saliente.
 - **`/torrent` no puede preparar aria2 portable:** comprueba que el hosting permita HTTPS saliente a GitHub y ejecución de `.runtime/aria2-*/aria2c`. Si el mensaje menciona tráfico o conexión torrent, el proveedor podría bloquear DHT, UDP o conexiones salientes de pares; el binario portable no puede eludir esas restricciones. Pide al proveedor habilitar BitTorrent o `aria2c` en el runtime.
 - **`ffmpeg` o `ffprobe` no aparecen:** el entorno no incluye las herramientas de procesamiento requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
+- **El quemado de subtítulos informa que no existe `subtitles`:** la build del panel carece de libass. Pide al proveedor una build de FFmpeg compilada con `--enable-libass`/el filtro `subtitles`; la compresión normal no depende de libass.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.
 - **El panel reinicia el bot repetidamente:** revisa los registros y confirma token, dependencias, permisos y conectividad saliente a Telegram.
 - **Falta espacio o se pierden archivos al reiniciar:** revisa límites y persistencia del almacenamiento del proveedor.

@@ -332,11 +332,17 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/gdrive <enlace_o_id>` | Descarga un archivo público de Google Drive, sin OAuth/API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
+| `/process` | Responde a un video para elegir compresión o quemar subtítulos. |
+| `/compress` | Abre perfiles de compresión; `/compress 700` intenta aproximarse a 700 MB mediante dos pasadas. |
+| `/subtitles` o `/sub` | Quema una pista de texto interna o un `.srt`, `.ass`, `.ssa` o `.vtt` enviado al bot. |
+| `/processstatus`, `/cancelprocess` | Consulta o cancela tu trabajo de procesamiento. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
+
+El procesamiento multimedia usa FFmpeg/FFprobe del entorno. La compresión normal usa una pasada CRF; un tamaño objetivo se aproxima con dos pasadas y consume más CPU. Quemar subtítulos requiere que FFmpeg incluya el filtro `subtitles` (libass). Por defecto se procesa un video a la vez y se admiten hasta dos trabajos entre activos y en cola. Se puede ajustar en el hosting con `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (por defecto 1800 MB), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (segundos, por defecto 7200). Los archivos de trabajo se eliminan tras completar, cancelar o fallar.
 
 ## Solución de problemas
 
