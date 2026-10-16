@@ -17,6 +17,12 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 DRIVE_DOWNLOAD_URL = 'https://drive.google.com/uc'
 DRIVE_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36'}
+PUBLIC_LINK_HELP = (
+    'La descarga pública de Drive no pudo acceder al archivo. Puede estar privado, '
+    'el enlace/ID puede ser incorrecto o el propietario puede haber bloqueado la descarga. '
+    'En Drive abre ⋮ > Administrar acceso > Acceso general > '
+    'Cualquier persona con el enlace (Lector), guarda y copia el enlace nuevo.'
+)
 
 # ── Importación opcional de las librerías de Google ───────────────────────────
 try:
@@ -85,9 +91,10 @@ def _open_public_drive_response(session: requests.Session, file_id: str):
         DRIVE_DOWNLOAD_URL, params=params, headers=DRIVE_HEADERS,
         stream=True, timeout=(20, 60), allow_redirects=True,
     )
-    if response.status_code == 403:
+    if response.status_code in (400, 403, 404):
+        status_code = response.status_code
         response.close()
-        raise requests.HTTPError('Google Drive respondió HTTP 403; revisa que el archivo sea público.', response=response)
+        raise PermissionError(f'Google Drive respondió HTTP {status_code}. {PUBLIC_LINK_HELP}')
     response.raise_for_status()
 
     content_type = response.headers.get('Content-Type', '').lower()
@@ -109,9 +116,8 @@ def _open_public_drive_response(session: requests.Session, file_id: str):
         response.close()
         if not token:
             raise PermissionError(
-                'No se pudo descargar el archivo sin iniciar sesión. '
-                'En Google Drive, compártelo como «Cualquier persona con el enlace». '
-                'Los documentos de Google (Docs/Sheets) requieren exportación.'
+                f'Google Drive mostró una página web en vez del archivo. {PUBLIC_LINK_HELP} '
+                'Los documentos nativos de Google (Docs/Sheets/Slides) requieren exportación.'
             )
 
         params['confirm'] = token
@@ -119,16 +125,19 @@ def _open_public_drive_response(session: requests.Session, file_id: str):
             DRIVE_DOWNLOAD_URL, params=params, headers=DRIVE_HEADERS,
             stream=True, timeout=(20, 60), allow_redirects=True,
         )
-        if response.status_code == 403:
+        if response.status_code in (400, 403, 404):
+            status_code = response.status_code
             response.close()
-            raise requests.HTTPError('Google Drive respondió HTTP 403 al confirmar la descarga.', response=response)
+            raise PermissionError(
+                f'Google Drive respondió HTTP {status_code} al confirmar la descarga. '
+                f'{PUBLIC_LINK_HELP}'
+            )
         response.raise_for_status()
         if ('text/html' in response.headers.get('Content-Type', '').lower()
                 and not response.headers.get('Content-Disposition')):
             response.close()
             raise PermissionError(
-                'Google Drive no entregó el archivo. Comprueba que el enlace sea público '
-                'y que permita descargarlo.'
+                f'Google Drive siguió mostrando una página web, no el archivo. {PUBLIC_LINK_HELP}'
             )
     return response
 
