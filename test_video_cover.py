@@ -70,6 +70,8 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         # Pyrogram expone message.photo como Photo; Aiogram suele usar una lista.
         message.photo = type("Photo", (), {"file_id": "cover-file-id"})()
         await self.app.handlers["save_cover"](None, message)
+        await self.app.handlers["save_cover"](None, message)
+        self.assertEqual(message.responses, ["Cover/Thumbnail Saved Successfully ✅"])
         db = self.work / "video_covers" / "covers.json"
         self.assertEqual(json.loads(db.read_text())["123"], "cover-file-id")
 
@@ -164,10 +166,10 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
             send_video.assert_not_called()
 
         new_photo = FakeMessage()
+        new_photo.id = 790
         new_photo.photo = type("Photo", (), {"file_id": "new-cover-id"})()
         await after_restart.handlers["save_cover"](None, new_photo)
-        self.assertIn("DESACTIVADA", new_photo.responses[0])
-        self.assertIn("/thumon", new_photo.responses[0])
+        self.assertEqual(new_photo.responses, ["Cover/Thumbnail Saved Successfully ✅"])
 
         enabled_message = FakeMessage()
         await after_restart.handlers["enable_cover"](None, enabled_message)

@@ -12,6 +12,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from pathlib import Path
 
 from pyrogram import filters
@@ -97,6 +98,9 @@ def register(app, work_dir: Path, bot_token: str) -> None:
 
     db_lock = asyncio.Lock()
     user_locks: dict[int, asyncio.Lock] = {}
+    photo_update_lock = asyncio.Lock()
+    photo_updates_inflight: set[tuple[int, int]] = set()
+    photo_updates_done: OrderedDict[tuple[int, int], None] = OrderedDict()
     try:
         max_video_mb = max(50, min(2048, int(os.getenv("ZERO_TWO_COVER_MAX_MB", "1800"))))
     except ValueError:
@@ -201,40 +205,49 @@ def register(app, work_dir: Path, bot_token: str) -> None:
 
     @app.on_message(filters.photo, group=10)
     async def save_cover(client, message: Message):
-        await refresh_settings()
-        key = owner_key(message)
-        if not key:
-            await message.reply_text("No pude identificar tu cuenta de Telegram.")
-            return
-        photo = message.photo
-        if isinstance(photo, (list, tuple)):
-            photo = photo[-1] if photo else None
-        file_id = getattr(photo, "file_id", None)
-        if not file_id:
-            await message.reply_text("No pude leer la foto. Envíala nuevamente como foto de Telegram.")
-            return
-        previous_cover = covers.get(key)
-        covers[key] = file_id
+        update_id = (message.chat.id, message.id)
+        async with photo_update_lock:
+            if update_id in photo_updates_done or update_id in photo_updates_inflight:
+                return
+            photo_updates_inflight.add(update_id)
+        saved = False
         try:
-            await save_db()
-        except OSError as error:
-            if previous_cover is None:
-                covers.pop(key, None)
-            else:
-                covers[key] = previous_cover
-            logger.exception("No se pudo guardar la portada")
-            await message.reply_text(f"No se pudo guardar la portada en el almacenamiento del hosting: {error}")
-            return
-        if key in disabled_users:
+            await refresh_settings()
+            key = owner_key(message)
+            if not key:
+                await message.reply_text("No pude identificar tu cuenta de Telegram.")
+                return
+            photo = message.photo
+            if isinstance(photo, (list, tuple)):
+                photo = photo[-1] if photo else None
+            file_id = getattr(photo, "file_id", None)
+            if not file_id:
+                await message.reply_text("No pude leer la foto. Envíala nuevamente como foto de Telegram.")
+                return
+            previous_cover = covers.get(key)
+            covers[key] = file_id
+            try:
+                await save_db()
+            except OSError as error:
+                if previous_cover is None:
+                    covers.pop(key, None)
+                else:
+                    covers[key] = previous_cover
+                logger.exception("No se pudo guardar la portada")
+                await message.reply_text(f"No se pudo guardar la portada en el almacenamiento del hosting: {error}")
+                return
+            saved = True
             await message.reply_text(
-                "Portada guardada, pero la aplicación automática está DESACTIVADA. "
-                "No se aplicará hasta que uses /thumon. Usa /show_cover o /del_cover."
+                "Cover/Thumbnail Saved Successfully ✅"
             )
-        else:
-            await message.reply_text(
-                "Portada guardada. Se aplicará a tus videos mientras esté activada. "
-                "Usa /thumoff para pausarla, /show_cover para verla o /del_cover para borrarla."
-            )
+        finally:
+            async with photo_update_lock:
+                photo_updates_inflight.discard(update_id)
+                if saved:
+                    photo_updates_done[update_id] = None
+                    photo_updates_done.move_to_end(update_id)
+                    if len(photo_updates_done) > 2048:
+                        photo_updates_done.popitem(last=False)
 
     @app.on_message(filters.video | filters.document, group=10)
     async def add_cover(client, message: Message):
