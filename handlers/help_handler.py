@@ -46,6 +46,8 @@ def register(app):
 <b>🖼 Portada de video</b>
 ├ Envía una foto para guardarla como tu miniatura
 ├ Al enviar un video, se reenviará con esa miniatura
+├ /thumon — Activar aplicación automática
+├ /thumoff — Desactivarla temporalmente
 ├ /show_cover — Ver tu portada guardada
 ├ /del_cover — Eliminarla
 └ Video normal: sin descargarlo; como documento puede requerir descarga y reenvío

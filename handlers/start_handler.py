@@ -44,7 +44,8 @@ Pega un enlace de MEGA o MediaFire directamente
 /processstatus  — Ver estado · /cancelprocess para cancelar
 
 🖼 <b>PORTADA DE VIDEO</b>
-Envía una foto para guardarla como miniatura automática de tus videos.
+Envía una foto para guardarla como miniatura de tus videos.
+/thumon         — Activar · /thumoff para desactivar
 /show_cover     — Ver tu portada · /del_cover para borrarla
 
 ━━━━━━━━━━━━━━━━━━━━

@@ -338,6 +338,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/processstatus`, `/cancelprocess` | Consulta o cancela tu trabajo de procesamiento. |
 | Enviar una foto | La guarda como tu miniatura personal para videos. |
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
+| `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
@@ -346,7 +347,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 
 El procesamiento multimedia usa FFmpeg/FFprobe del entorno. La compresión normal usa una pasada CRF; un tamaño objetivo se aproxima con dos pasadas y consume más CPU. Quemar subtítulos requiere que FFmpeg incluya el filtro `subtitles` (libass). Por defecto se procesa un video a la vez y se admiten hasta dos trabajos entre activos y en cola. Se puede ajustar en el hosting con `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (por defecto 1800 MB), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (segundos, por defecto 7200). Los archivos de trabajo se eliminan tras completar, cancelar o fallar.
 
-La función de portada guarda por usuario solo el `file_id` de Telegram en `~/telegram_bot_files/video_covers/covers.json`. Para videos enviados como video normal, usa la Bot API oficial `sendVideo` con los `file_id` tanto del video como de la portada: Telegram reutiliza los archivos en sus servidores, por lo que el bot no descarga ni vuelve a subir el MP4. Si se envía como documento/archivo, Telegram no permite cambiar su tipo al reutilizar el `file_id`; ese caso usa el fallback de descarga y reenvío con `thumb`, requiere FFmpeg y espacio temporal (límite por defecto 1800 MB, ajustable con `ZERO_TWO_COVER_MAX_MB`). La portada cambia la miniatura que muestra Telegram, no los fotogramas del video.
+La función de portada guarda por usuario solo el `file_id` de Telegram en `~/telegram_bot_files/video_covers/covers.json`; la preferencia de activación queda en `settings.json`. Está activa por defecto para preservar el comportamiento esperado. Usa `/thumoff` para desactivarla y `/thumon` para reactivarla. Para videos enviados como video normal, usa la Bot API oficial `sendVideo` con los `file_id` tanto del video como de la portada: Telegram reutiliza los archivos en sus servidores, por lo que el bot no descarga ni vuelve a subir el MP4. Si se envía como documento/archivo, Telegram no permite cambiar su tipo al reutilizar el `file_id`; ese caso usa el fallback de descarga y reenvío con `thumb`, requiere FFmpeg y espacio temporal (límite por defecto 1800 MB, ajustable con `ZERO_TWO_COVER_MAX_MB`). La portada cambia la miniatura que muestra Telegram, no los fotogramas del video.
 
 ## Solución de problemas
 

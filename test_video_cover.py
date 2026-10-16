@@ -139,6 +139,30 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["cover"], ["cover-id"])
         self.assertNotIn(b"video bytes", captured["body"].encode())
 
+    async def test_thumoff_persists_and_thumon_reactivates(self):
+        message = FakeMessage()
+        await self.app.handlers["disable_cover"](None, message)
+        settings = self.work / "video_covers" / "settings.json"
+        self.assertEqual(json.loads(settings.read_text())["disabled_users"], ["123"])
+
+        after_restart = FakeApp()
+        register(after_restart, self.work, "test-token")
+        video_message = FakeMessage()
+        video_message.video = type("Video", (), {"file_id": "video-id"})()
+
+        class NoDownloadClient:
+            async def download_media(self, *args, **kwargs):
+                raise AssertionError("Portadas desactivadas no deben procesar el video")
+
+        with patch("handlers.video_cover_handler._send_video_by_file_id") as send_video:
+            await after_restart.handlers["add_cover"](NoDownloadClient(), video_message)
+            send_video.assert_not_called()
+
+        enabled_message = FakeMessage()
+        await after_restart.handlers["enable_cover"](None, enabled_message)
+        self.assertEqual(json.loads(settings.read_text())["disabled_users"], [])
+        self.assertIn("activadas", enabled_message.responses[0])
+
 
 if __name__ == "__main__":
     unittest.main()

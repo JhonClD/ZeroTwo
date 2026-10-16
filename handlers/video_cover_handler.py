@@ -77,6 +77,7 @@ def register(app, work_dir: Path, bot_token: str) -> None:
     root = Path(work_dir) / "video_covers"
     root.mkdir(parents=True, exist_ok=True)
     db_path = root / "covers.json"
+    settings_path = root / "settings.json"
     try:
         raw = json.loads(db_path.read_text(encoding="utf-8")) if db_path.exists() else {}
         covers: dict[str, str] = {
@@ -87,6 +88,12 @@ def register(app, work_dir: Path, bot_token: str) -> None:
     except (OSError, json.JSONDecodeError) as error:
         logger.warning("No se pudo leer la base local de portadas: %s", error)
         covers = {}
+    try:
+        raw_settings = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+        disabled_users = set(map(str, raw_settings.get("disabled_users", []))) if isinstance(raw_settings, dict) else set()
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError) as error:
+        logger.warning("No se pudo leer la configuración de portadas: %s", error)
+        disabled_users = set()
 
     db_lock = asyncio.Lock()
     user_locks: dict[int, asyncio.Lock] = {}
@@ -105,8 +112,53 @@ def register(app, work_dir: Path, bot_token: str) -> None:
             )
             await asyncio.to_thread(temp_path.replace, db_path)
 
+    async def save_settings() -> None:
+        async with db_lock:
+            temp_path = settings_path.with_suffix(".json.tmp")
+            data = json.dumps({"disabled_users": sorted(disabled_users)}, ensure_ascii=False, indent=2)
+            await asyncio.to_thread(temp_path.write_text, data, encoding="utf-8")
+            await asyncio.to_thread(temp_path.replace, settings_path)
+
     def owner_key(message: Message) -> str | None:
         return str(message.from_user.id) if message.from_user else None
+
+    @app.on_message(filters.command("thumon"), group=10)
+    async def enable_cover(client, message: Message):
+        key = owner_key(message)
+        if not key:
+            await message.reply_text("No pude identificar tu cuenta de Telegram.")
+            return
+        if key not in disabled_users:
+            await message.reply_text("Las portadas ya están activas. Envíame una foto para guardarla o cambiarla.")
+            return
+        disabled_users.discard(key)
+        try:
+            await save_settings()
+        except OSError as error:
+            disabled_users.add(key)
+            logger.exception("No se pudo activar la preferencia de portada")
+            await message.reply_text(f"No se pudo guardar el cambio en el hosting: {error}")
+            return
+        await message.reply_text("✅ Portadas activadas. Se aplicará tu miniatura a los videos que envíes.")
+
+    @app.on_message(filters.command("thumoff"), group=10)
+    async def disable_cover(client, message: Message):
+        key = owner_key(message)
+        if not key:
+            await message.reply_text("No pude identificar tu cuenta de Telegram.")
+            return
+        if key in disabled_users:
+            await message.reply_text("Las portadas ya están desactivadas. Usa /thumon para activarlas.")
+            return
+        disabled_users.add(key)
+        try:
+            await save_settings()
+        except OSError as error:
+            disabled_users.discard(key)
+            logger.exception("No se pudo desactivar la preferencia de portada")
+            await message.reply_text(f"No se pudo guardar el cambio en el hosting: {error}")
+            return
+        await message.reply_text("⏸ Portadas desactivadas. Tus fotos guardadas se conservan; usa /thumon para volver a activarlas.")
 
     @app.on_message(filters.command("show_cover"), group=10)
     async def show_cover(client, message: Message):
@@ -156,7 +208,7 @@ def register(app, work_dir: Path, bot_token: str) -> None:
     @app.on_message(filters.video | filters.document, group=10)
     async def add_cover(client, message: Message):
         key = owner_key(message)
-        if not key:
+        if not key or key in disabled_users:
             return
         file_id = covers.get(key)
         if not file_id:
