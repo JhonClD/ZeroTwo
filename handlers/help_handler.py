@@ -16,20 +16,6 @@ def register(app):
         help_text = """📖 <b>Ayuda Detallada</b>
 
 ━━━━━━━━━━━━━━━━━━━━
-🎬 <b>PROCESAMIENTO DE VIDEOS</b>
-━━━━━━━━━━━━━━━━━━━━
-
-├ /sub — Quema subtítulos y guarda el resultado en Download/ZeroTwo
-├ /subsize &lt;MB&gt; — Quema subtítulos y apunta a un tamaño final
-└ Quema los subtítulos y agrega la marca ZeroTwo
-├ /dw2 — Guarda localmente un video respondido
-├ /press — Abre botones de resolución, audio, subtítulos y modo
-├ /press2 — Abre el mismo menú con dos pasadas por defecto
-├ /ed2 [-s N] — Codifica MKV local usando la pista N
-├ /ec2 — Codifica MKV local sin quemar subtítulos
-└ /up2 — Envía los videos codificados pendientes
-
-━━━━━━━━━━━━━━━━━━━━
 📥 <b>DESCARGAS</b>
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -119,7 +105,6 @@ def register(app):
 ━━━━━━━━━━━━━━━━━━━━
 • <b>Video:</b> MP4, MKV, AVI, MOV, WEBM
 • <b>Audio:</b> MP3, M4A, WAV, OGG, FLAC
-• <b>Subtítulos:</b> SRT, ASS, VTT
 • <b>Imagen:</b> JPG, PNG
 
 <b>⚠️ Límite Telegram:</b> 2GB por archivo

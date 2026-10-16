@@ -1,498 +1,33 @@
-"""
-VideoProcessor - Clase para procesar videos con FFmpeg
-"""
+"""Utilidades de metadatos y miniaturas para videos descargados."""
 
-import re
-import json
-import asyncio
 import logging
 import subprocess
-import inspect
 from pathlib import Path
-
-from utils.subtitle_tools import BUNDLED_FONT_FILES, FONTS, ass_font_style, ass_style, normalize_ass_font
 
 logger = logging.getLogger(__name__)
 
-# Tabla de banderas por código de idioma
-_LANG_FLAGS = {
-    'SPA': '🇪🇸', 'ESP': '🇪🇸', 'JPN': '🇯🇵', 'JAP': '🇯🇵',
-    'ENG': '🇺🇸', 'ENU': '🇺🇸', 'FRA': '🇫🇷', 'FRE': '🇫🇷',
-    'GER': '🇩🇪', 'DEU': '🇩🇪', 'POR': '🇧🇷', 'ITA': '🇮🇹',
-    'KOR': '🇰🇷', 'CHI': '🇨🇳', 'ZHO': '🇨🇳', 'RUS': '🇷🇺', 'UND': '🏳️',
-}
-_LANG_NAMES = {
-    'SPA': 'Español', 'ESP': 'Español', 'LAT': 'Latino', 'LAA': 'Latino',
-    'CAS': 'Castellano', 'ES': 'Español', 'JPN': 'Japonés', 'JAP': 'Japonés',
-    'ENG': 'Inglés', 'EN': 'Inglés', 'POR': 'Portugués', 'FRA': 'Francés',
-    'GER': 'Alemán', 'ITA': 'Italiano', 'KOR': 'Coreano', 'CHI': 'Chino',
-    'ZHO': 'Chino', 'UND': 'Sin idioma',
-}
-
 
 class VideoProcessor:
-    """Clase para procesar videos usando FFmpeg"""
-
-    # ─── Utilidades internas ──────────────────────────────────────────────────
-
-    @staticmethod
-    def _escape_path(path) -> str:
-        """Escapa una ruta para filtros FFmpeg (subtitles=…)."""
-        p = str(path).replace('\\', '/').replace(':', '\\:').replace("'", r"\'")
-        return f"'{p}'"
-
-    # ─── Análisis de medios ───────────────────────────────────────────────────
-
-    @staticmethod
-    def probe_media(input_path):
-        """
-        Analiza el archivo con FFprobe.
-        Retorna {'audio': [...], 'subtitle': [...]} o None si falla.
-        """
-        try:
-            cmd = [
-                'ffprobe', '-v', 'quiet',
-                '-print_format', 'json',
-                '-show_streams', '-show_format',
-                str(input_path),
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            data = json.loads(result.stdout)
-
-            info = {'audio': [], 'subtitle': []}
-            sub_count = 0
-
-            for stream in data.get('streams', []):
-                s_index = stream.get('index')
-                s_type  = stream.get('codec_type')
-                tags    = stream.get('tags', {})
-
-                lang_code = tags.get('language', 'UND').upper()
-                flag      = _LANG_FLAGS.get(lang_code, '🏳️')
-                title     = (tags.get('title') or '').strip()
-                language  = _LANG_NAMES.get(lang_code, lang_code.title())
-                is_forced = stream.get('disposition', {}).get('forced', 0) == 1
-                suffix    = ' (FORZADO)' if is_forced else ''
-
-                if s_type == 'audio':
-                    info['audio'].append({
-                        'index': s_index,
-                        'label': f"{flag} {lang_code} - {title}",
-                    })
-                elif s_type == 'subtitle':
-                    label_name = title if title and title.lower() not in {'pista', 'subtitle', 'subtitles'} else language
-                    info['subtitle'].append({
-                        'index': sub_count,
-                        'label': f"{flag} {label_name} — {language}{suffix}",
-                    })
-                    sub_count += 1
-
-            return info
-
-        except Exception as e:
-            logger.error(f"❌ Error en probe_media: {e}")
-            return None
-
-    # ─── Quemado de subtítulos (mejorado) ─────────────────────────────────────
-
-    @staticmethod
-    def _run_ffmpeg_logged(command, stage):
-        """Ejecuta una pasada FFmpeg sin ocultar su progreso en el log."""
-        logger.info("🔧 %s | %s", stage, " ".join(str(part) for part in command))
-        process = subprocess.Popen(
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-            text=True, universal_newlines=True, bufsize=1,
-        )
-        last_report = 0
-        for raw_line in process.stderr:
-            line = raw_line.strip()
-            if not line:
-                continue
-            frame = re.search(r"frame=\s*(\d+)", line)
-            if frame:
-                last_report += 1
-                if last_report == 1 or last_report % 10 == 0:
-                    logger.info("⚙️ %s | %s", stage, line[-220:])
-            elif "error" in line.lower() or "failed" in line.lower():
-                logger.error("❌ %s | %s", stage, line[-500:])
-        return process.wait()
-
-    @staticmethod
-    async def burn_subtitles(
-        video_path,
-        subtitle_path,
-        output_path,
-        audio_idx=None,
-        sub_idx=None,
-        is_external=True,
-        external_sub_path=None,
-        progress_callback=None,
-        crf="23",
-        preset="veryfast",
-        bitrate=None,
-        subtitle_color="white",
-        subtitle_alignment="bottom",
-        subtitle_size=20,
-        subtitle_font="dejavu",
-        add_watermark=True,
-        cancel_event=None,
-        timeout=None,
-        process_holder=None,
-        target_size_mb=None,
-    ):
-        """
-        Quema subtítulos en el video con estilo personalizado y marca Jap Anime TX.
-
-        Parámetros
-        ----------
-        video_path        Ruta al video de entrada.
-        subtitle_path     Ruta al archivo de subtítulos externo (.srt/.ass/.vtt).
-        output_path       Ruta del video de salida.
-        audio_idx         Índice de pista de audio (None = primera pista).
-        sub_idx           Índice de subtítulo interno (solo si is_external=False).
-        is_external       True (defecto) usa subtitle_path / external_sub_path.
-        external_sub_path Alias de subtitle_path para compatibilidad con código nuevo.
-
-        Compatibilidad
-        --------------
-        La firma original burn_subtitles(video_path, subtitle_path, output_path)
-        sigue funcionando sin cambios.
-        """
-        logger.info("📝 Iniciando quemado de subtítulos")
-        logger.info(f"📁 Video:      {video_path}")
-        logger.info(f"📁 Subtítulos: {subtitle_path or external_sub_path}")
-        logger.info(f"📦 Salida:     {output_path}")
-
-        if target_size_mb:
-            duration_probe = subprocess.run(
-                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                 '-of', 'default=noprint_wrappers=1:nokey=1', str(video_path)],
-                capture_output=True, text=True, check=True, timeout=30,
-            )
-            duration_seconds = float(duration_probe.stdout.strip())
-            total_kbps = (float(target_size_mb) * 1024 * 8 * 0.98) / duration_seconds
-            target_bitrate = max(100, int(total_kbps - 128))
-            bitrate = f"{target_bitrate}k"
-            logger.info("🎯 TAMAÑO OBJETIVO SUBTÍTULOS | %.2f MB | duración=%.2fs | video=%s | audio=128k", target_size_mb, duration_seconds, bitrate)
-
-        # ── Origen de los subtítulos ──────────────────────────────────────────
-        ext_path = external_sub_path or subtitle_path   # compatibilidad
-        normalized_ass_path = None
-        extracted_ass_path = None
-
-        # libass calcula FontSize según el lienzo del subtítulo. Declarar la
-        # resolución original evita que un SRT/ASS se vea enorme o diminuto al
-        # renderizar videos 720p, 1080p o archivos con PlayRes diferente.
-        original_size = None
-        try:
-            size_probe = subprocess.run(
-                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
-                 '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', str(video_path)],
-                capture_output=True, text=True, timeout=15,
-            )
-            width_height = size_probe.stdout.strip().split('x')
-            if len(width_height) == 2 and all(part.isdigit() for part in width_height):
-                original_size = 'x'.join(width_height)
-                logger.info("📐 Resolución original para subtítulos: %s", original_size)
-        except (OSError, subprocess.TimeoutExpired):
-            logger.warning("⚠️ No se pudo obtener la resolución original para escalar subtítulos.")
-
-        if is_external and ext_path:
-            filter_path = ext_path
-            if Path(ext_path).suffix.lower() == ".ass":
-                selected_font = FONTS.get(subtitle_font, FONTS["default"])[1]
-                if selected_font:
-                    normalized_ass_path = Path(output_path).with_name(
-                        f".{Path(output_path).stem}.forced.ass"
-                    )
-                    normalize_ass_font(ext_path, normalized_ass_path, selected_font, bold=subtitle_font == "jkanime")
-                    filter_path = normalized_ass_path
-                    logger.info("🔤 ASS normalizado | fuente aplicada: %s", selected_font)
-            sub_p = VideoProcessor._escape_path(filter_path)
-            sub_filter = f"subtitles={sub_p}"
-            logger.info(f"📂 Modo: subtítulos externos → {ext_path}")
-        else:
-            idx   = sub_idx if sub_idx is not None else 0
-            # Extraer la pista interna a ASS permite reemplazar también las
-            # etiquetas \fn de los diálogos, que force_style no puede vencer.
-            extracted_ass_path = Path(output_path).with_name(
-                f".{Path(output_path).stem}.source.ass"
-            )
-            normalized_ass_path = Path(output_path).with_name(
-                f".{Path(output_path).stem}.forced.ass"
-            )
-            extract = subprocess.run(
-                ['ffmpeg', '-y', '-v', 'error', '-i', str(video_path),
-                 '-map', f'0:s:{idx}', '-c:s', 'copy', str(extracted_ass_path)],
-                capture_output=True, text=True, timeout=60,
-            )
-            if extract.returncode == 0 and extracted_ass_path.exists():
-                selected_font = FONTS.get(subtitle_font, FONTS["default"])[1]
-                if selected_font:
-                    normalize_ass_font(extracted_ass_path, normalized_ass_path, selected_font, bold=subtitle_font == "jkanime")
-                    sub_filter = f"subtitles={VideoProcessor._escape_path(normalized_ass_path)}"
-                    logger.info("🔤 ASS interno extraído y normalizado | fuente aplicada: %s", selected_font)
-                else:
-                    sub_filter = f"subtitles={VideoProcessor._escape_path(extracted_ass_path)}"
-            else:
-                vid_p = VideoProcessor._escape_path(video_path)
-                sub_filter = f"subtitles={vid_p}:si={idx}"
-                extracted_ass_path = None
-                normalized_ass_path = None
-                logger.warning("⚠️ No se pudo extraer la pista interna; se usa directamente desde el contenedor.")
-            logger.info(f"📂 Modo: subtítulos internos (pista {idx})")
-        bundled_fonts = Path(__file__).resolve().parents[1] / "fonts"
-        if bundled_fonts.is_dir():
-            sub_filter += f":fontsdir={VideoProcessor._escape_path(bundled_fonts)}"
-            logger.info("🔤 Fuentes incluidas activadas: %s", bundled_fonts)
-            bundled_file = BUNDLED_FONT_FILES.get(subtitle_font)
-            if bundled_file and not (bundled_fonts / bundled_file).is_file():
-                raise FileNotFoundError(f"Falta la fuente incluida: {bundled_file}")
-            if bundled_file:
-                logger.info("🔤 Fuente física verificada: %s", bundled_file)
-        if original_size:
-            sub_filter += f":original_size={original_size}"
-
-        # ── Estilo de subtítulos configurable ────────────────────────────────
-        sub_style = ass_style(subtitle_color, subtitle_alignment, subtitle_size, font=subtitle_font)
-        # En ASS no usamos Alignment/MarginV globales: force_style afecta también
-        # carteles, títulos y logos. La posición definida por el propio ASS se
-        # conserva; solo se permite cambiar la fuente de forma segura.
-        ass_font_override = ass_font_style(subtitle_font)
-        # Los ASS ya contienen color, fuente, tamaño, posición y estilos por diálogo.
-        # Para ASS aplicamos únicamente la fuente, conservando posiciones,
-        # colores, tamaños, bordes y demás estilos originales.
-        preserve_original_style = (not is_external) or (
-            ext_path is not None and Path(ext_path).suffix.lower() == ".ass"
-        )
-        if preserve_original_style:
-            logger.info("🎨 Estilo ASS preservado; fuente=%s; posición original intacta", subtitle_font)
-
-        # ── Marca Jap Anime TX: Oleo Script, blanca, borde azul y fade ────────
-        watermark_font = bundled_fonts / "OleoScript-Regular.ttf"
-        watermark_fontfile = VideoProcessor._escape_path(watermark_font)
-        watermark = (
-            "drawtext=text='Jap Anime TX':"
-            "x=30:y=30:"
-            f"fontfile={watermark_fontfile}:"
-            "fontsize=34:"
-            "fontcolor=white:"
-            "bordercolor=blue:"
-            "borderw=2:"
-            "box=0:"
-            "alpha='if(lt(t,0.8),t/0.8,if(lt(t,5.2),1,if(lt(t,6),(6-t)/0.8,0)))':"
-            "enable='between(t,0,6)'"
-        )
-
-        if preserve_original_style:
-            styled_sub_filter = f"{sub_filter}:{ass_font_override}" if ass_font_override else sub_filter
-        else:
-            styled_sub_filter = f"{sub_filter}:{sub_style}"
-        full_vf = f"{watermark},{styled_sub_filter}" if add_watermark else styled_sub_filter
-
-        # ── Mapeado de audio ──────────────────────────────────────────────────
-        # El signo '?' permite procesar vídeos mudos sin cambiar la política
-        # normal: se conserva como máximo la pista de audio seleccionada.
-        audio_map = ["-map", f"0:{audio_idx}?"] if audio_idx is not None else ["-map", "0:a:0?"]
-
-        cmd = [
-            'ffmpeg', '-y',
-            '-i', str(video_path),
-            '-map', '0:v:0',
-            *audio_map,
-            '-vf', full_vf,
-            '-c:v', 'libx264',
-            '-crf', str(max(16, min(35, int(crf)))),
-            '-preset', str(preset),
-            '-profile:v', 'main',
-            '-level', '3.1',
-            '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-ac', '2',
-            '-movflags', '+faststart',
-            '-threads', '0',
-            str(output_path),
-        ]
-        if bitrate:
-            cmd[cmd.index('-crf'):cmd.index('-crf') + 2] = ['-b:v', str(bitrate)]
-
-        logger.info("🔧 Comando FFmpeg construido: %s", " ".join(str(part) for part in cmd))
-
-        try:
-            # Total de frames para progreso
-            probe_cmd = [
-                'ffprobe', '-v', 'error',
-                '-select_streams', 'v:0',
-                '-show_entries', 'stream=nb_frames',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                str(video_path),
-            ]
-            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
-            total_frames = 0
-            raw = probe_result.stdout.strip()
-            if probe_result.returncode == 0 and raw.isdigit():
-                total_frames = int(raw)
-                logger.info(f"🎬 Total de frames: {total_frames}")
-
-            logger.info("⏳ Quemando subtítulos...")
-
-            passlog = Path(output_path).with_suffix(".subsize-passlog") if target_size_mb else None
-            if passlog:
-                first_pass = list(cmd[:-1])
-                first_pass[first_pass.index('-c:a'):first_pass.index('-c:a') + 4] = ['-an']
-                first_pass.extend(['-pass', '1', '-passlogfile', str(passlog), '-f', 'null', '/dev/null'])
-                logger.info("⏳ Primera pasada con subtítulos y bitrate objetivo…")
-                first_result = await asyncio.to_thread(
-                    VideoProcessor._run_ffmpeg_logged, first_pass, "Primera pasada"
-                )
-                if first_result != 0:
-                    logger.error("❌ Primera pasada falló con código %s", first_result)
-                    return False
-                cmd[-1:-1] = ['-pass', '2', '-passlogfile', str(passlog)]
-                logger.info("⏳ Segunda pasada con subtítulos…")
-
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-            )
-            if process_holder is not None:
-                process_holder["process"] = process
-
-            # ── Leer stderr en thread para no bloquear el event loop ────────
-            import threading
-
-            last_tg_pct = [-10]
-            loop = asyncio.get_event_loop()
-
-            def _bar(pct, w=10):
-                f = int(w * pct / 100)
-                return '\u2593' * f + '\u2591' * (w - f)
-
-            def _read_stderr():
-                line_count = 0
-                for line in process.stderr:
-                    if 'frame=' in line:
-                        line_count += 1
-                        frame_match = re.search(r'frame=\s*(\d+)', line)
-                        fps_match   = re.search(r'fps=\s*([\d.]+)', line)
-                        time_match  = re.search(r'time=\s*([\d:.]+)', line)
-                        speed_match = re.search(r'speed=\s*([\d.]+)x', line)
-
-                        if frame_match:
-                            frame = int(frame_match.group(1))
-                            fps   = fps_match.group(1)   if fps_match   else '0'
-                            time  = time_match.group(1)  if time_match  else '00:00:00'
-                            speed = speed_match.group(1) if speed_match else '0'
-
-                            if total_frames > 0:
-                                pct = int((frame / total_frames) * 100)
-                                if line_count % 30 == 0:
-                                    logger.info(
-                                        f"⚙️ Subtítulos {pct}% | "
-                                        f"Frame: {frame}/{total_frames} | "
-                                        f"FPS: {fps} | Time: {time} | Speed: {speed}x"
-                                    )
-                                if pct - last_tg_pct[0] >= 10 and progress_callback:
-                                    bar = _bar(pct)
-                                    text = (
-                                        f"📝 <b>Quemando subtítulos</b>\n"
-                                        f"{bar} {pct}%\n"
-                                        f"🎞 Frame: {frame}/{total_frames} | ⚡ {speed}x"
-                                    )
-                                    try:
-                                        update = progress_callback(text)
-                                        if inspect.isawaitable(update):
-                                            asyncio.run_coroutine_threadsafe(update, loop)
-                                        else:
-                                            logger.debug("Callback de progreso completado de forma síncrona; se omite su programación async.")
-                                    except Exception:
-                                        logger.debug("No se pudo actualizar el progreso de subtítulos", exc_info=True)
-                                    last_tg_pct[0] = pct
-                            else:
-                                if line_count % 30 == 0:
-                                    logger.info(f"⚙️ Frame: {frame} | FPS: {fps} | Time: {time}")
-
-                    elif 'error' in line.lower():
-                        logger.warning(f"⚠️ FFmpeg: {line.strip()}")
-
-            reader = threading.Thread(target=_read_stderr, daemon=True)
-            reader.start()
-
-            started_at = asyncio.get_running_loop().time()
-            while process.poll() is None:
-                if cancel_event is not None and cancel_event.is_set():
-                    logger.info("🛑 Cancelación solicitada; terminando FFmpeg")
-                    process.terminate()
-                    try:
-                        await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=5)
-                    except asyncio.TimeoutError:
-                        logger.warning("⚠️ FFmpeg no terminó tras SIGTERM; se fuerza su cierre")
-                        process.kill()
-                        await asyncio.to_thread(process.wait)
-                    break
-                if timeout is not None and asyncio.get_running_loop().time() - started_at > timeout:
-                    logger.warning("⏱️ Tiempo máximo de FFmpeg excedido: %ss", timeout)
-                    process.terminate()
-                    try:
-                        await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=5)
-                    except asyncio.TimeoutError:
-                        process.kill()
-                        await asyncio.to_thread(process.wait)
-                    break
-                await asyncio.sleep(0.25)
-            # FFmpeg ya terminó; no permitimos que un lector de stderr defectuoso
-            # deje bloqueado el flujo de respuesta de Telegram.
-            reader.join(timeout=5)
-            if reader.is_alive():
-                logger.warning("⚠️ El lector de progreso no cerró a tiempo; se continúa con el archivo generado.")
-            if normalized_ass_path:
-                normalized_ass_path.unlink(missing_ok=True)
-            if extracted_ass_path:
-                extracted_ass_path.unlink(missing_ok=True)
-            if passlog:
-                for suffix in ("", "-0.log", ".log"):
-                    Path(str(passlog) + suffix).unlink(missing_ok=True)
-
-            cancelled = cancel_event is not None and cancel_event.is_set()
-            if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:
-                output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-                logger.info("✅ Subtítulos quemados exitosamente")
-                logger.info(f"📦 Tamaño final: {output_size_mb:.2f} MB")
-                logger.info("🏁 PROCESO COMPLETADO | quemado de subtítulos | salida=%s", output_path)
-                return True
-            else:
-                logger.error(f"❌ Error quemando subtítulos: código {process.returncode}")
-                Path(output_path).unlink(missing_ok=True)
-                return False
-
-        except Exception as e:
-            logger.error(f"❌ Error en burn_subtitles: {e}", exc_info=True)
-            Path(output_path).unlink(missing_ok=True)
-            return False
-        finally:
-            if process_holder is not None:
-                process_holder["process"] = None
-
-    # ─── Metadatos y miniatura ────────────────────────────────────────────────
-
+    """Herramientas multimedia ligeras usadas por los previews de video."""
 
     @staticmethod
     def get_video_meta(video_path, thumb_path):
-        """Obtiene duración y genera una miniatura JPEG compatible con Telegram."""
+        """Obtiene duración con ffprobe y genera una miniatura JPEG para Telegram."""
         duration = 0
         video_path = Path(video_path)
         thumb_path = Path(thumb_path)
 
         try:
             probe = subprocess.run(
-                ["ffprobe", "-v", "error",
-                 "-show_entries", "format=duration:stream=duration",
-                 "-of", "default=noprint_wrappers=1:nokey=1",
-                 str(video_path)],
-                capture_output=True, text=True, timeout=15,
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration:stream=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    str(video_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             values = []
             for line in probe.stdout.splitlines():
@@ -505,22 +40,27 @@ class VideoProcessor:
             if values:
                 duration = max(1, round(max(values)))
             else:
-                logger.warning("⚠️ ffprobe no devolvió una duración válida: %s", probe.stderr.strip()[:300])
+                logger.warning(
+                    "⚠️ ffprobe no devolvió una duración válida: %s",
+                    probe.stderr.strip()[:300],
+                )
         except (OSError, subprocess.TimeoutExpired) as error:
             logger.warning("⚠️ No se pudo obtener duración con ffprobe: %s", error)
 
         thumb_path.parent.mkdir(parents=True, exist_ok=True)
         thumb = None
-        # Buscar un frame cercano al centro; -ss después de -i funciona mejor
-        # con videos cuyos índices no permiten seek rápido.
         seek = max(0, duration // 2)
         commands = [
-            ["ffmpeg", "-y", "-i", str(video_path), "-ss", str(seek),
-             "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "3",
-             "-f", "image2", str(thumb_path)],
-            ["ffmpeg", "-y", "-i", str(video_path), "-frames:v", "1",
-             "-vf", "scale=640:-2", "-q:v", "3", "-f", "image2",
-             str(thumb_path)],
+            [
+                "ffmpeg", "-y", "-i", str(video_path), "-ss", str(seek),
+                "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "3",
+                "-f", "image2", str(thumb_path),
+            ],
+            [
+                "ffmpeg", "-y", "-i", str(video_path), "-frames:v", "1",
+                "-vf", "scale=640:-2", "-q:v", "3", "-f", "image2",
+                str(thumb_path),
+            ],
         ]
         for command in commands:
             try:
@@ -528,7 +68,10 @@ class VideoProcessor:
                 if result.returncode == 0 and thumb_path.exists() and thumb_path.stat().st_size > 0:
                     thumb = str(thumb_path)
                     break
-                logger.warning("⚠️ ffmpeg no generó miniatura: %s", result.stderr.decode(errors="ignore")[-300:])
+                logger.warning(
+                    "⚠️ ffmpeg no generó miniatura: %s",
+                    result.stderr.decode(errors="ignore")[-300:],
+                )
             except (OSError, subprocess.TimeoutExpired) as error:
                 logger.warning("⚠️ Error generando miniatura: %s", error)
 

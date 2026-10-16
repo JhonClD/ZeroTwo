@@ -33,9 +33,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar capturas del inicio, cuartos, mitad y final antes del video. |
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
-| Procesamiento | Extraer audio en MP3 y procesar videos con FFmpeg. |
-| Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
-| Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
+| Audio | Extraer audio de videos de YouTube. |
 | Descargas sociales | YouTube con búsqueda y descarga mediante Loader.to (audio MP3 con carátula cuando está disponible y video hasta 720p); muestra título, canal e imagen antes de descargar. También enlaces públicos de Facebook, X/Twitter y TikTok. |
 | Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
@@ -338,43 +336,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
-| `/sub` | Responde a un video para seleccionar una pista interna o enviar un subtítulo externo y quemarlo. El resultado se guarda localmente en `Download/ZeroTwo` y no se sube automáticamente a Telegram. |
-| `/subsize <MB>` | Quema subtítulos y codifica en dos pasadas apuntando al tamaño indicado sin crear un video intermedio, por ejemplo `/subsize 1750`. |
-| `/dw2` | Guarda localmente el video o archivo respondido para codificación. |
-| `/press [-crf N]` | Codifica un video respondido con FFmpeg y marca ZeroTwo. |
-| `/compre1`, `/compress1` | Alias de `/press`. |
-| `/press2` | Codifica un video respondido en dos pasadas. |
-| `/compre2`, `/compress2` | Alias de `/press2`. |
-| `/size <MB>` | Codifica en dos pasadas calculando el bitrate para aproximarse al tamaño indicado, por ejemplo `/size 168`. |
-| `/ed2 [-s N]` | Codifica MKV locales usando la pista interna de subtítulos `N`. |
-| `/ec2` | Codifica MKV locales sin quemar subtítulos. |
-| `/up2` | Envía los videos codificados pendientes. |
-| `/delete2` | Limpia subtítulos y logs temporales. |
-| `/dele2` | Limpia videos locales temporales. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
-
-### Flujo recomendado de subtítulos y codificación
-
-Responde a un video con `/sub`. El bot muestra botones para elegir una pista interna o recibir un `.srt`, `.ass` o `.vtt`. La fuente predeterminada es **Rosario Bold** y también puedes cambiarla desde el menú. Después puedes ajustar **fuente**, **alineación**, **preset** y **CRF** antes de iniciar el quemado. Incluye **Roboto** para el estilo anime clásico, **Noto Sans** como opción neutra, **Montserrat** para una apariencia limpia, **Oswald** cuando hay líneas largas y se necesita ahorrar ancho, **M PLUS 1p** para una estética anime con buena cobertura latina y japonesa, y **Rosario Bold** para un acabado más elegante. También aparece **Comic Sans MS — sistema** si esa fuente está instalada localmente. El preset JK anime usa un margen inferior reducido (`MarginV=12`) para acercar el texto al borde del video. La marca de agua **Jap Anime TX** usa Oleo Script Regular, texto blanco de 34 px, borde azul de 2 px, fondo transparente y desvanecido durante los primeros seis segundos. Si configuras LibreTranslate, también aparecerá la opción de traducir un SRT o VTT antes de renderizarlo.
-
-En archivos **ASS**, la opción **Predeterminada / conservar** mantiene la fuente, posiciones y estilos originales, incluidos los carteles. Si eliges otra fuente, ZeroTwo cambia únicamente la familia tipográfica y conserva colores, tamaños, bordes, posiciones `\pos`/`\move` y demás estilos ASS. La alineación abajo (`Alignment=2`, `MarginV=12`) se aplica a SRT/VTT, no globalmente a ASS, para no desplazar carteles.
-
-El botón **Cancelar** termina el proceso FFmpeg de forma cooperativa y elimina la salida parcial después de que el proceso haya finalizado; no borra un directorio mientras el encoder aún está escribiendo. Por defecto, un quemado puede durar hasta 7200 segundos. Puedes cambiar ese límite con `SUBTITLE_TIMEOUT` (en segundos), por ejemplo `export SUBTITLE_TIMEOUT=3600`. Los videos sin pista de audio también se admiten; cuando existe audio, el bot conserva la primera pista seleccionada por su política actual y la recodifica a AAC.
-
-Para codificar sin subtítulos, responde al video con `/press` o `/press2`. El menú permite elegir CRF (calidad constante), bitrate, preset y pista de audio. En general, CRF 18–23 ofrece mayor calidad; CRF 26–30 reduce el tamaño. `veryfast` es una opción equilibrada para Termux y `medium` mejora la compresión a costa de más tiempo.
-
-### Traducción opcional
-
-La traducción no se activa por defecto. Configura un servidor compatible con LibreTranslate antes de arrancar el bot:
-
-```bash
-export LIBRETRANSLATE_URL="https://tu-servidor-libretranslate.example"
-# Opcional, si tu servidor requiere autenticación:
-export LIBRETRANSLATE_API_KEY="TU_CLAVE"
-python main.py
-```
-
-Por privacidad y estabilidad, la traducción se limita a archivos `.srt` y `.vtt`; los archivos `.ass` se pueden quemar con sus estilos originales, pero deben traducirse externamente si se necesita conservar un formato ASS complejo.
 
 ## Solución de problemas
 
