@@ -10,6 +10,7 @@ import re
 import subprocess
 from email.message import Message as EmailMessage
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -102,12 +103,28 @@ def _open_public_drive_response(session: requests.Session, file_id: str):
     # intermedia de confirmación/permisos normalmente no trae Content-Disposition.
     if 'text/html' in content_type and not response.headers.get('Content-Disposition'):
         html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
+        form = soup.find('form', action=True)
+        form_params = {}
+        form_url = DRIVE_DOWNLOAD_URL
+        if form:
+            form_params = {
+                field.get('name'): field.get('value', '')
+                for field in form.find_all(['input', 'button'])
+                if field.get('name')
+            }
+            candidate_url = urljoin(response.url, form.get('action', ''))
+            candidate_host = (urlparse(candidate_url).hostname or '').lower()
+            if candidate_host in {'drive.google.com', 'drive.usercontent.google.com'}:
+                form_url = candidate_url
+
         token = next(
             (value for key, value in session.cookies.items() if key.startswith('download_warning')),
             None,
         )
         if not token:
-            soup = BeautifulSoup(html, 'html.parser')
+            token = form_params.get('confirm')
+        if not token:
             confirm = soup.select_one('input[name="confirm"][value]')
             token = confirm.get('value') if confirm else None
         if not token:
@@ -120,9 +137,12 @@ def _open_public_drive_response(session: requests.Session, file_id: str):
                 'Los documentos nativos de Google (Docs/Sheets/Slides) requieren exportación.'
             )
 
+        params.update(form_params)
+        params['id'] = file_id
+        params['export'] = 'download'
         params['confirm'] = token
         response = session.get(
-            DRIVE_DOWNLOAD_URL, params=params, headers=DRIVE_HEADERS,
+            form_url, params=params, headers=DRIVE_HEADERS,
             stream=True, timeout=(20, 60), allow_redirects=True,
         )
         if response.status_code in (400, 403, 404):
