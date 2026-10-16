@@ -44,7 +44,10 @@ _POLL_LOCK: asyncio.Lock | None = None
 
 def _owner_ids() -> set[int]:
     raw = os.getenv("CRUNCHYROLL_OWNER_IDS", "") or os.getenv("TIOANIME_OWNER_IDS", "")
-    return {int(part) for part in raw.split(",") if part.strip().isdigit()}
+    configured = {int(part) for part in raw.split(",") if part.strip().isdigit()}
+    # ID indicado por el propietario para que el comando funcione también en
+    # paneles donde no se han configurado correctamente las variables de entorno.
+    return configured or {7856571519}
 
 
 def _is_owner(message: Message) -> bool:
@@ -293,11 +296,7 @@ def register(app, work_dir: Path) -> None:
     async def require_owner(message: Message) -> bool:
         if _is_owner(message):
             return True
-        if not _owner_ids():
-            text = "⛔ Configura CRUNCHYROLL_OWNER_IDS (o TIOANIME_OWNER_IDS) con tu ID de Telegram para usar estos comandos."
-        else:
-            text = "⛔ Solo el propietario puede administrar las notificaciones."
-        await message.reply_text(text)
+        await message.reply_text("⛔ Solo el propietario puede administrar las notificaciones.")
         return False
 
     @app.on_message(filters.command("crset"))
