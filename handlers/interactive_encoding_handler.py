@@ -9,7 +9,7 @@ from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from utils.video_processor import VideoProcessor
-from handlers.encoding_handler import _run_encode, _safe_name, _parse_args
+from handlers.encoding_handler import _run_encode, _safe_name
 
 logger = logging.getLogger(__name__)
 _pending = {}

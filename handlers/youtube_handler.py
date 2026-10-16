@@ -99,7 +99,7 @@ def register(app, download_dir):
             # Si es URL directa
             if query.startswith('http'):
                 video_url = query
-                logger.info(f"📹 URL directa proporcionada")
+                logger.info("📹 URL directa proporcionada")
                 
                 # Obtener info del video
                 info_cmd = f'curl -s "https://www.youtube.com/oembed?url={video_url}&format=json"'
@@ -190,7 +190,7 @@ def register(app, download_dir):
                 download_url, loader_title = await loader_download_url(video_url, media_format)
                 if loader_title and not video_title:
                     video_title = loader_title
-                logger.info(f"✅ loader.to devolvió una URL de descarga")
+                logger.info("✅ loader.to devolvió una URL de descarga")
             except LoaderToError as error:
                 raise Exception(f"loader.to no pudo procesar el video: {error}") from error
             

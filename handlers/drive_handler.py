@@ -174,7 +174,6 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
             ))
 
             file_size = file_path.stat().st_size / (1024 * 1024)
-            file_ext  = file_path.suffix.lower()
             logger.info(f"✅ Archivo descargado: {file_path.name} ({file_size:.1f} MB)")
 
             if action == 'drive_sync':

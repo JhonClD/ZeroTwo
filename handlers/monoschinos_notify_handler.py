@@ -84,10 +84,6 @@ async def _get(url, **kwargs):
     return await asyncio.to_thread(requests.get, url, **kwargs)
 
 
-def _safe_file(value):
-    return re.sub(r'\s+', ' ', re.sub(r'[/\\:*?"<>|]', '_', value)).strip()
-
-
 def _episode_id(slug, number):
     return f'monoschinos-{slug.lower()}-{number}'
 

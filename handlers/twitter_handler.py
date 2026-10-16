@@ -7,7 +7,6 @@ import json
 import logging
 import subprocess
 import re
-from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 
@@ -63,7 +62,7 @@ def register(app, download_dir):
             # Llamar a la API de Tweeload
             api_url = f"https://info.tweeload.site/status/{tweet_id}.json"
             
-            logger.info(f"📥 Llamando a API Tweeload...")
+            logger.info("📥 Llamando a API Tweeload...")
             
             api_cmd = f'''curl -s -H "Authorization: {authorization}" -H "user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36" "{api_url}"'''
             
@@ -83,7 +82,6 @@ def register(app, download_dir):
             author = tweet.get('author', {})
             media = tweet.get('media', {})
             
-            author_name = author.get('name', 'Desconocido')
             author_username = author.get('screen_name', 'unknown')
             tweet_text = tweet.get('text', '')
             
@@ -110,7 +108,7 @@ def register(app, download_dir):
                     if not video_url:
                         continue
                     
-                    logger.info(f"📹 Descargando y enviando video...")
+                    logger.info("📹 Descargando y enviando video...")
                     
                     tmp_video = download_dir / f"tw_{message.from_user.id}.mp4"
                     
@@ -182,7 +180,7 @@ def register(app, download_dir):
                     if not photo_url:
                         continue
                     
-                    logger.info(f"🖼️ Enviando foto...")
+                    logger.info("🖼️ Enviando foto...")
                     
                     await message.reply_photo(
                         photo=photo_url,

@@ -150,16 +150,6 @@ def build_file_name(titulo: str, ep_num) -> str:
     return f"{zero_pad(ep_num)} {safe_file(titulo)}.mp4"
 
 
-def fmt_bytes(b) -> str:
-    if not b or b <= 0:
-        return '0 KB'
-    if b >= 1073741824:
-        return f"{b / 1073741824:.2f} GB"
-    if b >= 1048576:
-        return f"{b / 1048576:.2f} MB"
-    return f"{b / 1024:.2f} KB"
-
-
 def _progress_bar(pct: int, width: int = 10) -> str:
     filled = int(width * pct / 100)
     return '▓' * filled + '░' * (width - filled)

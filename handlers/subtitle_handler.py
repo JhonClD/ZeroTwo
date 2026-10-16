@@ -106,7 +106,7 @@ async def _burn(message, state):
             progress_callback=lambda text: status.edit_text(text, parse_mode=enums.ParseMode.HTML),
             crf=s["crf"], preset=s["preset"], subtitle_color="white",
             subtitle_alignment=s["alignment"], subtitle_size=20,
-            subtitle_font=s["font"], watermark_color="pink", watermark_size=28,
+            subtitle_font=s["font"],
             add_watermark=s.get("watermark", True),
             cancel_event=state["cancel_event"], process_holder=state["process_holder"],
             timeout=state["timeout"],
@@ -208,7 +208,7 @@ def register(app, user_states, work_dir: Path):
     async def submenu(client, query):
         _, kind, uid = query.data.split(":"); state = user_states.get(query.from_user.id)
         if not state or int(uid) != query.from_user.id: return await query.answer("Sesión expirada", show_alert=True)
-        s = _settings(state); rows = []
+        _settings(state); rows = []
         if kind == "align": rows = [[InlineKeyboardButton(label, callback_data=f"subset:alignment:{key}:{uid}")] for key, (label, _) in ALIGNMENTS.items()]
         elif kind == "font": rows = [[InlineKeyboardButton(label, callback_data=f"subset:font:{key}:{uid}")] for key, (label, _) in FONTS.items()]
         elif kind == "preset": rows = [[InlineKeyboardButton(v, callback_data=f"subset:preset:{v}:{uid}") for v in ("ultrafast", "veryfast", "fast", "medium")]]
@@ -271,7 +271,3 @@ def register(app, user_states, work_dir: Path):
         else:
             await query.message.edit_text("🛑 Cancelando FFmpeg…", parse_mode=enums.ParseMode.HTML)
         await query.answer("Cancelación solicitada")
-
-
-# Evita que una variable mal escrita rompa el registro de botones.
-fifty = 55

@@ -9,7 +9,6 @@ import subprocess
 import re
 import urllib.request
 import urllib.parse
-from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from utils import VideoProcessor
@@ -93,7 +92,7 @@ def register(app, download_dir):
 
             try:
                 dl_cmd = f'curl -s -L -o "{tmp_video}" "{video_url}"'
-                result = subprocess.run(dl_cmd, shell=True, timeout=120)
+                subprocess.run(dl_cmd, shell=True, timeout=120, check=True)
 
                 if not tmp_video.exists() or tmp_video.stat().st_size < 10_000:
                     raise Exception("El archivo descargado está vacío o es inválido.")

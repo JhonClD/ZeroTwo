@@ -824,19 +824,6 @@ def _traducir(texto: str) -> str:
 
 def register(app, user_states, work_dir):
     """Registra el handler del comando /anime."""
-
-    ESTADOS = {
-        'FINISHED': 'Finalizado', 'RELEASING': 'En emisión',
-        'NOT_YET_RELEASED': 'Próximamente', 'CANCELLED': 'Cancelado', 'HIATUS': 'En pausa'
-    }
-    TEMPORADAS = {
-        'WINTER': 'Invierno', 'SPRING': 'Primavera',
-        'SUMMER': 'Verano', 'FALL': 'Otoño'
-    }
-    FORMATOS = {
-        'TV': 'Serie de TV', 'MOVIE': 'Película', 'SPECIAL': 'Especial',
-        'OVA': 'OVA', 'ONA': 'ONA', 'MUSIC': 'Musical', 'TV_SHORT': 'Serie Corta'
-    }
     GENEROS_TRAD = {
         'Action': 'Acción', 'Adventure': 'Aventura', 'Comedy': 'Comedia',
         'Drama': 'Drama', 'Ecchi': 'Ecchi', 'Fantasy': 'Fantasía',

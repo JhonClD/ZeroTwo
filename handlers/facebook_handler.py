@@ -7,14 +7,12 @@ import asyncio
 import logging
 import re
 import subprocess
-from pathlib import Path
 
 from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from utils import VideoProcessor
 from utils.loader_to import (
-    LoaderToError,
     download_url as loader_download_url,
     get_available_formats,
 )

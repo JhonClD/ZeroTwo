@@ -4,7 +4,6 @@ VideoProcessor - Clase para procesar videos con FFmpeg
 
 import re
 import json
-import os
 import asyncio
 import logging
 import subprocess
@@ -94,116 +93,6 @@ class VideoProcessor:
             logger.error(f"❌ Error en probe_media: {e}")
             return None
 
-    # ─── Compresión ───────────────────────────────────────────────────────────
-
-    @staticmethod
-    def compress_video_resolution(input_path, output_path, scale=None, bitrate='2000k', crf='23', preset='medium', max_size_mb=None):
-        """
-        Comprime un video con resolución específica.
-        scale: '640:360' para 360p, '1280:720' para 720p, None para original.
-        """
-        logger.info(f"🎬 Iniciando compresión de video con resolución")
-        logger.info(f"📁 Entrada: {input_path}")
-        logger.info(f"📁 Salida: {output_path}")
-        logger.info(f"📺 Resolución: {scale if scale else 'Original'}")
-        logger.info(f"📊 Bitrate: {bitrate}, CRF: {crf}, Preset: {preset}")
-
-        cmd = ['ffmpeg', '-i', input_path]
-
-        if scale:
-            if '360' in scale:
-                cmd.extend([
-                    '-vf', f'scale={scale}:force_original_aspect_ratio=decrease:flags=lanczos,pad={scale}:(ow-iw)/2:(oh-ih)/2',
-                    '-c:v', 'libx264', '-crf', crf, '-preset', preset,
-                    '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', '900k',
-                    '-profile:v', 'main', '-level', '3.1', '-pix_fmt', 'yuv420p',
-                ])
-            else:
-                cmd.extend([
-                    '-vf', f'scale={scale}:force_original_aspect_ratio=decrease:flags=lanczos,pad={scale}:(ow-iw)/2:(oh-ih)/2',
-                    '-c:v', 'libx264', '-crf', crf, '-preset', preset, '-b:v', bitrate,
-                ])
-        else:
-            cmd.extend(['-c:v', 'libx264', '-crf', crf, '-preset', preset, '-b:v', bitrate])
-
-        if '360' in str(scale):
-            cmd.extend(['-c:a', 'aac', '-b:a', '96k', '-ar', '44100'])
-        else:
-            cmd.extend(['-c:a', 'aac', '-b:a', '128k'])
-
-        cmd.extend(['-movflags', '+faststart', '-y', output_path])
-
-        logger.info(f"🔧 Comando FFmpeg: {' '.join(cmd[:15])}...")
-
-        try:
-            logger.info("⏳ Procesando video...")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-
-            line_count = 0
-            for line in process.stderr:
-                if 'time=' in line:
-                    line_count += 1
-                    if line_count % 30 == 0:
-                        time_match = re.search(r'time=(\S+)', line)
-                        if time_match:
-                            logger.info(f"⚙️ Procesando: {time_match.group(1)}")
-                elif 'error' in line.lower():
-                    logger.error(f"❌ {line.strip()}")
-
-            process.wait()
-
-            if process.returncode != 0:
-                logger.error(f"❌ Error en compresión: código {process.returncode}")
-                return False
-
-            output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-            logger.info(f"📦 Tamaño final: {output_size_mb:.2f} MB")
-            logger.info("✅ Video comprimido exitosamente")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Error comprimiendo video: {e}")
-            return False
-
-    # ─── Thumbnail ────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def add_thumbnail_fast(video_path, thumbnail_path, output_path):
-        """Añade una portada al video SIN recodificar (ultra rápido)."""
-        logger.info(f"🖼️ Iniciando añadido de portada (método rápido)")
-        logger.info(f"📁 Video: {video_path}")
-        logger.info(f"📁 Imagen: {thumbnail_path}")
-        logger.info(f"📁 Salida: {output_path}")
-
-        cmd = [
-            'ffmpeg',
-            '-i', video_path, '-i', thumbnail_path,
-            '-map', '0', '-map', '1', '-c', 'copy',
-            '-disposition:v:0', 'default',
-            '-disposition:v:1', 'attached_pic',
-            '-metadata:s:v:1', 'comment=Cover (front)',
-            '-y', output_path,
-        ]
-
-        try:
-            logger.info("⚡ Añadiendo portada (esto solo toma segundos)...")
-            result = subprocess.run(cmd, capture_output=True, stderr=subprocess.PIPE, timeout=60)
-
-            if result.returncode == 0:
-                logger.info("✅ Portada añadida exitosamente!")
-                return True
-            else:
-                logger.error(f"❌ Error añadiendo portada: código {result.returncode}")
-                logger.error(f"FFmpeg stderr: {result.stderr.decode()[:500]}")
-                return False
-
-        except subprocess.TimeoutExpired:
-            logger.error("❌ Timeout añadiendo portada")
-            return False
-        except Exception as e:
-            logger.error(f"❌ Error: {e}")
-            return False
-
     # ─── Quemado de subtítulos (mejorado) ─────────────────────────────────────
 
     @staticmethod
@@ -245,8 +134,6 @@ class VideoProcessor:
         subtitle_alignment="bottom",
         subtitle_size=20,
         subtitle_font="dejavu",
-        watermark_color="pink",
-        watermark_size=28,
         add_watermark=True,
         cancel_event=None,
         timeout=None,
@@ -572,7 +459,7 @@ class VideoProcessor:
             cancelled = cancel_event is not None and cancel_event.is_set()
             if process.returncode == 0 and not cancelled and Path(output_path).exists() and Path(output_path).stat().st_size > 0:
                 output_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-                logger.info(f"✅ Subtítulos quemados exitosamente")
+                logger.info("✅ Subtítulos quemados exitosamente")
                 logger.info(f"📦 Tamaño final: {output_size_mb:.2f} MB")
                 logger.info("🏁 PROCESO COMPLETADO | quemado de subtítulos | salida=%s", output_path)
                 return True
@@ -589,7 +476,7 @@ class VideoProcessor:
             if process_holder is not None:
                 process_holder["process"] = None
 
-    # ─── Extracción de audio ──────────────────────────────────────────────────
+    # ─── Metadatos y miniatura ────────────────────────────────────────────────
 
 
     @staticmethod
@@ -646,34 +533,3 @@ class VideoProcessor:
                 logger.warning("⚠️ Error generando miniatura: %s", error)
 
         return duration, thumb
-
-    @staticmethod
-    def extract_audio(video_path, output_path):
-        """Extrae el audio de un video en MP3 a 192 kbps."""
-        logger.info(f"🎵 Iniciando extracción de audio")
-        logger.info(f"📁 Video: {video_path}")
-        logger.info(f"📁 Audio salida: {output_path}")
-
-        cmd = [
-            'ffmpeg', '-y',
-            '-i', str(video_path),
-            '-vn', '-acodec', 'libmp3lame', '-b:a', '192k',
-            str(output_path),
-        ]
-
-        try:
-            logger.info("⏳ Extrayendo audio...")
-            result = subprocess.run(cmd, capture_output=True)
-
-            if result.returncode == 0:
-                audio_size = Path(output_path).stat().st_size / (1024 * 1024)
-                logger.info(f"✅ Audio extraído exitosamente ({audio_size:.2f} MB)")
-            else:
-                logger.error(f"❌ Error extrayendo audio: código {result.returncode}")
-                logger.error(f"FFmpeg stderr: {result.stderr.decode()[:500]}")
-
-            return result.returncode == 0
-
-        except Exception as e:
-            logger.error(f"❌ Error extrayendo audio: {e}")
-            return False
