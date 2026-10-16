@@ -2,7 +2,9 @@
 
 Esta guía sirve para un VPS Ubuntu/Debian o un panel de hosting que ejecute procesos Python de forma continua. Los nombres de menús cambian según el proveedor. ZeroTwo usa Pyrogram con conexión saliente a Telegram y permanece ejecutándose; no es una aplicación web ni necesita un puerto HTTP/webhook.
 
-> El panel debe permitir mantener un proceso en ejecución y tener disponibles Python 3, FFmpeg/FFprobe y utilidades de descarga. Si `megadl` no está instalado, ZeroTwo puede descargar un build portable de Megatools al primer uso de MEGA. Si falta `aria2c`, puede descargar un build portable de aria2 al primer uso de `/torrent`. Ambos funcionan sin permisos root.
+> El panel debe permitir mantener un proceso en ejecución y tener disponibles Python 3.10+, FFmpeg/FFprobe y utilidades de descarga. Si `megadl` no está instalado, ZeroTwo puede descargar un build portable de Megatools al primer uso de MEGA. Si falta `aria2c`, puede descargar un build portable de aria2 al primer uso de `/torrent`. Ambos funcionan sin permisos root.
+
+Las descargas de YouTube usan `yt-dlp`, instalado por `requirements.txt` como `yt-dlp[default]`. Para soporte completo se necesita **Deno 2.3+** (recomendado) o **Node.js 22+**. El extra `default` incluye los scripts EJS, pero no instala el runtime JavaScript. FFmpeg/FFprobe se utilizan para extraer MP3, combinar formatos y crear miniaturas. Si el panel no ofrece uno de esos runtimes, solicita al proveedor que habilite una versión compatible.
 
 ## 1. Preparar el entorno
 
