@@ -67,7 +67,8 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_save_show_delete_and_persistence(self):
         message = FakeMessage()
-        message.photo = [type("Photo", (), {"file_id": "cover-file-id"})()]
+        # Pyrogram expone message.photo como Photo; Aiogram suele usar una lista.
+        message.photo = type("Photo", (), {"file_id": "cover-file-id"})()
         await self.app.handlers["save_cover"](None, message)
         db = self.work / "video_covers" / "covers.json"
         self.assertEqual(json.loads(db.read_text())["123"], "cover-file-id")

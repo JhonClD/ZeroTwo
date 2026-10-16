@@ -191,8 +191,15 @@ def register(app, work_dir: Path, bot_token: str) -> None:
         if not key:
             await message.reply_text("No pude identificar tu cuenta de Telegram.")
             return
+        photo = message.photo
+        if isinstance(photo, (list, tuple)):
+            photo = photo[-1] if photo else None
+        file_id = getattr(photo, "file_id", None)
+        if not file_id:
+            await message.reply_text("No pude leer la foto. Envíala nuevamente como foto de Telegram.")
+            return
         previous_cover = covers.get(key)
-        covers[key] = message.photo[-1].file_id
+        covers[key] = file_id
         try:
             await save_db()
         except OSError as error:
