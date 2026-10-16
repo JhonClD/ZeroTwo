@@ -14,7 +14,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 from pyrogram import enums, filters
@@ -173,7 +173,38 @@ def _normalize_episode(item: dict) -> dict | None:
         "number": ep_num if ep_num is not None else "Especial",
         "locale": locale,
         "url": f"{CR_BASE}/watch/{quote(episode_id, safe='-._~')}{suffix}",
+        "image": _extract_image(item.get("images") or metadata.get("images") or {}),
     }
+
+
+def _image_candidates(value) -> list[tuple[int, str]]:
+    if isinstance(value, str):
+        return [(0, value)]
+    if isinstance(value, list):
+        return [candidate for child in value for candidate in _image_candidates(child)]
+    if isinstance(value, dict):
+        source = value.get("source")
+        if isinstance(source, str):
+            try:
+                width = int(value.get("width") or 0)
+            except (TypeError, ValueError):
+                width = 0
+            return [(width, source)]
+        return [candidate for child in value.values() for candidate in _image_candidates(child)]
+    return []
+
+
+def _extract_image(images: dict) -> str | None:
+    if not isinstance(images, dict):
+        return None
+    for key in ("thumbnail", "poster_tall", "poster_wide"):
+        candidates = sorted(_image_candidates(images.get(key)), key=lambda candidate: candidate[0], reverse=True)
+        for _, url in candidates:
+            parsed = urlparse(url)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme == "https" and (host == "crunchyroll.com" or host.endswith(".crunchyroll.com")):
+                return url
+    return None
 
 
 def _fetch_latest_sync() -> list[dict]:
@@ -228,7 +259,15 @@ def _interval_minutes() -> int:
 
 
 async def _send_episode(app, chat_id: int, episode: dict) -> None:
-    await app.send_message(chat_id, _format_episode(episode), parse_mode=enums.ParseMode.HTML)
+    caption = _format_episode(episode)
+    image = episode.get("image")
+    if image:
+        try:
+            await app.send_photo(chat_id, image, caption=caption, parse_mode=enums.ParseMode.HTML)
+            return
+        except Exception:
+            logger.warning("Crunchyroll: no se pudo enviar la miniatura; se enviará solo el enlace.", exc_info=True)
+    await app.send_message(chat_id, caption, parse_mode=enums.ParseMode.HTML)
 
 
 async def _poll_once_locked(app) -> int:
@@ -345,7 +384,7 @@ def register(app, work_dir: Path) -> None:
             if not episodes:
                 return await status.edit_text("📭 No se encontraron episodios recientes en los idiomas configurados.")
             for episode in episodes[:10]:
-                await message.reply_text(_format_episode(episode), parse_mode=enums.ParseMode.HTML)
+                await _send_episode(client, message.chat.id, episode)
                 await asyncio.sleep(1)
             await status.delete()
         except Exception as error:

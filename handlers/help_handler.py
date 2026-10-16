@@ -102,8 +102,8 @@ def register(app):
 ├ /crset — Suscribir este chat (solo propietario)
 ├ /crrem — Quitar este chat
 ├ /crstatus — Ver estado del monitor
-├ /crlist — Mostrar los 10 episodios recientes
-└ /crnotify — Revisar y enviar avisos nuevos ahora
+├ /crlist — Mostrar los 10 episodios recientes con miniatura disponible
+└ /crnotify — Revisar avisos nuevos (con imagen si está disponible)
 
 ━━━━━━━━━━━━━━━━━━━━
 🔍 <b>BÚSQUEDA</b>

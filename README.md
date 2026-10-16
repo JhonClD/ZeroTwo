@@ -37,7 +37,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Subtítulos | Selección por botones de pista interna o archivo externo, fuentes, alineación, CRF y preset. |
 | Traducción | Traducción opcional de SRT/VTT mediante un servidor LibreTranslate configurable. |
 | Descargas sociales | Flujo público para enlaces de YouTube, Facebook, X/Twitter y TikTok. |
-| Notificaciones | Avisos de episodios recientes de Crunchyroll con enlaces oficiales; no descarga videos. |
+| Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
 | Almacenamiento | Subir archivos a Google Drive mediante OAuth (opcional) o guardarlos en una carpeta compartida de Android. |
 | Rendimiento | Usar aria2c cuando está disponible; los torrents descargan un aria2c portable si el hosting no lo trae. |
