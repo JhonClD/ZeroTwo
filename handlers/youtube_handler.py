@@ -234,6 +234,69 @@ def _convert_to_voice_note(source: Path, destination: Path) -> None:
         raise RuntimeError(f"No se pudo convertir el audio a nota de voz. {detail}")
 
 
+def _prepare_audio_thumbnail(thumbnail_url: str, destination: Path) -> bool:
+    """Descarga y normaliza una miniatura de YouTube para adjuntarla al MP3."""
+    parsed = urlparse(thumbnail_url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() != "https" or not (
+        host == "ytimg.com" or host.endswith(".ytimg.com")
+        or host == "youtube.com" or host.endswith(".youtube.com")
+    ):
+        return False
+
+    source_path = destination.with_name(f"{destination.stem}_source")
+    response = None
+    try:
+        response = requests.get(
+            thumbnail_url,
+            headers=_YOUTUBE_HEADERS,
+            stream=True,
+            timeout=(8, 15),
+        )
+        response.raise_for_status()
+        content_type = str(response.headers.get("Content-Type", "")).lower()
+        if not content_type.startswith("image/"):
+            return False
+
+        size = 0
+        with source_path.open("wb") as source_file:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > 5 * 1024 * 1024:
+                    raise ValueError("La miniatura supera el límite de tamaño.")
+                source_file.write(chunk)
+        if size < 256:
+            return False
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        for quality in (5, 8):
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-v", "error", "-i", str(source_path),
+                    "-vf", "scale=320:320:force_original_aspect_ratio=decrease,pad=320:320:(ow-iw)/2:(oh-ih)/2",
+                    "-frames:v", "1", "-q:v", str(quality), "-y", str(destination),
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            if result.returncode == 0 and destination.exists():
+                output_size = destination.stat().st_size
+                if 1024 <= output_size <= 200 * 1024:
+                    return True
+        destination.unlink(missing_ok=True)
+        return False
+    except (requests.RequestException, OSError, ValueError, subprocess.TimeoutExpired) as error:
+        logger.info("No se pudo preparar la miniatura del audio: %s", error)
+        destination.unlink(missing_ok=True)
+        return False
+    finally:
+        if response is not None:
+            response.close()
+        source_path.unlink(missing_ok=True)
+
+
 async def safe_react(message: Message, emoji: str) -> None:
     try:
         await message.react(emoji)
@@ -277,10 +340,12 @@ def register(app, download_dir: Path) -> None:
             title = str(info.get("title") or "Video de YouTube")
             channel = str(info.get("channel") or "YouTube")
             media_format = "720" if is_video else "mp3"
-            await status_msg.edit_text("⏳ Loader.to está preparando la descarga…")
-            direct_url, loader_title = await loader_download_url(video_url, media_format)
-            title = loader_title or title
-
+            logger.info(
+                "🎵 YouTube seleccionado: %s | canal: %s",
+                title.replace("\n", " ")[:160],
+                channel.replace("\n", " ")[:100],
+            )
+            logger.info("📥 Solicitando %s a Loader.to", "video 720p" if is_video else "audio MP3")
             caption_info = (
                 f"╭━━━〔 🎵 YOUTUBE {'VIDEO' if is_video else 'AUDIO'} 〕━━━⬣\n"
                 f"┃ 📌 <b>Título:</b> {escape(title[:300])}\n"
@@ -297,7 +362,19 @@ def register(app, download_dir: Path) -> None:
                     )
                 except Exception as error:
                     logger.info("No se pudo enviar la miniatura de YouTube: %s", error)
+                    try:
+                        await message.reply_text(caption_info, parse_mode=enums.ParseMode.HTML)
+                    except Exception:
+                        logger.info("No se pudo enviar la tarjeta de información de YouTube")
+            else:
+                try:
+                    await message.reply_text(caption_info, parse_mode=enums.ParseMode.HTML)
+                except Exception:
+                    logger.info("No se pudo enviar la tarjeta de información de YouTube")
 
+            await status_msg.edit_text("⬇️ Descargando con Loader.to…")
+            direct_url, loader_title = await loader_download_url(video_url, media_format)
+            title = loader_title or title
             await safe_react(message, "⚡")
             timeout = (20, 180) if is_video else (15, 120)
             await asyncio.to_thread(download_file, direct_url, media_path, timeout)
@@ -326,10 +403,18 @@ def register(app, download_dir: Path) -> None:
                 await message.reply_voice(voice=str(voice_path))
             else:
                 await asyncio.to_thread(_validate_audio_file, media_path)
+                has_thumbnail = False
+                if info.get("thumbnail"):
+                    has_thumbnail = await asyncio.to_thread(
+                        _prepare_audio_thumbnail,
+                        info["thumbnail"],
+                        thumbnail_path,
+                    )
                 await message.reply_audio(
                     audio=str(media_path),
                     title=title[:64] or "Audio de YouTube",
                     performer=channel[:64] or "YouTube",
+                    thumb=str(thumbnail_path) if has_thumbnail else None,
                 )
             await safe_react(message, "👍")
         except subprocess.TimeoutExpired:

@@ -40,7 +40,7 @@ def register(app):
 ├ /get &lt;url&gt; — Descargar recurso
 └ /ssweb &lt;url&gt; — Captura de página
 <b>6️⃣ YouTube</b>
-├ /play &lt;nombre&gt; — Audio MP3 por Loader.to
+├ /play &lt;nombre&gt; — MP3 por Loader.to con carátula si está disponible
 ├ /play2 &lt;nombre&gt; — Video hasta 720p por Loader.to
 ├ /playaudio &lt;nombre&gt; — Nota de voz
 ├ /ytmp3 &lt;url&gt; — Audio desde URL
