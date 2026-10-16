@@ -336,6 +336,8 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/compress` | Abre perfiles de compresión; `/compress 700` intenta aproximarse a 700 MB mediante dos pasadas. |
 | `/subtitles` o `/sub` | Quema una pista de texto interna o un `.srt`, `.ass`, `.ssa` o `.vtt` enviado al bot. |
 | `/processstatus`, `/cancelprocess` | Consulta o cancela tu trabajo de procesamiento. |
+| Enviar una foto | La guarda como tu miniatura personal para videos. |
+| `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
@@ -343,6 +345,8 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 El procesamiento multimedia usa FFmpeg/FFprobe del entorno. La compresión normal usa una pasada CRF; un tamaño objetivo se aproxima con dos pasadas y consume más CPU. Quemar subtítulos requiere que FFmpeg incluya el filtro `subtitles` (libass). Por defecto se procesa un video a la vez y se admiten hasta dos trabajos entre activos y en cola. Se puede ajustar en el hosting con `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (por defecto 1800 MB), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (segundos, por defecto 7200). Los archivos de trabajo se eliminan tras completar, cancelar o fallar.
+
+La función de portada guarda por usuario solo el `file_id` de Telegram en `~/telegram_bot_files/video_covers/covers.json`. Si ya guardaste una foto, al enviar un video el bot lo descarga temporalmente y lo vuelve a enviar con una miniatura JPEG (máximo 320×320 y 200 KB), usando `thumb` de Pyrogram. Esto cambia la miniatura que muestra Telegram, no los fotogramas del video. Los temporales se eliminan al terminar; `ZERO_TWO_COVER_MAX_MB` limita el video (por defecto 1800 MB). Requiere FFmpeg disponible.
 
 ## Solución de problemas
 

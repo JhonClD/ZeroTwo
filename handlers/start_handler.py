@@ -43,6 +43,10 @@ Pega un enlace de MEGA o MediaFire directamente
 /subtitles      — Quemar subtítulos internos o externos
 /processstatus  — Ver estado · /cancelprocess para cancelar
 
+🖼 <b>PORTADA DE VIDEO</b>
+Envía una foto para guardarla como miniatura automática de tus videos.
+/show_cover     — Ver tu portada · /del_cover para borrarla
+
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━

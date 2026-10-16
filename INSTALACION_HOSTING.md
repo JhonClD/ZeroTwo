@@ -10,6 +10,8 @@ Para procesar videos, responde al archivo con `/process`, `/compress` o `/subtit
 
 Se pueden ajustar los límites en las variables del panel: `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (100–4096), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (60–21600 segundos). Mantén un trabajador y pocos hilos en BotKeep para no agotar CPU/RAM; no se requiere `sudo` para estas opciones.
 
+También puedes enviar una foto para guardarla como tu portada personal. Los videos que envíes después se reenvían con esa miniatura; `/show_cover` la muestra y `/del_cover` la elimina. La base que guarda el `file_id` queda en `~/telegram_bot_files/video_covers/covers.json`; el video se descarga temporalmente y se vuelve a subir con el `thumb` de Pyrogram, sin modificar sus fotogramas. El proceso requiere FFmpeg y espacio temporal aproximadamente del tamaño del video. `ZERO_TWO_COVER_MAX_MB` fija el máximo (por defecto 1800 MB).
+
 ## 1. Preparar el entorno
 
 En un VPS Ubuntu/Debian con acceso SSH y permisos `sudo`:

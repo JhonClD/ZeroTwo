@@ -24,6 +24,7 @@ from . import (
     jkanime_notify_handler,
     crunchyroll_notify_handler,
     video_processing_handler,
+    video_cover_handler,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     'jkanime_notify_handler',
     'crunchyroll_notify_handler',
     'video_processing_handler',
+    'video_cover_handler',
 ]
