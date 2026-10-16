@@ -336,7 +336,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/compress` | Abre perfiles de compresión; `/compress 700` intenta aproximarse a 700 MB mediante dos pasadas. |
 | `/subtitles` o `/sub` | Quema una pista de texto interna o un `.srt`, `.ass`, `.ssa` o `.vtt` enviado al bot. |
 | `/processstatus`, `/cancelprocess` | Consulta o cancela tu trabajo de procesamiento. |
-| Enviar una foto | La guarda como tu miniatura personal para videos. |
+| Enviar una foto | La guarda como tu única miniatura personal; una foto nueva reemplaza la anterior. |
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |

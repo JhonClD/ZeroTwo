@@ -101,6 +101,11 @@ def register(app, work_dir: Path, bot_token: str) -> None:
     photo_update_lock = asyncio.Lock()
     photo_updates_inflight: set[tuple[int, int]] = set()
     photo_updates_done: OrderedDict[tuple[int, int], None] = OrderedDict()
+    photo_order_lock = asyncio.Lock()
+    latest_photo_ids: dict[tuple[str, int], int] = {}
+    video_update_lock = asyncio.Lock()
+    video_updates_inflight: set[tuple[int, int]] = set()
+    video_updates_done: OrderedDict[tuple[int, int], None] = OrderedDict()
     try:
         max_video_mb = max(50, min(2048, int(os.getenv("ZERO_TWO_COVER_MAX_MB", "1800"))))
     except ValueError:
@@ -224,15 +229,24 @@ def register(app, work_dir: Path, bot_token: str) -> None:
             if not file_id:
                 await message.reply_text("No pude leer la foto. Envíala nuevamente como foto de Telegram.")
                 return
+            order_key = (key, message.chat.id)
+            async with photo_order_lock:
+                latest_id = latest_photo_ids.get(order_key, 0)
+                if message.id <= latest_id:
+                    saved = True
+                    return
+                latest_photo_ids[order_key] = message.id
             previous_cover = covers.get(key)
             covers[key] = file_id
             try:
                 await save_db()
             except OSError as error:
-                if previous_cover is None:
-                    covers.pop(key, None)
-                else:
-                    covers[key] = previous_cover
+                async with photo_order_lock:
+                    if latest_photo_ids.get(order_key) == message.id:
+                        if previous_cover is None:
+                            covers.pop(key, None)
+                        else:
+                            covers[key] = previous_cover
                 logger.exception("No se pudo guardar la portada")
                 await message.reply_text(f"No se pudo guardar la portada en el almacenamiento del hosting: {error}")
                 return
@@ -249,8 +263,7 @@ def register(app, work_dir: Path, bot_token: str) -> None:
                     if len(photo_updates_done) > 2048:
                         photo_updates_done.popitem(last=False)
 
-    @app.on_message(filters.video | filters.document, group=10)
-    async def add_cover(client, message: Message):
+    async def apply_cover_once(client, message: Message):
         await refresh_settings()
         key = owner_key(message)
         if not key or key in disabled_users:
@@ -382,3 +395,20 @@ def register(app, work_dir: Path, bot_token: str) -> None:
             finally:
                 if temp_dir is not None:
                     await asyncio.to_thread(shutil.rmtree, temp_dir, ignore_errors=True)
+
+    @app.on_message(filters.video | filters.document, group=10)
+    async def add_cover(client, message: Message):
+        update_id = (message.chat.id, message.id)
+        async with video_update_lock:
+            if update_id in video_updates_done or update_id in video_updates_inflight:
+                return
+            video_updates_inflight.add(update_id)
+        try:
+            await apply_cover_once(client, message)
+        finally:
+            async with video_update_lock:
+                video_updates_inflight.discard(update_id)
+                video_updates_done[update_id] = None
+                video_updates_done.move_to_end(update_id)
+                if len(video_updates_done) > 2048:
+                    video_updates_done.popitem(last=False)

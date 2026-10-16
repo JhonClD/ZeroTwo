@@ -84,6 +84,16 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
         await new_app.handlers["delete_cover"](None, FakeMessage())
         self.assertEqual(json.loads(db.read_text()), {})
 
+    async def test_many_photos_keep_only_latest_cover(self):
+        for message_id in range(110, 100, -1):
+            message = FakeMessage()
+            message.id = message_id
+            message.photo = type("Photo", (), {"file_id": f"cover-{message_id}"})()
+            await self.app.handlers["save_cover"](None, message)
+
+        db = self.work / "video_covers" / "covers.json"
+        self.assertEqual(json.loads(db.read_text())["123"], "cover-110")
+
     async def test_video_reuses_file_ids_without_downloading_or_reuploading(self):
         photo_message = FakeMessage()
         photo_message.photo = [type("Photo", (), {"file_id": "cover-file-id"})()]
@@ -106,6 +116,7 @@ class CoverStorageTests(unittest.IsolatedAsyncioTestCase):
                 raise AssertionError("El flujo video normal no debe descargar el video")
 
         with patch("handlers.video_cover_handler._send_video_by_file_id", side_effect=fake_bot_api):
+            await self.app.handlers["add_cover"](NoDownloadClient(), message)
             await self.app.handlers["add_cover"](NoDownloadClient(), message)
         self.assertTrue(message.status.deleted)
         self.assertEqual(len(payloads), 1)

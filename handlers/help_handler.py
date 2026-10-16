@@ -44,7 +44,7 @@ def register(app):
 └ /cancelprocess — Cancelar y limpiar archivos temporales
 
 <b>🖼 Portada de video</b>
-├ Envía una foto para guardarla como tu miniatura
+├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
 ├ Al enviar un video, se reenviará con esa miniatura
 ├ /thumon — Activar aplicación automática
 ├ /thumoff — Desactivarla temporalmente
