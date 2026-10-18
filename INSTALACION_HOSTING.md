@@ -41,6 +41,8 @@ El notificador de Crunchyroll consulta metadatos del catálogo en modo anónimo 
 
 MediaFire puede usar `aria2c`, `wget` o `curl` si están instalados. Si no hay ninguno, ZeroTwo usa `requests` de Python, incluido en `requirements.txt`; no requiere instalar otro ejecutable. Si MediaFire devuelve HTTP 403 desde el hosting, el sitio/CDN está rechazando esa solicitud y el fallback no puede quitar ese bloqueo.
 
+Para Drime, pega un enlace compartido público de `app.drime.cloud/drive/s/...` con la descarga habilitada. Si el enlace es una carpeta, el bot muestra un botón por archivo para que descargues uno a la vez. No hace falta crear una API key ni iniciar sesión en Drime. El archivo se guarda temporalmente antes de subirse a Telegram, así que deja espacio libre suficiente; el límite por defecto es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (entre 50 y 4096 MB). Los enlaces privados, vencidos, protegidos por contraseña o con descarga desactivada no se pueden bajar. Esta integración usa las rutas públicas que consume la web de Drime y puede requerir ajustes si Drime las cambia.
+
 ## 2. Descargar el proyecto e instalar Python
 
 Desde la terminal del servidor o la consola del panel, sitúate en el directorio persistente del bot y ejecuta:

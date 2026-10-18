@@ -2,7 +2,7 @@
 help_handler.py - Manejador del comando /help
 """
 
-from pyrogram import filters, enums
+from pyrogram import enums, filters
 from pyrogram.types import Message
 
 
@@ -60,12 +60,14 @@ def register(app):
 ├ /tiktok &lt;url&gt; — Sin marca de agua, calidad HD
 └ Alias: /ttdl /tt /tiktoknowm
 
-<b>🔟 MEGA / MediaFire / Google Drive</b>
+<b>🔟 MEGA / MediaFire / Google Drive / Drime</b>
 ├ Pega el enlace directamente o usa:
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
 ├ ☁️ /gdrive &lt;url_o_id&gt; — Descargar de Drive
 ├ 📤 /gdrive_upload [folder_id] — Subir usando API de Drive
+├ ☁️ Drime — pega un enlace público; si es carpeta, elige un archivo
+├ Drime requiere que el enlace permita descargar; no pide token de cuenta
 
 ├ 📁 /drive_sync — Guardar para sincronización Android
 └ Después envía un documento, foto, video o audio
