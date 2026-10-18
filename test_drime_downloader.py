@@ -67,6 +67,31 @@ class DrimeDownloaderTests(unittest.TestCase):
         self.assertNotIn("Authorization", mock_get.call_args.kwargs["headers"])
 
     @patch("downloaders.drime_downloader.requests.get")
+    def test_lists_single_file_share_from_link_entry(self, mock_get):
+        direct_entry = {
+            "id": 989782514,
+            "name": "episodio3-test.mkv",
+            "file_size": 291006766,
+            "type": "video",
+            "mime": "video/matroska",
+            "extension": "mkv",
+            "hash": "OTg5NzgyNTE0fA",
+        }
+        mock_get.return_value = FakeResponse(data={
+            "status": "success",
+            "link": {
+                "id": 175546,
+                "hash": SHARE_HASH,
+                "allow_download": True,
+                "entry": direct_entry,
+            },
+            "seo": None,
+        })
+        result = DrimeDownloader.list_shared_files(SHARE_URL)
+        self.assertEqual(result["share_id"], 175546)
+        self.assertEqual(result["files"], [direct_entry])
+
+    @patch("downloaders.drime_downloader.requests.get")
     def test_refuses_shares_with_download_disabled(self, mock_get):
         mock_get.return_value = FakeResponse(data=_listing(allow_download=False))
         with self.assertRaisesRegex(DrimeDownloadError, "desactivó la descarga"):

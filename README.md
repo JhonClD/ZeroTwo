@@ -330,7 +330,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/help` | Muestra la ayuda detallada. |
 | `/download` | Inicia una descarga desde MEGA o MediaFire. |
 | `/gdrive <enlace_o_id>` | Descarga un archivo público de Google Drive, sin OAuth/API. |
-| Enlace público de Drime | Pégalo directamente; en carpetas compartidas elige qué archivo descargar. No requiere token API. |
+| Enlace público de Drime | Pégalo directamente; descarga el archivo compartido o permite elegir uno dentro de una carpeta. No requiere token API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
 | `/process` | Responde a un video para elegir compresión o quemar subtítulos. |
@@ -346,7 +346,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/anime <nombre>` | Busca información de un anime. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
-Drime acepta enlaces compartidos de `app.drime.cloud` con descarga habilitada. Si el enlace contiene varios archivos, ZeroTwo muestra botones para descargarlos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
+Drime acepta enlaces compartidos de archivos y carpetas en `app.drime.cloud` con descarga habilitada. Los enlaces a un archivo se descargan directamente; si el enlace es una carpeta, ZeroTwo muestra botones para elegir los archivos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
 
 El procesamiento multimedia usa FFmpeg/FFprobe del entorno. La compresión normal usa una pasada CRF; un tamaño objetivo se aproxima con dos pasadas y consume más CPU. Quemar subtítulos requiere que FFmpeg incluya el filtro `subtitles` (libass). Por defecto se procesa un video a la vez y se admiten hasta dos trabajos entre activos y en cola. Se puede ajustar en el hosting con `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (por defecto 1800 MB), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (segundos, por defecto 7200). Los archivos de trabajo se eliminan tras completar, cancelar o fallar.
 

@@ -81,6 +81,14 @@ class DrimeDownloader:
                 link = current_link
                 if current_link.get("allow_download") is False:
                     raise DrimeDownloadError("El propietario desactivó la descarga para este enlace de Drime.")
+                direct_entry = current_link.get("entry")
+                if (
+                    isinstance(direct_entry, dict)
+                    and direct_entry.get("type") != "folder"
+                    and direct_entry.get("hash")
+                    and direct_entry.get("name")
+                ):
+                    files.append(direct_entry)
                 try:
                     link_id = int(current_link["id"])
                 except (KeyError, TypeError, ValueError) as error:
@@ -106,7 +114,7 @@ class DrimeDownloader:
                 break
 
         if not files:
-            raise DrimeDownloadError("No encontré archivos descargables dentro de esa carpeta compartida.")
+            raise DrimeDownloadError("No encontré archivos descargables en ese enlace compartido de Drime.")
         for entry in files:
             if not _HASH_RE.fullmatch(str(entry.get("hash", ""))):
                 raise DrimeDownloadError("Drime entregó un identificador de archivo no válido.")
