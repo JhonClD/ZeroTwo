@@ -29,7 +29,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Área | Función |
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
-| Descargas | Descargar archivos de MEGA, MediaFire y enlaces públicos de Google Drive. |
+| Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile. |
 | Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar capturas del inicio, cuartos, mitad y final antes del video. |
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
@@ -43,6 +43,8 @@ ZeroTwo ofrece las siguientes funciones principales:
 En Linux, si no existe `megadl`, el descargador de MEGA puede usar una compilación portable oficial de Megatools (x86_64/ARM64), con verificación de integridad y sin permisos root. Consulta la [guía de hosting](INSTALACION_HOSTING.md#1-preparar-el-entorno) para conocer sus requisitos de red y almacenamiento.
 
 Para torrents en Linux, si no existe `aria2c`, ZeroTwo prepara automáticamente una compilación estática de aria2 1.37.0 para x86_64/ARM64/ARMv7, valida los hashes SHA-256 del archivo y del ejecutable y la guarda bajo `.runtime/`, sin permisos root. El binario proviene del [proyecto comunitario aria2-static-build](https://github.com/abcfy2/aria2-static-build/releases/tag/1.37.0); el hosting necesita HTTPS saliente a GitHub y permiso para ejecutar archivos del proyecto. Esto no evita restricciones del proveedor sobre tráfico BitTorrent.
+
+GoFile admite enlaces públicos `https://gofile.io/d/ID`: los enlaces de un solo archivo se descargan directamente y las carpetas muestran un selector para elegir un archivo. No hace falta una cuenta personal ni una API key; el bot crea una cuenta invitada anónima sin correo y reutiliza su token mientras está en ejecución. El tamaño máximo por archivo es 1800 MB por defecto y se puede ajustar con `ZERO_TWO_GOFILE_MAX_MB` (50–4096 MB). GoFile puede cambiar su token web o bloquear IPs de hosting, por lo que el acceso desde BotKeep no se puede garantizar si el proveedor bloquea esas conexiones.
 
 ## Requisitos
 

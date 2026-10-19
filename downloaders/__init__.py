@@ -2,10 +2,17 @@
 Downloaders - Módulos para descargar de diferentes servicios
 """
 
-from .mega_downloader import MEGADownloader
-from .mediafire_downloader import MediaFireDownloader
-
-__all__ = ['MEGADownloader', 'MediaFireDownloader']
 from .drive_downloader import DriveDownloader, DriveUploader, take_video_screenshots
+from .gofile_downloader import GoFileDownloader, GoFileDownloadError
+from .mediafire_downloader import MediaFireDownloader
+from .mega_downloader import MEGADownloader
 
-__all__ = ['MEGADownloader', 'MediaFireDownloader', 'DriveDownloader', 'DriveUploader', 'take_video_screenshots']
+__all__ = [
+    'DriveDownloader',
+    'DriveUploader',
+    'GoFileDownloadError',
+    'GoFileDownloader',
+    'MEGADownloader',
+    'MediaFireDownloader',
+    'take_video_screenshots',
+]

@@ -60,7 +60,7 @@ def register(app):
 ├ /tiktok &lt;url&gt; — Sin marca de agua, calidad HD
 └ Alias: /ttdl /tt /tiktoknowm
 
-<b>🔟 MEGA / MediaFire / Google Drive / Drime</b>
+<b>🔟 MEGA / MediaFire / Google Drive / Drime / GoFile</b>
 ├ Pega el enlace directamente o usa:
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
@@ -68,6 +68,8 @@ def register(app):
 ├ 📤 /gdrive_upload [folder_id] — Subir usando API de Drive
 ├ ☁️ Drime — pega un enlace público; si es carpeta, elige un archivo
 ├ Drime requiere que el enlace permita descargar; no pide token de cuenta
+├ ☁️ GoFile — pega un enlace público https://gofile.io/d/ID
+└ Si es carpeta, elige el archivo; no requiere una cuenta personal
 
 ├ 📁 /drive_sync — Guardar para sincronización Android
 └ Después envía un documento, foto, video o audio

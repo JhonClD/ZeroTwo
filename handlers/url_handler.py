@@ -18,6 +18,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from downloaders import MediaFireDownloader, MEGADownloader
 from downloaders.drime_downloader import DrimeDownloader, DrimeDownloadError
 from downloaders.drive_downloader import DriveDownloader, take_video_screenshots
+from downloaders.gofile_downloader import GoFileDownloader, GoFileDownloadError
 from utils import VideoProcessor
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,15 @@ def register(app, download_dir):
         max_drime_mb = max(50, min(4096, int(os.getenv("ZERO_TWO_DRIME_MAX_MB", "1800"))))
     except ValueError:
         max_drime_mb = 1800
+    try:
+        max_gofile_mb = max(50, min(4096, int(os.getenv("ZERO_TWO_GOFILE_MAX_MB", "1800"))))
+    except ValueError:
+        max_gofile_mb = 1800
     drime_busy_users: set[int] = set()
     drime_busy_lock = asyncio.Lock()
+    gofile_busy_users: set[int] = set()
+    gofile_busy_lock = asyncio.Lock()
+    gofile_selections = {}
 
     def _file_label(entry):
         name = Path(str(entry.get("name") or "archivo_drime")).name.replace("\x00", "")
@@ -162,6 +170,127 @@ def register(app, download_dir):
         finally:
             await asyncio.to_thread(shutil.rmtree, job_dir, ignore_errors=True)
 
+    def _gofile_file_label(entry):
+        name = GoFileDownloader._safe_filename(entry.get("name"), str(entry.get("id") or "file"))
+        try:
+            size = max(0, int(entry.get("size") or 0))
+        except (TypeError, ValueError):
+            size = 0
+        if size >= 1024 ** 3:
+            size_text = f"{size / (1024 ** 3):.2f} GB"
+        elif size:
+            size_text = f"{size / (1024 ** 2):.1f} MB"
+        else:
+            size_text = "tamaño desconocido"
+        return name, size, size_text
+
+    async def _download_and_send_gofile(message, status_msg, share, entry, user_id=None):
+        if user_id is None:
+            user_id = message.from_user.id if message.from_user else 0
+        filename, expected_size, size_text = _gofile_file_label(entry)
+        max_bytes = max_gofile_mb * 1024 * 1024
+        if expected_size and expected_size > max_bytes:
+            await status_msg.edit_text(
+                f"❌ <b>{html.escape(filename)}</b> supera el límite de {max_gofile_mb} MB configurado para GoFile.",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
+
+        user_dir = Path(download_dir) / f"user_{user_id}"
+        job_dir = user_dir / f"gofile_{uuid.uuid4().hex[:10]}"
+        try:
+            job_dir.mkdir(parents=True, exist_ok=False)
+            if expected_size and shutil.disk_usage(job_dir).free < expected_size + 64 * 1024 * 1024:
+                raise GoFileDownloadError("No hay suficiente espacio libre en el hosting para este archivo.")
+
+            escaped_name = html.escape(filename)
+            await status_msg.edit_text(
+                f"☁️ <b>Descargando desde GoFile</b>\n{escaped_name}\n📦 {size_text}\n0%",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            loop = asyncio.get_running_loop()
+            last_download_pct = [-10]
+
+            def download_progress(current, total):
+                if not total:
+                    return
+                pct = min(100, int(current * 100 / total))
+                if pct - last_download_pct[0] < 10 and pct != 100:
+                    return
+                last_download_pct[0] = pct
+
+                async def update_status():
+                    try:
+                        await status_msg.edit_text(
+                            f"☁️ <b>Descargando desde GoFile</b>\n{escaped_name}\n📦 {size_text}\n"
+                            f"{_progress_bar(pct)} {pct}%",
+                            parse_mode=enums.ParseMode.HTML,
+                        )
+                    except Exception:
+                        pass
+
+                future = asyncio.run_coroutine_threadsafe(update_status(), loop)
+                try:
+                    future.result(timeout=20)
+                except Exception:
+                    pass
+
+            destination = job_dir / filename
+            file_path, downloaded_bytes = await asyncio.to_thread(
+                GoFileDownloader.download_file,
+                entry,
+                destination,
+                max_bytes,
+                download_progress,
+                share.get("content_id", ""),
+            )
+            file_size = downloaded_bytes / (1024 * 1024)
+            await status_msg.edit_text(
+                f"✅ <b>Descarga de GoFile completada</b>\n{escaped_name}\n"
+                f"📦 {file_size:.1f} MB\n📤 Enviando a Telegram…",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            last_upload_pct = [-10]
+
+            async def upload_progress(current, total):
+                if not total:
+                    return
+                pct = min(100, int(current * 100 / total))
+                if pct - last_upload_pct[0] < 10 and pct != 100:
+                    return
+                last_upload_pct[0] = pct
+                try:
+                    await status_msg.edit_text(
+                        f"📤 <b>Enviando desde GoFile a Telegram</b>\n{escaped_name}\n"
+                        f"{_progress_bar(pct)} {pct}%",
+                        parse_mode=enums.ParseMode.HTML,
+                    )
+                except Exception:
+                    pass
+
+            await message.reply_document(
+                document=str(file_path),
+                caption=f"✅ Descargado de GoFile\n📄 {filename}\n📦 {file_size:.1f} MB",
+                progress=upload_progress,
+            )
+            await status_msg.delete()
+        except GoFileDownloadError as error:
+            await status_msg.edit_text(
+                f"❌ <b>Error de GoFile</b>\n{html.escape(str(error))}",
+                parse_mode=enums.ParseMode.HTML,
+            )
+        except Exception as error:
+            logger.exception("Error descargando o enviando archivo de GoFile")
+            try:
+                await status_msg.edit_text(
+                    f"❌ Error al descargar/enviar desde GoFile\n<code>{html.escape(str(error)[:500])}</code>",
+                    parse_mode=enums.ParseMode.HTML,
+                )
+            except Exception:
+                pass
+        finally:
+            await asyncio.to_thread(shutil.rmtree, job_dir, ignore_errors=True)
+
     @app.on_message(filters.text & filters.regex(r'https?://'))
     async def handle_url(client, message: Message):
         url = _extract_url(message.text)
@@ -176,9 +305,10 @@ def register(app, download_dir):
         is_mediafire = MediaFireDownloader.is_mediafire_url(url)
         is_drive     = DriveDownloader.is_drive_url(url)
         is_drime     = DrimeDownloader.is_drime_url(url)
+        is_gofile    = GoFileDownloader.is_gofile_url(url)
 
-        if not any([is_mega, is_mediafire, is_drive, is_drime]):
-            logger.info("⏭️ URL ignorada (no es MEGA, MediaFire, Drive ni Drime)")
+        if not any([is_mega, is_mediafire, is_drive, is_drime, is_gofile]):
+            logger.info("⏭️ URL ignorada (no es un servicio de descarga compatible)")
             return
 
         if is_mega:
@@ -187,6 +317,8 @@ def register(app, download_dir):
             service = "MediaFire"
         elif is_drime:
             service = "Drime"
+        elif is_gofile:
+            service = "GoFile"
         else:
             service = "Google Drive"
 
@@ -209,6 +341,50 @@ def register(app, download_dir):
 
         # ── Descarga ──────────────────────────────────────────────────────────
         try:
+            if is_gofile:
+                share = await asyncio.to_thread(GoFileDownloader.list_shared_files, url)
+                entries = share["files"]
+                if len(entries) == 1:
+                    async with gofile_busy_lock:
+                        if user_id in gofile_busy_users:
+                            await status_msg.edit_text("Ya tienes una descarga GoFile en curso.")
+                            return
+                        gofile_busy_users.add(user_id)
+                    try:
+                        await _download_and_send_gofile(message, status_msg, share, entries[0])
+                    finally:
+                        async with gofile_busy_lock:
+                            gofile_busy_users.discard(user_id)
+                    return
+
+                buttons = []
+                for entry in entries[:30]:
+                    filename, _, size_text = _gofile_file_label(entry)
+                    label = f"📥 {filename} ({size_text})"
+                    if len(label) > 64:
+                        label = label[:61] + "…"
+                    if len(gofile_selections) >= 500:
+                        gofile_selections.pop(next(iter(gofile_selections)))
+                    selector_id = uuid.uuid4().hex[:12]
+                    gofile_selections[selector_id] = {
+                        "user_id": user_id,
+                        "share": share,
+                        "entry": entry,
+                    }
+                    callback_data = f"gf:{user_id}:{selector_id}"
+                    buttons.append([InlineKeyboardButton(label, callback_data=callback_data)])
+                if not buttons:
+                    raise GoFileDownloadError("No pude crear el selector para los archivos de esta carpeta.")
+                count = "100 o más" if share.get("truncated") else str(len(entries))
+                more = "\nSolo se muestran los primeros 30 archivos." if len(entries) > 30 or share.get("truncated") else ""
+                await status_msg.edit_text(
+                    f"📂 <b>Carpeta pública de GoFile</b>\nEncontré {count} archivos. "
+                    f"Elige cuál quieres descargar:{more}",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                    parse_mode=enums.ParseMode.HTML,
+                )
+                return
+
             if is_drime:
                 share = await asyncio.to_thread(DrimeDownloader.list_shared_files, url)
                 entries = share["files"]
@@ -341,6 +517,12 @@ def register(app, download_dir):
             file_path.unlink(missing_ok=True)
             logger.info("🗑️ Archivo temporal eliminado")
 
+        except GoFileDownloadError as e:
+            logger.warning("Error en enlace GoFile: %s", e)
+            await status_msg.edit_text(
+                f"❌ <b>Error de GoFile</b>\n{html.escape(str(e))}",
+                parse_mode=enums.ParseMode.HTML,
+            )
         except DrimeDownloadError as e:
             logger.warning("Error en enlace Drime: %s", e)
             await status_msg.edit_text(
@@ -395,6 +577,57 @@ def register(app, download_dir):
         finally:
             async with drime_busy_lock:
                 drime_busy_users.discard(owner_id)
+
+    @app.on_callback_query(filters.regex(r"^gf:\d+:[a-f0-9]{12}$"))
+    async def gofile_download_callback(client, query):
+        parts = (query.data or "").split(":", 2)
+        if len(parts) != 3 or query.message is None:
+            await query.answer("Este botón de descarga no es válido.", show_alert=True)
+            return
+        _, owner_id, selector_id = parts
+        try:
+            owner_id = int(owner_id)
+        except ValueError:
+            await query.answer("Este botón de descarga no es válido.", show_alert=True)
+            return
+        if not query.from_user or query.from_user.id != owner_id:
+            await query.answer("Este selector pertenece a otra persona.", show_alert=True)
+            return
+
+        selection = gofile_selections.get(selector_id)
+        if not selection or selection.get("user_id") != owner_id:
+            await query.answer("Este selector venció. Vuelve a enviar el enlace.", show_alert=True)
+            return
+        async with gofile_busy_lock:
+            if owner_id in gofile_busy_users:
+                await query.answer("Ya tienes una descarga GoFile en curso.", show_alert=True)
+                return
+            gofile_busy_users.add(owner_id)
+            selection = gofile_selections.pop(selector_id, None)
+        if not selection:
+            async with gofile_busy_lock:
+                gofile_busy_users.discard(owner_id)
+            await query.answer("Este selector venció. Vuelve a enviar el enlace.", show_alert=True)
+            return
+
+        await query.answer("Preparando descarga…")
+        try:
+            await _download_and_send_gofile(
+                query.message,
+                query.message,
+                selection["share"],
+                selection["entry"],
+                user_id=owner_id,
+            )
+        except Exception as error:
+            logger.exception("Error procesando selección GoFile")
+            try:
+                await query.message.edit_text(f"❌ Error procesando GoFile: {html.escape(str(error)[:400])}")
+            except Exception:
+                pass
+        finally:
+            async with gofile_busy_lock:
+                gofile_busy_users.discard(owner_id)
 
 
 # ── Helper de screenshots ──────────────────────────────────────────────────────
