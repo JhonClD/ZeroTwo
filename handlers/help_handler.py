@@ -65,6 +65,7 @@ def register(app):
 ├ 🔷 MEGA — mega.nz
 ├ 🔶 MediaFire — mediafire.com
 ├ ☁️ /gdrive &lt;url_o_id&gt; — Descargar de Drive
+├ Carpeta pública: elegir archivo o descargar todo; requiere GOOGLE_DRIVE_API_KEY
 ├ 📤 /gdrive_upload [folder_id] — Subir usando API de Drive
 ├ ☁️ Drime — pega un enlace público; si es carpeta, elige un archivo
 ├ Drime requiere que el enlace permita descargar; no pide token de cuenta
