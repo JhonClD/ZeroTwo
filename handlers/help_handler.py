@@ -79,7 +79,8 @@ def register(app):
 ├ Pega un enlace magnet directamente
 ├ Pega una URL directa terminada en .torrent
 ├ Usa /torrent URL o responde a un archivo .torrent con /torrent
-└ Al terminar, el bot envía los archivos al chat
+├ Si hay varios capítulos, marca los que quieras en el selector
+└ El bot descarga y envía solo los archivos elegidos al chat
 
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>

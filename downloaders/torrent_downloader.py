@@ -90,6 +90,37 @@ def _torrent_metadata(source):
     return metadata
 
 
+def _torrent_file_entries(source):
+    """Devuelve archivos en el mismo orden 1-based que aria2 --select-file."""
+    try:
+        torrent = _decode_bencode(Path(source).read_bytes())
+        info = torrent.get(b"info", {}) if isinstance(torrent, dict) else {}
+        if not isinstance(info, dict):
+            return []
+        raw_root = info.get(b"name.utf-8", info.get(b"name", b"Torrent"))
+        root = raw_root.decode("utf-8", errors="replace") if isinstance(raw_root, bytes) else str(raw_root)
+        entries = info.get(b"files")
+        if isinstance(entries, list):
+            result = []
+            for index, item in enumerate(entries, 1):
+                if not isinstance(item, dict):
+                    continue
+                components = item.get(b"path.utf-8", item.get(b"path", []))
+                parts = [part.decode("utf-8", errors="replace") if isinstance(part, bytes) else str(part)
+                         for part in components]
+                result.append({
+                    "index": index,
+                    "name": "/".join([root, *parts]) if parts else root,
+                    "size": max(0, int(item.get(b"length", 0))),
+                })
+            return result
+        if isinstance(info.get(b"length"), int):
+            return [{"index": 1, "name": root, "size": max(0, info[b"length"])}]
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
+        pass
+    return []
+
+
 def _parse_aria2_progress(output):
     """Extrae bytes y porcentaje de la línea de estado de aria2, si está presente."""
     match = _SIZE_TOKEN_RE.search(_ANSI_RE.sub("", output))
@@ -204,7 +235,46 @@ class TorrentDownloader:
             return False
 
     @staticmethod
-    def download(source, output_dir: Path, timeout=None, progress_callback=None):
+    def prepare_selection(source, work_dir: Path, timeout=240):
+        """Prepara metadatos solamente y lista archivos antes de iniciar la descarga."""
+        work_dir.mkdir(parents=True, exist_ok=True)
+        prepared_source = source
+        metainfo_path = None
+        if isinstance(source, str) and source.lower().startswith(("http://", "https://")):
+            try:
+                metainfo_path = TorrentDownloader._download_torrent_url(source, work_dir / "source.torrent")
+                prepared_source = str(metainfo_path)
+            except (ValueError, requests.RequestException, OSError) as error:
+                return False, source, None, [], f"No se pudo obtener el archivo .torrent: {error}"
+        elif isinstance(source, str) and source.lower().startswith("magnet:"):
+            try:
+                aria2_binary = TorrentDownloader._aria2_binary()
+                result = subprocess.run(
+                    [aria2_binary, "--dir", str(work_dir), "--bt-metadata-only=true",
+                     "--bt-save-metadata=true", "--enable-dht=true", "--bt-enable-lpd=true",
+                     "--seed-time=0", "--console-log-level=warn", source],
+                    capture_output=True, text=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                return False, source, None, [], "Se agotó el tiempo para obtener los metadatos del magnet."
+            except Exception as error:
+                return False, source, None, [], f"No se pudieron obtener los metadatos del magnet: {error}"
+            torrent_files = sorted(work_dir.glob("*.torrent"), key=lambda path: path.stat().st_mtime, reverse=True)
+            if result.returncode != 0 or not torrent_files:
+                detail = (result.stderr or result.stdout or "No se recibió metadato torrent.").strip()[-900:]
+                return False, source, None, [], detail
+            metainfo_path = torrent_files[0]
+        else:
+            metainfo_path = Path(source)
+
+        entries = _torrent_file_entries(metainfo_path) if metainfo_path else []
+        if not entries:
+            return False, prepared_source, metainfo_path, [], "No pude leer la lista de archivos de este torrent."
+        return True, prepared_source, metainfo_path, entries, ""
+
+    @staticmethod
+    def download(source, output_dir: Path, timeout=None, progress_callback=None,
+                 selected_files=None, metadata_source=None):
         output_dir.mkdir(parents=True, exist_ok=True)
         source_path = source
         if isinstance(source, str) and source.lower().startswith(("http://", "https://")):
@@ -222,15 +292,27 @@ class TorrentDownloader:
                 f"archivos en .runtime/: {error}"
             )
 
-        metadata = _torrent_metadata(source_path)
-        if isinstance(source, str) and source.lower().startswith("magnet:"):
+        metadata = _torrent_metadata(metadata_source or source_path)
+        if isinstance(source, str) and source.lower().startswith("magnet:") and not metadata_source:
             metadata = _torrent_metadata(source)
+        if selected_files:
+            selected_indexes = {int(index) for index in selected_files}
+            selected_entries = [item for item in _torrent_file_entries(metadata_source or source_path)
+                                if item["index"] in selected_indexes]
+            if selected_entries:
+                metadata["total_size"] = sum(item["size"] for item in selected_entries)
+                metadata["total_files"] = len(selected_entries)
         command = [
             aria2_binary, "--dir", str(output_dir), "--continue=true",
             "--seed-time=0", "--follow-torrent=true", "--bt-enable-lpd=true",
             "--enable-dht=true", "--summary-interval=5", "--show-console-readout=true",
             "--console-log-level=notice", "--file-allocation=none", str(source_path),
         ]
+        if selected_files:
+            selected_indexes = sorted({int(index) for index in selected_files if int(index) > 0})
+            if not selected_indexes:
+                return False, [], "Selecciona al menos un archivo del torrent."
+            command.insert(-1, "--select-file=" + ",".join(map(str, selected_indexes)))
         start = time.monotonic()
         output_lines = []
         updates = queue.Queue()
