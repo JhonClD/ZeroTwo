@@ -5,6 +5,7 @@ import html
 import logging
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,7 +24,48 @@ _TORRENT_URL_RE = re.compile(r"^https?://\S+\.torrent(?:\?\S*)?$", re.IGNORECASE
 def _progress_bar(pct, width=10):
     pct = max(0, min(100, int(pct)))
     filled = int(width * pct / 100)
-    return "▓" * filled + "░" * (width - filled)
+    return "■" * filled + "▢" * (width - filled)
+
+
+def _format_size(size):
+    size = max(0, int(size or 0))
+    if size < 1024:
+        return f"{size} B"
+    value = float(size)
+    for unit in ("KB", "MB", "GB", "TB"):
+        value /= 1024
+        if value < 1024 or unit == "TB":
+            return f"{value:.1f} {unit}"
+
+
+def _format_elapsed(seconds):
+    seconds = max(0, int(seconds or 0))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _torrent_status_text(metrics):
+    name = html.escape(str(metrics.get("name") or "Torrent"))
+    completed = int(metrics.get("completed_size") or 0)
+    total_size = int(metrics.get("total_size") or 0)
+    percent = int(metrics.get("percent") or 0)
+    if total_size:
+        size_text = f"{_format_size(completed)} / {_format_size(total_size)}"
+        percent = max(percent, min(100, int(completed * 100 / total_size)))
+    else:
+        size_text = f"{_format_size(completed)} / Calculando…"
+    current_files = int(metrics.get("current_files") or 0)
+    total_files = int(metrics.get("total_files") or 0)
+    files_text = f"{current_files} / {total_files}" if total_files else f"{current_files} / Calculando…"
+    return (
+        "📥 <b>Descargando torrent</b>\n"
+        f"┃ <b>Nombre:</b> <code>{name}</code>\n"
+        f"┣ <b>Size:</b> {size_text}\n"
+        f"┣ <b>Elapsed:</b> {_format_elapsed(metrics.get('elapsed'))}\n"
+        f"┣ <b>Progreso:</b> {_progress_bar(percent)} {percent}%\n"
+        f"┗ <b>Total Files:</b> {files_text}"
+    )
 
 
 def _is_torrent_url(value):
@@ -66,12 +108,35 @@ async def _send_file(message, path: Path, status: Message, source_label: str):
 async def _run_torrent(message: Message, source, download_dir: Path, source_label="torrent"):
     job_dir = download_dir / f"torrent_{message.from_user.id}_{uuid.uuid4().hex[:8]}"
     status = await message.reply_text("⏳ Preparando descarga torrent…")
+    loop = asyncio.get_running_loop()
+    status_lock = asyncio.Lock()
+    progress_active = [True]
+    last_progress_edit = [0.0]
+
+    async def update_progress(metrics):
+        if not progress_active[0]:
+            return
+        async with status_lock:
+            if not progress_active[0]:
+                return
+            try:
+                await status.edit_text(_torrent_status_text(metrics), parse_mode=enums.ParseMode.HTML)
+            except Exception:
+                pass
+
+    def progress_callback(metrics):
+        now = time.monotonic()
+        if now - last_progress_edit[0] < 2 and metrics.get("percent", 0) < 100:
+            return
+        last_progress_edit[0] = now
+        loop.call_soon_threadsafe(lambda: asyncio.create_task(update_progress(metrics)))
+
     try:
-        await status.edit_text(
-            "🧲 <b>Descargando torrent…</b>\nAl terminar, enviaré los archivos a este chat.",
-            parse_mode=enums.ParseMode.HTML,
+        await status.edit_text(_torrent_status_text({"name": source_label}), parse_mode=enums.ParseMode.HTML)
+        ok, files, error = await asyncio.to_thread(
+            TorrentDownloader.download, source, job_dir, None, progress_callback
         )
-        ok, files, error = await asyncio.to_thread(TorrentDownloader.download, source, job_dir)
+        progress_active[0] = False
         if not ok:
             await status.edit_text(f"❌ <b>Error torrent</b>\n<code>{html.escape(error[:900])}</code>", parse_mode=enums.ParseMode.HTML)
             return

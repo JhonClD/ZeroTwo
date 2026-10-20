@@ -1,6 +1,7 @@
 """Pruebas locales para la descarga de torrents desde enlaces directos."""
 
 import asyncio
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,6 +45,18 @@ class FakeApp:
         return decorator
 
 
+class FakeProcess:
+    def __init__(self, output=""):
+        self.stdout = io.StringIO(output)
+        self.returncode = 0
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
 class TorrentDownloadTests(unittest.TestCase):
     def test_download_accepts_public_torrent_url_and_passes_local_file_to_aria2(self):
         async def unused():
@@ -52,25 +65,27 @@ class TorrentDownloadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             torrent_bytes = b"d8:announce4: url4:infod4:name4:testee"
             response = FakeResponse(torrent_bytes, {"Content-Length": str(len(torrent_bytes))})
-            completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+            progress = []
 
-            def fake_run(command, **kwargs):
+            def fake_popen(command, **kwargs):
                 self.assertTrue(Path(command[-1]).is_file())
                 self.assertEqual(Path(command[-1]).name, "source.torrent")
                 (Path(temporary) / "episode.mkv").write_bytes(b"video")
-                return completed
+                return FakeProcess("[#abc 512KiB/1MiB(50%) CN:4 DL:1MiB]\n")
 
             with patch("downloaders.torrent_downloader.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]), \
                  patch("downloaders.torrent_downloader.requests.get", return_value=response), \
                  patch.object(TorrentDownloader, "_aria2_binary", return_value="aria2c"), \
-                 patch("downloaders.torrent_downloader.subprocess.run", side_effect=fake_run):
+                 patch("downloaders.torrent_downloader.subprocess.Popen", side_effect=fake_popen):
                 ok, files, error = TorrentDownloader.download(
-                    "https://example.org/download/series.torrent", Path(temporary)
+                    "https://example.org/download/series.torrent", Path(temporary),
+                    progress_callback=progress.append,
                 )
 
             self.assertTrue(ok, error)
             self.assertEqual([path.name for path in files], ["episode.mkv"])
             self.assertTrue(response.closed)
+            self.assertTrue(any(item["percent"] == 50 for item in progress))
 
     def test_download_rejects_a_private_address(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -103,6 +118,23 @@ class TorrentDownloadTests(unittest.TestCase):
         self.assertTrue(torrent_handler._is_torrent_url("https://example.org/a.torrent?download=1"))
         self.assertFalse(torrent_handler._is_torrent_url("https://example.org/view/2176425"))
         self.assertFalse(torrent_handler._is_torrent_url("file:///tmp/a.torrent"))
+
+    def test_progress_template_contains_all_requested_fields(self):
+        text = torrent_handler._torrent_status_text({
+            "name": "Mi archivo.mkv",
+            "completed_size": 1048576,
+            "total_size": 10485760,
+            "elapsed": 65,
+            "percent": 10,
+            "current_files": 1,
+            "total_files": 10,
+        })
+        self.assertIn("Mi archivo.mkv", text)
+        self.assertIn("Size:", text)
+        self.assertIn("Elapsed:</b> 00:01:05", text)
+        self.assertIn("Progreso:", text)
+        self.assertIn("10%", text)
+        self.assertIn("Total Files:</b> 1 / 10", text)
 
 
 if __name__ == "__main__":

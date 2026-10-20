@@ -1,11 +1,16 @@
-"""Descargas BitTorrent con aria2c del sistema o una copia portable para Linux."""
+"""Descargas BitTorrent con aria2c y progreso legible para el bot."""
 
 import ipaddress
-import socket
+import os
+import queue
+import re
 import shutil
+import socket
 import subprocess
+import threading
+import time
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 import requests
 
@@ -13,6 +18,98 @@ from downloaders.portable_aria2 import ensure_aria2c
 
 _MAX_TORRENT_BYTES = 10 * 1024 * 1024
 _MAX_REDIRECTS = 5
+_SIZE_TOKEN_RE = re.compile(r"(?P<done>[\d.]+\s*[KMGT]?i?B)/(?P<total>[\d.]+\s*[KMGT]?i?B)\s*\((?P<pct>\d+(?:\.\d+)?)%\)", re.IGNORECASE)
+_SIZE_VALUE_RE = re.compile(r"^\s*(?P<value>[\d.]+)\s*(?P<unit>[KMGT]?i?B)?\s*$", re.IGNORECASE)
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _decode_bencode(data):
+    """Decodifica un metainfo bencode pequeño sin una dependencia adicional."""
+    def parse(index):
+        if index >= len(data):
+            raise ValueError("bencode truncado")
+        marker = data[index:index + 1]
+        if marker == b"i":
+            end = data.index(b"e", index)
+            return int(data[index + 1:end]), end + 1
+        if marker == b"l":
+            values = []
+            index += 1
+            while data[index:index + 1] != b"e":
+                value, index = parse(index)
+                values.append(value)
+            return values, index + 1
+        if marker == b"d":
+            values = {}
+            index += 1
+            while data[index:index + 1] != b"e":
+                key, index = parse(index)
+                value, index = parse(index)
+                values[key] = value
+            return values, index + 1
+        colon = data.index(b":", index)
+        length = int(data[index:colon])
+        start = colon + 1
+        end = start + length
+        if length < 0 or end > len(data):
+            raise ValueError("cadena bencode inválida")
+        return data[start:end], end
+
+    value, end = parse(0)
+    if end != len(data):
+        raise ValueError("datos sobrantes en bencode")
+    return value
+
+
+def _torrent_metadata(source):
+    """Obtiene nombre, tamaño total y cantidad de archivos si hay metainfo disponible."""
+    metadata = {"name": "Torrent", "total_size": 0, "total_files": 0}
+    try:
+        if isinstance(source, str) and source.lower().startswith("magnet:"):
+            query = parse_qs(urlsplit(source).query)
+            metadata["name"] = (query.get("dn") or ["Torrent"])[0]
+            return metadata
+        path = Path(source)
+        if not path.is_file() or path.stat().st_size > _MAX_TORRENT_BYTES:
+            return metadata
+        torrent = _decode_bencode(path.read_bytes())
+        info = torrent.get(b"info", {}) if isinstance(torrent, dict) else {}
+        if not isinstance(info, dict):
+            return metadata
+        raw_name = info.get(b"name.utf-8", info.get(b"name", b"Torrent"))
+        metadata["name"] = raw_name.decode("utf-8", errors="replace") if isinstance(raw_name, bytes) else str(raw_name)
+        entries = info.get(b"files")
+        if isinstance(entries, list):
+            metadata["total_files"] = len(entries)
+            metadata["total_size"] = sum(max(0, item.get(b"length", 0)) for item in entries if isinstance(item, dict))
+        elif isinstance(info.get(b"length"), int):
+            metadata["total_files"] = 1
+            metadata["total_size"] = max(0, info[b"length"])
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
+        pass
+    return metadata
+
+
+def _parse_aria2_progress(output):
+    """Extrae bytes y porcentaje de la línea de estado de aria2, si está presente."""
+    match = _SIZE_TOKEN_RE.search(_ANSI_RE.sub("", output))
+    if not match:
+        return None
+
+    def to_bytes(value):
+        parsed = _SIZE_VALUE_RE.match(value)
+        if not parsed:
+            return 0
+        number = float(parsed.group("value"))
+        unit = (parsed.group("unit") or "B").upper().replace("IB", "B")
+        exponent = {"B": 0, "KB": 1, "MB": 2, "GB": 3, "TB": 4}.get(unit, 0)
+        return int(number * (1024 ** exponent))
+
+    return {
+        "completed_size": to_bytes(match.group("done")),
+        "total_size": to_bytes(match.group("total")),
+        "percent": float(match.group("pct")),
+    }
 
 
 class TorrentDownloader:
@@ -107,7 +204,7 @@ class TorrentDownloader:
             return False
 
     @staticmethod
-    def download(source, output_dir: Path, timeout=None):
+    def download(source, output_dir: Path, timeout=None, progress_callback=None):
         output_dir.mkdir(parents=True, exist_ok=True)
         source_path = source
         if isinstance(source, str) and source.lower().startswith(("http://", "https://")):
@@ -125,22 +222,113 @@ class TorrentDownloader:
                 f"archivos en .runtime/: {error}"
             )
 
+        metadata = _torrent_metadata(source_path)
+        if isinstance(source, str) and source.lower().startswith("magnet:"):
+            metadata = _torrent_metadata(source)
         command = [
             aria2_binary, "--dir", str(output_dir), "--continue=true",
             "--seed-time=0", "--follow-torrent=true", "--bt-enable-lpd=true",
-            "--enable-dht=true", "--summary-interval=5", "--console-log-level=warn",
-            "--file-allocation=none", str(source_path),
+            "--enable-dht=true", "--summary-interval=5", "--show-console-readout=true",
+            "--console-log-level=notice", "--file-allocation=none", str(source_path),
         ]
+        start = time.monotonic()
+        output_lines = []
+        updates = queue.Queue()
+        sentinel = object()
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
+            )
+        except OSError as error:
+            return False, [], f"No se pudo iniciar aria2c: {error}"
+
+        def read_output():
+            try:
+                for line in process.stdout:
+                    updates.put(line)
+            finally:
+                updates.put(sentinel)
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        completed_size = 0
+        reported_total = int(metadata.get("total_size") or 0)
+        reported_percent = 0.0
+        last_report = 0.0
+        timed_out = False
+
+        def report_progress(force=False):
+            nonlocal last_report
+            if not progress_callback:
+                return
+            now = time.monotonic()
+            if not force and now - last_report < 2:
+                return
+            current = dict(metadata)
+            current.update({
+                "completed_size": completed_size,
+                "total_size": reported_total,
+                "percent": reported_percent,
+                "elapsed": int(now - start),
+                "current_files": sum(
+                    1 for path in output_dir.rglob("*")
+                    if path.is_file() and not path.name.endswith((".aria2", ".torrent"))
+                ),
+            })
+            try:
+                progress_callback(current)
+            except Exception:
+                pass
+            last_report = now
+
+        report_progress(force=True)
+        done_reading = False
+        while not done_reading:
+            if timeout is not None and time.monotonic() - start > timeout:
+                timed_out = True
+                process.kill()
+                break
+            try:
+                line = updates.get(timeout=0.5)
+            except queue.Empty:
+                report_progress()
+                if process.poll() is not None and not reader.is_alive():
+                    break
+                continue
+            if line is sentinel:
+                done_reading = True
+                continue
+            output_lines.append(line)
+            if len(output_lines) > 200:
+                output_lines = output_lines[-100:]
+            parsed = _parse_aria2_progress(line)
+            if parsed:
+                completed_size = parsed["completed_size"]
+                reported_total = parsed["total_size"] or reported_total
+                reported_percent = parsed["percent"]
+                report_progress(force=True)
+
+        try:
+            return_code = process.wait(timeout=5)
         except subprocess.TimeoutExpired:
+            process.kill()
+            return_code = process.wait()
+        reader.join(timeout=1)
+        if timed_out:
             return False, [], "La descarga torrent superó el tiempo límite."
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()[-1200:]
+        if return_code != 0:
+            detail = "".join(output_lines).strip()[-1200:]
             return False, [], detail or "aria2c terminó con error."
         files = sorted(
             (p for p in output_dir.rglob("*") if p.is_file() and not p.name.endswith((".aria2", ".torrent"))),
             key=lambda p: p.stat().st_size,
             reverse=True,
         )
+        reported_total = reported_total or sum(path.stat().st_size for path in files)
+        reported_percent = 100.0
+        if files:
+            metadata["total_files"] = metadata.get("total_files") or len(files)
+            completed_size = reported_total
+            report_progress(force=True)
         return bool(files), files, "" if files else "El torrent terminó sin archivos descargados."
