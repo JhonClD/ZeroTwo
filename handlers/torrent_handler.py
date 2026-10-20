@@ -68,6 +68,21 @@ def _torrent_status_text(metrics):
     )
 
 
+def _upload_status_text(filename, current, total, elapsed, source_label):
+    current = max(0, int(current or 0))
+    total = max(0, int(total or 0))
+    percent = min(100, int(current * 100 / total)) if total else 0
+    size_text = f"{_format_size(current)} / {_format_size(total)}" if total else _format_size(current)
+    return (
+        "📤 <b>Enviando archivo a Telegram</b>\n"
+        f"┃ <b>Nombre:</b> <code>{html.escape(str(filename))}</code>\n"
+        f"┣ <b>Size:</b> {size_text}\n"
+        f"┣ <b>Elapsed:</b> {_format_elapsed(elapsed)}\n"
+        f"┣ <b>Progreso:</b> {_progress_bar(percent)} {percent}%\n"
+        f"┗ <b>Archivo:</b> {html.escape(str(source_label))}"
+    )
+
+
 def _is_torrent_url(value):
     if not isinstance(value, str) or not _TORRENT_URL_RE.fullmatch(value.strip()):
         return False
@@ -89,9 +104,16 @@ def _is_magnet_uri(value):
 
 
 async def _send_file(message, path: Path, status: Message, source_label: str):
-    size = path.stat().st_size / (1024 * 1024)
+    file_size = path.stat().st_size
+    size = file_size / (1024 * 1024)
     caption = f"✅ Torrent descargado\n📄 {path.name}\n📦 {size:.1f} MB"
+    started = time.monotonic()
     last = [-10]
+
+    await status.edit_text(
+        _upload_status_text(path.name, 0, file_size, 0, source_label),
+        parse_mode=enums.ParseMode.HTML,
+    )
 
     async def progress(current, total):
         if not total:
@@ -102,7 +124,7 @@ async def _send_file(message, path: Path, status: Message, source_label: str):
         last[0] = pct
         try:
             await status.edit_text(
-                f"📤 <b>Enviando {source_label} a Telegram</b>\n{_progress_bar(pct)} {pct}%",
+                _upload_status_text(path.name, current, total, time.monotonic() - started, source_label),
                 parse_mode=enums.ParseMode.HTML,
             )
         except Exception:
@@ -155,7 +177,10 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
             return
         for index, path in enumerate(files):
             await _send_file(message, path, status, f"archivo {index + 1}/{len(files)}")
-        await status.delete()
+        await status.edit_text(
+            f"✅ <b>Envío completado</b>\nSe enviaron {len(files)} archivo(s) del torrent.",
+            parse_mode=enums.ParseMode.HTML,
+        )
     except Exception as error:
         logger.error("Error en descarga torrent", exc_info=True)
         await status.edit_text(f"❌ Error enviando torrent\n<code>{html.escape(str(error)[:700])}</code>", parse_mode=enums.ParseMode.HTML)

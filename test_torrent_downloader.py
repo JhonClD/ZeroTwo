@@ -160,6 +160,17 @@ class TorrentDownloadTests(unittest.TestCase):
         self.assertIn("10%", text)
         self.assertIn("Total Files:</b> 1 / 10", text)
 
+    def test_upload_template_contains_file_size_elapsed_and_progress(self):
+        text = torrent_handler._upload_status_text(
+            "S02E01 & S02E02.mkv", 5 * 1024 * 1024, 10 * 1024 * 1024, 65, "archivo 1/2"
+        )
+        self.assertIn("Enviando archivo a Telegram", text)
+        self.assertIn("S02E01 &amp; S02E02.mkv", text)
+        self.assertIn("5.0 MB / 10.0 MB", text)
+        self.assertIn("Elapsed:</b> 00:01:05", text)
+        self.assertIn(f"Progreso:</b> {torrent_handler._progress_bar(50)}", text)
+        self.assertIn("50%", text)
+
 
 if __name__ == "__main__":
     unittest.main()
