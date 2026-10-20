@@ -78,7 +78,8 @@ def register(app):
 <b>1️⃣1️⃣ Torrents</b>
 ├ Pega un enlace magnet directamente
 ├ Pega una URL directa terminada en .torrent
-├ Usa /torrent URL o responde a un archivo .torrent con /torrent
+├ También puedes usar /torrent MAGNET o /torrent URL
+├ O responder a un archivo .torrent con /torrent
 └ Al terminar, el bot envía los archivos al chat
 
 ━━━━━━━━━━━━━━━━━━━━

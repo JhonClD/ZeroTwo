@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from downloaders.torrent_downloader import TorrentDownloader
@@ -118,6 +118,30 @@ class TorrentDownloadTests(unittest.TestCase):
         self.assertTrue(torrent_handler._is_torrent_url("https://example.org/a.torrent?download=1"))
         self.assertFalse(torrent_handler._is_torrent_url("https://example.org/view/2176425"))
         self.assertFalse(torrent_handler._is_torrent_url("file:///tmp/a.torrent"))
+
+    def test_magnet_uri_requires_a_torrent_identifier(self):
+        magnet = "magnet:?xt=urn:btih:11570de06bb259af71aab6d2104f7321dee23&dn=Episode"
+        self.assertTrue(torrent_handler._is_magnet_uri(magnet))
+        self.assertFalse(torrent_handler._is_magnet_uri("magnet:?dn=Episode"))
+
+    def test_torrent_command_accepts_magnet_as_argument(self):
+        async def run_test():
+            app = FakeApp()
+            torrent_handler.register(app, Path("/tmp/downloads"))
+            handler = app.handlers[-1][1]
+            magnet = "magnet:?xt=urn:btih:11570de06bb259af71aab6d2104f7321dee23&dn=Episode"
+            message = SimpleNamespace(
+                text=f"/torrent {magnet}",
+                from_user=SimpleNamespace(id=123),
+                reply_to_message=None,
+                reply_text=AsyncMock(),
+            )
+            with patch.object(torrent_handler, "_run_torrent", new_callable=AsyncMock) as run_torrent:
+                await handler(None, message)
+            run_torrent.assert_awaited_once_with(message, magnet, Path("/tmp/downloads"), "magnet")
+            message.reply_text.assert_not_awaited()
+
+        asyncio.run(run_test())
 
     def test_progress_template_contains_all_requested_fields(self):
         text = torrent_handler._torrent_status_text({

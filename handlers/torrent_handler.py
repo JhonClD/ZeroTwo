@@ -8,7 +8,7 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from pyrogram import enums, filters
 from pyrogram.types import Message
@@ -73,6 +73,19 @@ def _is_torrent_url(value):
         return False
     parsed = urlsplit(value.strip())
     return parsed.scheme.lower() in {"http", "https"} and bool(parsed.hostname) and parsed.path.lower().endswith(".torrent")
+
+
+def _is_magnet_uri(value):
+    if not isinstance(value, str) or not value.strip().lower().startswith("magnet:?"):
+        return False
+    parsed = urlsplit(value.strip())
+    if parsed.scheme.lower() != "magnet":
+        return False
+    query = parse_qs(parsed.query)
+    return any(
+        tracker_id.lower().startswith(("urn:btih:", "urn:btmh:"))
+        for tracker_id in query.get("xt", [])
+    )
 
 
 async def _send_file(message, path: Path, status: Message, source_label: str):
@@ -153,7 +166,11 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
 def register(app, download_dir: Path):
     @app.on_message(filters.text & filters.regex(r"^magnet:\?"))
     async def magnet(client, message: Message):
-        await _run_torrent(message, message.text.strip(), download_dir, "magnet")
+        source = message.text.strip()
+        if not _is_magnet_uri(source):
+            await message.reply_text("❌ El enlace magnet no contiene un identificador de torrent válido.")
+            return
+        await _run_torrent(message, source, download_dir, "magnet")
 
     # El handler genérico de enlaces se registra antes que este; el grupo 1 permite
     # que el enlace .torrent también llegue a este manejador.
@@ -187,9 +204,13 @@ def register(app, download_dir: Path):
 
         parts = (message.text or "").split(maxsplit=1)
         source = parts[1].strip() if len(parts) > 1 else ""
+        if _is_magnet_uri(source):
+            await _run_torrent(message, source, download_dir, "magnet")
+            return
         if not _is_torrent_url(source):
             await message.reply_text(
-                "Uso: pega un magnet, pega una URL directa terminada en .torrent, "
+                "Uso: /torrent magnet:?xt=…; pega un magnet directamente; "
+                "usa /torrent URL para un enlace .torrent; "
                 "o responde a un archivo .torrent con /torrent."
             )
             return

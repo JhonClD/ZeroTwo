@@ -352,7 +352,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | Enviar una foto | La guarda como tu única miniatura personal; una foto nueva reemplaza la anterior. |
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
-| `/torrent` | Responde a un archivo `.torrent`, usa `/torrent https://.../archivo.torrent` o pega la URL `.torrent` o un enlace `magnet:` directamente. Al completar, el bot envía los archivos descargados a Telegram. En Linux puede preparar aria2c portable si no está instalado. |
+| `/torrent` | Responde a un archivo `.torrent`, usa `/torrent https://.../archivo.torrent`, `/torrent magnet:?xt=...` o pega el magnet/URL `.torrent` directamente. Al completar, el bot envía los archivos descargados a Telegram. En Linux puede preparar aria2c portable si no está instalado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
