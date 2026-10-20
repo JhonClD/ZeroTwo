@@ -77,8 +77,9 @@ def register(app):
 
 <b>1️⃣1️⃣ Torrents</b>
 ├ Pega un enlace magnet directamente
-├ Responde a un archivo .torrent con /torrent
-└ Requiere aria2 instalado en Termux
+├ Pega una URL directa terminada en .torrent
+├ Usa /torrent URL o responde a un archivo .torrent con /torrent
+└ Al terminar, el bot envía los archivos al chat
 
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>
