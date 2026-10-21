@@ -11,21 +11,17 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from utils.transfer_status import TransferProgress, parse_bytes, render_transfer_status
 
 logger = logging.getLogger(__name__)
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-
-
-def _progress_bar(pct: int, width: int = 10) -> str:
-    filled = int(width * pct / 100)
-    return '▓' * filled + '░' * (width - filled)
 
 
 class MediaFireDownloader:
     """Descarga archivos de MediaFire con progreso en tiempo real."""
 
     @staticmethod
-    def _download_with_requests(url: str, output_path: Path, referer: str) -> int:
+    def _download_with_requests(url: str, output_path: Path, referer: str, progress=None) -> int:
         """Descarga sin binarios externos, útil en contenedores de hosting restringidos."""
         headers = {'User-Agent': UA, 'Referer': referer}
         with requests.get(url, headers=headers, stream=True, timeout=(20, 60), allow_redirects=True) as response:
@@ -38,6 +34,10 @@ class MediaFireDownloader:
             content_type = response.headers.get('Content-Type', '').lower()
             if 'text/html' in content_type:
                 raise ValueError('MediaFire devolvió una página HTML en vez del archivo.')
+            try:
+                content_length = max(0, int(response.headers.get('Content-Length') or 0))
+            except (TypeError, ValueError):
+                content_length = 0
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
             written = 0
@@ -52,6 +52,8 @@ class MediaFireDownloader:
                             raise ValueError('MediaFire entregó una página HTML, no el archivo solicitado.')
                     output.write(chunk)
                     written += len(chunk)
+                    if progress:
+                        progress(written, content_length)
             if written == 0:
                 raise ValueError('MediaFire devolvió un archivo vacío.')
             return written
@@ -160,19 +162,52 @@ class MediaFireDownloader:
             logger.info(f"📥 MediaFire: descargando '{filename}'")
             logger.info(f"   URL: {direct_url[:80]}…")
 
+            meter = TransferProgress()
+            last_reported = [-10]
+            last_unknown_update = [0.0]
+
+            async def report_progress(current, total, speed=None):
+                if not progress_callback:
+                    return
+                current = max(0, int(current or 0))
+                total = max(0, int(total or 0))
+                pct = min(100, int(current * 100 / total)) if total else None
+                if pct is not None:
+                    if pct - last_reported[0] < 10 and pct != 100:
+                        return
+                    last_reported[0] = pct
+                else:
+                    now = asyncio.get_running_loop().time()
+                    if now - last_unknown_update[0] < 2:
+                        return
+                    last_unknown_update[0] = now
+                await progress_callback(
+                    render_transfer_status(
+                        "Descargando", "MediaFire", filename, current, total, meter,
+                        speed_override=speed,
+                    )
+                )
+
             if progress_callback:
                 await progress_callback(
-                    f"🔶 <b>Descargando de MediaFire</b>\n"
-                    f"📄 {filename}\n"
-                    f"⏳ Iniciando…"
+                    render_transfer_status("Descargando", "MediaFire", filename, 0, 0, meter)
                 )
 
             async def _requests_fallback():
+                state = [0, 0]
+
+                def update_progress(current, total):
+                    state[:] = [current, total]
+
+                task = asyncio.create_task(asyncio.to_thread(
+                    MediaFireDownloader._download_with_requests,
+                    direct_url, output_path, url, update_progress,
+                ))
+                while not task.done():
+                    await asyncio.sleep(0.5)
+                    await report_progress(*state)
                 try:
-                    size = await asyncio.to_thread(
-                        MediaFireDownloader._download_with_requests,
-                        direct_url, output_path, url,
-                    )
+                    size = await task
                 except Exception:
                     output_path.unlink(missing_ok=True)
                     raise
@@ -180,7 +215,7 @@ class MediaFireDownloader:
                 logger.info(f"✅ MediaFire descargado: {filename} ({size_mb:.1f} MB) con requests")
                 if progress_callback:
                     await progress_callback(
-                        f"🔶 <b>MediaFire</b>\n📄 {filename}\n✅ Descarga completa ({size_mb:.1f} MB)"
+                        render_transfer_status("Descarga completada", "MediaFire", filename, size, size, meter)
                     )
                 return True, output_path, None
 
@@ -248,20 +283,19 @@ class MediaFireDownloader:
 
                 # aria2c: "[#abc123 10MiB/100MiB(10%) CN:16 DL:5MiB]"
                 if tool == 'aria2c':
-                    m = re.search(r'\((\d+)%\)', line)
-                    spd = re.search(r'DL:([\d.]+\w+)', line)
+                    m = re.search(
+                        r'([\d.]+\s*[KMGT]?i?B)/([\d.]+\s*[KMGT]?i?B)\((\d+)%\)',
+                        line, re.IGNORECASE,
+                    )
+                    spd = re.search(r'DL:([\d.]+\s*[KMGT]?i?B)', line, re.IGNORECASE)
                     if m:
-                        pct = int(m.group(1))
-                        speed = spd.group(1) if spd else ''
+                        current = parse_bytes(m.group(1)) or 0
+                        total = parse_bytes(m.group(2)) or 0
+                        pct = int(m.group(3))
+                        speed = parse_bytes(spd.group(1)) if spd else None
                         logger.info(f"📥 MediaFire {pct}%  {speed}")
                         if pct - last_pct[0] >= 10 and progress_callback:
-                            bar = _progress_bar(pct)
-                            await progress_callback(
-                                f"🔶 <b>Descargando de MediaFire</b>\n"
-                                f"📄 {filename}\n"
-                                f"{bar} {pct}%\n"
-                                f"⚡ {speed}"
-                            )
+                            await report_progress(current, total, speed)
                             last_pct[0] = pct
 
                 # wget: "100%[====] 50.0M  2.50MB/s"
@@ -269,14 +303,13 @@ class MediaFireDownloader:
                     m = re.search(r'(\d+)%', line)
                     if m:
                         pct = int(m.group(1))
+                        current_match = re.search(r'\s([\d,.]+)\s*(B|[KMGT]?B)\s+([\d.]+\s*[KMGT]?B/s)', line, re.IGNORECASE)
+                        current = parse_bytes(f"{current_match.group(1).replace(',', '')} {current_match.group(2)}") if current_match else (output_path.stat().st_size if output_path.exists() else 0)
+                        total = int(current * 100 / pct) if pct else 0
+                        speed = parse_bytes(current_match.group(3).removesuffix('/s')) if current_match else None
                         logger.info(f"📥 MediaFire {pct}%")
                         if pct - last_pct[0] >= 10 and progress_callback:
-                            bar = _progress_bar(pct)
-                            await progress_callback(
-                                f"🔶 <b>Descargando de MediaFire</b>\n"
-                                f"📄 {filename}\n"
-                                f"{bar} {pct}%"
-                            )
+                            await report_progress(current, total, speed)
                             last_pct[0] = pct
 
                 # curl: progreso en formato libre
@@ -284,14 +317,11 @@ class MediaFireDownloader:
                     m = re.search(r'(\d+)\s*%', line)
                     if m:
                         pct = int(m.group(1))
+                        current = output_path.stat().st_size if output_path.exists() else 0
+                        total = int(current * 100 / pct) if pct else 0
                         logger.info(f"📥 MediaFire {pct}%")
                         if pct - last_pct[0] >= 10 and progress_callback:
-                            bar = _progress_bar(pct)
-                            await progress_callback(
-                                f"🔶 <b>Descargando de MediaFire</b>\n"
-                                f"📄 {filename}\n"
-                                f"{bar} {pct}%"
-                            )
+                            await report_progress(current, total)
                             last_pct[0] = pct
 
             process.wait()
