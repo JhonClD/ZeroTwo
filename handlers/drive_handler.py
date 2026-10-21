@@ -9,6 +9,7 @@ from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from downloaders.drive_downloader import DriveDownloader, DriveUploader, take_video_screenshots
+from utils.transfer_status import TransferProgress, format_bytes, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +67,11 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
             )
             return
 
-        file_size = file_path.stat().st_size / (1024 * 1024)
         file_ext  = file_path.suffix.lower()
         filename  = file_path.name
 
         await status_msg.edit_text(
-            f"✅ <b>Descarga completada</b>\n📄 {filename}\n📦 {file_size:.1f} MB\n📤 Enviando…",
+            f"✅ <b>Descarga completada</b> · Google Drive\n{format_file_info(file_path, 'Google Drive')}\n📤 Enviando…",
             parse_mode=enums.ParseMode.HTML
         )
 
@@ -80,11 +80,24 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
             await _send_screenshots(message, file_path, user_dir, "drive")
 
         # Enviar archivo
-        last_pct = [0]
+        last_pct = [-10]
+        upload_meter = TransferProgress()
         async def upload_progress(current, total):
+            if not total:
+                return
             pct = int(current / total * 100)
             if pct - last_pct[0] >= 10:
-                logger.info(f"📤 Telegram upload {pct}%")
+                logger.info(f"📤 Telegram upload {pct}% ({current}/{total} bytes)")
+                try:
+                    await status_msg.edit_text(
+                        render_transfer_status(
+                            "Subiendo", "Telegram · Google Drive", filename,
+                            current, total, upload_meter,
+                        ),
+                        parse_mode=enums.ParseMode.HTML,
+                    )
+                except Exception:
+                    pass
                 last_pct[0] = pct
 
         try:
@@ -166,11 +179,30 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
         filename = filename or f"file_{media.file_unique_id}"
         mime_type = getattr(media, 'mime_type', None) or ('image/jpeg' if message.photo else 'application/octet-stream')
 
-        status_msg = await message.reply_text("⬇️ Descargando archivo de Telegram…")
+        download_meter = TransferProgress()
+        status_msg = await message.reply_text(
+            render_transfer_status("Descargando", "Telegram", filename, 0, getattr(media, 'file_size', 0) or 0, download_meter),
+            parse_mode=enums.ParseMode.HTML,
+        )
+        last_download_pct = [0]
+
+        async def telegram_download_progress(current, total):
+            if total:
+                pct = min(100, int(current * 100 / total))
+                if pct - last_download_pct[0] < 10 and pct != 100:
+                    return
+                last_download_pct[0] = pct
+            await status_msg.edit_text(
+                render_transfer_status(
+                    "Descargando", "Telegram", filename, current, total, download_meter,
+                ),
+                parse_mode=enums.ParseMode.HTML,
+            )
 
         try:
             file_path = Path(await message.download(
-                file_name=str(user_dir / filename)
+                file_name=str(user_dir / filename),
+                progress=telegram_download_progress,
             ))
 
             file_size = file_path.stat().st_size / (1024 * 1024)
@@ -183,7 +215,7 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
                 await status_msg.edit_text(
                     f"✅ <b>Archivo guardado en Termux</b>\n"
                     f"📄 {escape(target_path.name)}\n"
-                    f"📦 {file_size:.1f} MB\n\n"
+                    f"📦 {format_bytes(target_path.stat().st_size)}\n\n"
                     "La aplicación de sincronización puede subirlo a Google Drive.",
                     parse_mode=enums.ParseMode.HTML,
                 )
@@ -191,8 +223,11 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
                 return
 
             await status_msg.edit_text(
-                f"📤 <b>Subiendo a Drive…</b>\n📄 {escape(file_path.name)}\n📦 {file_size:.1f} MB",
-                parse_mode=enums.ParseMode.HTML
+                render_transfer_status(
+                    "Subiendo", "Google Drive", file_path.name, 0,
+                    file_path.stat().st_size, TransferProgress(),
+                ),
+                parse_mode=enums.ParseMode.HTML,
             )
 
             async def tg_progress(text):
@@ -215,7 +250,8 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
                 )
                 await status_msg.edit_text(
                     f"✅ <b>Subido a Google Drive</b>\n"
-                    f"📄 {escape(info.get('name', file_path.name))}\n"
+                    f"📄 <code>{escape(info.get('name', file_path.name))}</code>\n"
+                    f"📦 {format_bytes(file_path.stat().st_size)}\n"
                     f"🔗 {escape(link, quote=True)}",
                     parse_mode=enums.ParseMode.HTML
                 )

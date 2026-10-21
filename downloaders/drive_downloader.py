@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from utils.transfer_status import TransferProgress, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
 DRIVE_DOWNLOAD_URL = 'https://drive.google.com/uc'
@@ -217,7 +218,7 @@ def _download_public_drive_file(
                 output.write(chunk)
                 downloaded += len(chunk)
                 if progress_update:
-                    progress_update(downloaded, total)
+                    progress_update(downloaded, total, output_path.name)
         if downloaded == 0:
             raise ValueError('Google Drive devolvió un archivo vacío.')
         partial_path.replace(output_path)
@@ -506,7 +507,8 @@ class DriveDownloader:
         try:
             file_id = _extract_file_id(url_or_id)
             output_dir.mkdir(parents=True, exist_ok=True)
-            progress_state = [0, 0]
+            progress_state = [0, 0, ""]
+            download_meter = TransferProgress()
             if progress_callback:
                 try:
                     await progress_callback(
@@ -517,8 +519,8 @@ class DriveDownloader:
                 except Exception:
                     pass
 
-            def progress_update(downloaded, total):
-                progress_state[:] = [downloaded, total]
+            def progress_update(downloaded, total, filename=""):
+                progress_state[:] = [downloaded, total, filename]
 
             task = asyncio.create_task(asyncio.to_thread(
                 _download_public_drive_file, file_id, output_dir, progress_update, max_bytes
@@ -526,18 +528,17 @@ class DriveDownloader:
             last_reported = -10
             while not task.done():
                 await asyncio.sleep(0.5)
-                downloaded, total = progress_state
+                downloaded, total, filename = progress_state
                 if total > 0:
                     pct = min(100, int(downloaded * 100 / total))
                     if pct - last_reported >= 10 and progress_callback:
-                        downloaded_mb = downloaded / (1024 * 1024)
-                        total_mb = total / (1024 * 1024)
-                        logger.info(f"📥 Drive {pct}% — {downloaded_mb:.1f}/{total_mb:.1f} MB")
+                        logger.info(f"📥 Drive {pct}% — {downloaded}/{total} bytes")
                         try:
                             await progress_callback(
-                                f"📥 <b>Descargando de Drive</b>\n"
-                                f"{_progress_bar(pct)} {pct}%\n"
-                                f"💾 {downloaded_mb:.1f} / {total_mb:.1f} MB"
+                                render_transfer_status(
+                                    "Descargando", "Google Drive", filename or "archivo de Drive",
+                                    downloaded, total, download_meter,
+                                )
                             )
                         except Exception:
                             pass
@@ -549,7 +550,7 @@ class DriveDownloader:
             if progress_callback:
                 try:
                     await progress_callback(
-                        f"✅ <b>Drive descargado</b>\n📄 {output_path.name}\n📦 {file_size:.1f} MB"
+                        f"✅ <b>Descarga completada</b> · Google Drive\n{format_file_info(output_path, 'Google Drive')}"
                     )
                 except Exception:
                     pass
@@ -580,14 +581,15 @@ class DriveUploader:
             service   = _get_service()
             filename  = file_path.name
             total_mb  = file_path.stat().st_size / (1024 * 1024)
+            upload_meter = TransferProgress()
 
             logger.info(f"📤 Drive: subiendo '{filename}' ({total_mb:.1f} MB)")
             if progress_callback:
                 await progress_callback(
-                    f"📤 <b>Subiendo a Drive</b>\n"
-                    f"📄 {filename}\n"
-                    f"📦 {total_mb:.1f} MB\n"
-                    f"⏳ Iniciando..."
+                    render_transfer_status(
+                        "Subiendo", "Google Drive", filename, 0,
+                        file_path.stat().st_size, upload_meter,
+                    )
                 )
 
             metadata = {'name': filename}
@@ -618,12 +620,11 @@ class DriveUploader:
                     logger.info(f"📤 Drive {pct}% — {uploaded_mb:.1f}/{total_mb:.1f} MB")
 
                     if pct - last_reported >= 10 and progress_callback:
-                        bar = _progress_bar(pct)
                         await progress_callback(
-                            f"📤 <b>Subiendo a Drive</b>\n"
-                            f"📄 {filename}\n"
-                            f"{bar} {pct}%\n"
-                            f"💾 {uploaded_mb:.1f} / {total_mb:.1f} MB"
+                            render_transfer_status(
+                                "Subiendo", "Google Drive", filename,
+                                status.resumable_progress or 0, file_path.stat().st_size, upload_meter,
+                            )
                         )
                         last_reported = pct
 

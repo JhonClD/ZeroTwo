@@ -11,21 +11,22 @@ from pyrogram.types import Message
 
 from downloaders.torrent_downloader import TorrentDownloader
 from utils import VideoProcessor
+from utils.transfer_status import TransferProgress, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
 _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
-
-
-def _progress_bar(pct, width=10):
-    pct = max(0, min(100, int(pct)))
-    filled = int(width * pct / 100)
-    return "▓" * filled + "░" * (width - filled)
 
 
 async def _send_file(message, path: Path, status: Message, source_label: str):
     size = path.stat().st_size / (1024 * 1024)
     caption = f"✅ Torrent descargado\n📄 {path.name}\n📦 {size:.1f} MB"
     last = [-10]
+    meter = TransferProgress()
+    await status.edit_text(
+        f"✅ <b>Descarga torrent completada</b>\n{format_file_info(path, 'Torrent')}\n"
+        f"📤 Preparando envío · {source_label}",
+        parse_mode=enums.ParseMode.HTML,
+    )
 
     async def progress(current, total):
         if not total:
@@ -36,7 +37,10 @@ async def _send_file(message, path: Path, status: Message, source_label: str):
         last[0] = pct
         try:
             await status.edit_text(
-                f"📤 <b>Enviando {source_label}</b>\n{_progress_bar(pct)} {pct}%",
+                render_transfer_status(
+                    "Subiendo", "Telegram · Torrent", path.name,
+                    current, total, meter, source_label,
+                ),
                 parse_mode=enums.ParseMode.HTML,
             )
         except Exception:
@@ -56,8 +60,45 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
     job_dir = download_dir / f"torrent_{message.from_user.id}_{uuid.uuid4().hex[:8]}"
     status = await message.reply_text("⏳ Preparando descarga torrent…")
     try:
-        await status.edit_text("🧲 <b>Descargando torrent…</b>\nEsto puede tardar según los seeders.", parse_mode=enums.ParseMode.HTML)
-        ok, files, error = await asyncio.to_thread(TorrentDownloader.download, source, job_dir)
+        meter = TransferProgress()
+        last_pct = [-10]
+        loop = asyncio.get_running_loop()
+        await status.edit_text(
+            render_transfer_status(
+                "Descargando", "Torrent / aria2", "Preparando metadatos",
+                0, 0, meter, source_label,
+            ),
+            parse_mode=enums.ParseMode.HTML,
+        )
+
+        def torrent_progress(current, total, speed=None):
+            if total:
+                pct = min(100, int(current * 100 / total))
+                if pct - last_pct[0] < 10 and pct != 100:
+                    return
+                last_pct[0] = pct
+
+            async def update_status():
+                try:
+                    await status.edit_text(
+                        render_transfer_status(
+                            "Descargando", "Torrent / aria2", "Descarga torrent",
+                            current, total, meter, source_label, speed_override=speed,
+                        ),
+                        parse_mode=enums.ParseMode.HTML,
+                    )
+                except Exception:
+                    pass
+
+            future = asyncio.run_coroutine_threadsafe(update_status(), loop)
+            try:
+                future.result(timeout=20)
+            except Exception:
+                pass
+
+        ok, files, error = await asyncio.to_thread(
+            TorrentDownloader.download, source, job_dir, progress_callback=torrent_progress,
+        )
         if not ok:
             await status.edit_text(f"❌ <b>Error torrent</b>\n<code>{error[:900]}</code>", parse_mode=enums.ParseMode.HTML)
             return
