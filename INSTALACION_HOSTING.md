@@ -45,16 +45,6 @@ Para Drime, pega un enlace compartido público de `app.drime.cloud/drive/s/...` 
 
 Para GoFile, pega un enlace público `https://gofile.io/d/ID`. Los enlaces de un archivo se descargan directamente; si es una carpeta, el bot presenta un selector para elegir qué archivo bajar. No hace falta API key ni cuenta personal: ZeroTwo crea una cuenta invitada anónima sin correo y reutiliza su token mientras está en ejecución. El archivo se descarga temporalmente antes de enviarse a Telegram; reserva espacio libre suficiente. El límite es 1800 MB por archivo y se ajusta con `ZERO_TWO_GOFILE_MAX_MB` (50–4096 MB). GoFile puede cambiar el token de su cliente web, limitar consultas o bloquear IPs de centros de datos; si eso ocurre, el bot mostrará un error y BotKeep tendría que permitir la conexión saliente a `api.gofile.io` y `store-*.gofile.io`. No requiere `sudo` ni paquetes del sistema.
 
-### Carpetas públicas de Google Drive
-
-Los enlaces públicos a **archivos individuales** de Drive se descargan por HTTP y no requieren API key, OAuth ni una cuenta de Google. Para que ZeroTwo pueda enumerar una **carpeta pública** y mostrar botones para elegir un archivo o descargar todos, sí requiere `GOOGLE_DRIVE_API_KEY`:
-
-1. En [Google Cloud Console](https://console.cloud.google.com/), crea o selecciona un proyecto y habilita **Google Drive API**.
-2. En APIs y servicios → Credenciales, crea una **API key**. Restringe la clave a Google Drive API; si BotKeep entrega una IP saliente fija, puedes restringirla también a esa IP.
-3. En el panel de BotKeep/Pterodactyl, agrega `GOOGLE_DRIVE_API_KEY` como variable de entorno del servidor y reinicia el bot. No la publiques ni la incluyas en el código o el repositorio.
-
-La carpeta debe permitir **Cualquier persona con el enlace (Lector)**; una API key no otorga acceso a contenido privado ni sustituye OAuth. La opción de descargar todo está limitada por defecto a 50 archivos, 1800 MB por archivo y 4096 MB en total. Los límites se pueden ajustar desde las variables del panel: `ZERO_TWO_DRIVE_FOLDER_MAX_FILES` (1–200), `ZERO_TWO_DRIVE_MAX_MB` (50–4096 MB) y `ZERO_TWO_DRIVE_ALL_MAX_MB` (100–16384 MB). Las descargas ocupan espacio temporal antes de enviarse a Telegram. Los documentos nativos de Google Docs/Sheets/Slides no aparecen en el selector.
-
 ## 2. Descargar el proyecto e instalar Python
 
 Desde la terminal del servidor o la consola del panel, sitúate en el directorio persistente del bot y ejecuta:

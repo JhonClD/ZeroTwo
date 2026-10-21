@@ -2,7 +2,7 @@
 start_handler.py - Manejador del comando /start
 """
 
-from pyrogram import enums, filters
+from pyrogram import filters, enums
 from pyrogram.types import Message
 
 
@@ -30,7 +30,6 @@ Puedo ayudarte con todo esto:
 /x              — Twitter/X video
 /tiktok         — TikTok sin marca de agua
 /gdrive         — Descargar de Google Drive
-                 Carpetas públicas: elegir archivo o descargar todo (requiere GOOGLE_DRIVE_API_KEY)
 /gdrive_upload  — Subir directamente usando API
 /drive_sync     — Guardar para sincronización Android
                  Luego envía el archivo

@@ -17,11 +17,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from downloaders import MediaFireDownloader, MEGADownloader
 from downloaders.drime_downloader import DrimeDownloader, DrimeDownloadError
-from downloaders.drive_downloader import (
-    DriveDownloader,
-    DriveFolderError,
-    take_video_screenshots,
-)
+from downloaders.drive_downloader import DriveDownloader, take_video_screenshots
 from downloaders.gofile_downloader import GoFileDownloader, GoFileDownloadError
 from utils import VideoProcessor
 
@@ -58,26 +54,11 @@ def register(app, download_dir):
         max_gofile_mb = max(50, min(4096, int(os.getenv("ZERO_TWO_GOFILE_MAX_MB", "1800"))))
     except ValueError:
         max_gofile_mb = 1800
-    try:
-        max_drive_mb = max(50, min(4096, int(os.getenv("ZERO_TWO_DRIVE_MAX_MB", "1800"))))
-    except ValueError:
-        max_drive_mb = 1800
-    try:
-        max_drive_all_mb = max(100, min(16384, int(os.getenv("ZERO_TWO_DRIVE_ALL_MAX_MB", "4096"))))
-    except ValueError:
-        max_drive_all_mb = 4096
-    try:
-        max_drive_folder_files = max(1, min(200, int(os.getenv("ZERO_TWO_DRIVE_FOLDER_MAX_FILES", "50"))))
-    except ValueError:
-        max_drive_folder_files = 50
     drime_busy_users: set[int] = set()
     drime_busy_lock = asyncio.Lock()
     gofile_busy_users: set[int] = set()
     gofile_busy_lock = asyncio.Lock()
     gofile_selections = {}
-    drive_busy_users: set[int] = set()
-    drive_busy_lock = asyncio.Lock()
-    drive_selections = {}
 
     def _file_label(entry):
         name = Path(str(entry.get("name") or "archivo_drime")).name.replace("\x00", "")
@@ -310,144 +291,6 @@ def register(app, download_dir):
         finally:
             await asyncio.to_thread(shutil.rmtree, job_dir, ignore_errors=True)
 
-    def _new_drive_selection(selection):
-        if len(drive_selections) >= 500:
-            drive_selections.pop(next(iter(drive_selections)))
-        selector_id = uuid.uuid4().hex[:12]
-        drive_selections[selector_id] = selection
-        return selector_id
-
-    def _drive_file_size(entry):
-        try:
-            return max(0, int(entry.get("size") or 0))
-        except (TypeError, ValueError):
-            return 0
-
-    async def _download_and_send_drive_selection(message, status_msg, selection, user_id):
-        is_all = selection.get("mode") == "all"
-        files = selection.get("files", []) if is_all else [selection.get("file")]
-        files = [item for item in files if isinstance(item, dict)]
-        if not files:
-            await status_msg.edit_text("❌ No encontré archivos para esta selección.")
-            return
-
-        max_file_bytes = max_drive_mb * 1024 * 1024
-        total_known_bytes = sum(_drive_file_size(item) for item in files)
-        oversized = [item for item in files if _drive_file_size(item) > max_file_bytes]
-        if oversized:
-            names = ", ".join(html.escape(str(item.get("name") or "archivo")) for item in oversized[:5])
-            await status_msg.edit_text(
-                f"❌ No inicié la descarga: {names} supera el límite de {max_drive_mb} MB por archivo. "
-                "Puedes aumentar ZERO_TWO_DRIVE_MAX_MB en el panel.",
-                parse_mode=enums.ParseMode.HTML,
-            )
-            return
-        if is_all and total_known_bytes > max_drive_all_mb * 1024 * 1024:
-            await status_msg.edit_text(
-                f"❌ El tamaño total conocido supera el límite de {max_drive_all_mb} MB para descargar todo. "
-                "Puedes aumentar ZERO_TWO_DRIVE_ALL_MAX_MB en el panel.",
-            )
-            return
-
-        folder_name = html.escape(str(selection.get("folder_name") or "Carpeta de Drive"))
-        user_dir = Path(download_dir) / f"user_{user_id}"
-        job_dir = user_dir / f"drive_folder_{uuid.uuid4().hex[:10]}"
-        sent = 0
-        errors = []
-        actual_total_bytes = 0
-        max_total_bytes = max_drive_all_mb * 1024 * 1024
-        try:
-            job_dir.mkdir(parents=True, exist_ok=False)
-            for index, entry in enumerate(files, start=1):
-                display_name = str(entry.get("relative_path") or entry.get("name") or "archivo")
-                escaped_name = html.escape(display_name)
-                remaining_total_bytes = max_total_bytes - actual_total_bytes
-                if is_all and remaining_total_bytes <= 0:
-                    errors.append((display_name, f"se alcanzó el límite total de {max_drive_all_mb} MB"))
-                    break
-                expected_size = _drive_file_size(entry)
-                if is_all and expected_size and expected_size > remaining_total_bytes:
-                    errors.append((display_name, f"supera el límite restante de {remaining_total_bytes // (1024 * 1024)} MB"))
-                    continue
-                per_download_limit = min(max_file_bytes, remaining_total_bytes) if is_all else max_file_bytes
-                await status_msg.edit_text(
-                    f"☁️ <b>Google Drive: {'descargando todo' if is_all else 'descarga seleccionada'}</b>\n"
-                    f"📁 {folder_name}\n📄 {escaped_name}\n📦 Archivo {index}/{len(files)}",
-                    parse_mode=enums.ParseMode.HTML,
-                )
-
-                progress_message = f"📁 {index}/{len(files)} · {escaped_name}"
-
-                async def drive_progress(text, prefix=progress_message):
-                    try:
-                        await status_msg.edit_text(
-                            f"☁️ <b>Google Drive</b>\n{prefix}\n{text}",
-                            parse_mode=enums.ParseMode.HTML,
-                        )
-                    except Exception:
-                        pass
-
-                success, file_path, error = await DriveDownloader.download(
-                    str(entry.get("id") or ""),
-                    job_dir,
-                    progress_callback=drive_progress,
-                    max_bytes=per_download_limit,
-                )
-                if not success or not file_path:
-                    errors.append((display_name, str(error or "falló la descarga")))
-                    continue
-
-                file_size = file_path.stat().st_size
-                if is_all and file_size > remaining_total_bytes:
-                    errors.append((display_name, f"supera el límite total de {max_drive_all_mb} MB"))
-                    file_path.unlink(missing_ok=True)
-                    continue
-                actual_total_bytes += file_size
-
-                async def upload_progress(current, total, prefix=progress_message):
-                    if not total:
-                        return
-                    pct = min(100, int(current * 100 / total))
-                    if pct % 20 < 2 or pct == 100:
-                        try:
-                            await status_msg.edit_text(
-                                f"📤 <b>Enviando desde Drive a Telegram</b>\n{prefix}\n{_progress_bar(pct)} {pct}%",
-                                parse_mode=enums.ParseMode.HTML,
-                            )
-                        except Exception:
-                            pass
-
-                try:
-                    await message.reply_document(
-                        document=str(file_path),
-                        caption=f"✅ Google Drive · {display_name} · {file_size / (1024 * 1024):.1f} MB",
-                        progress=upload_progress,
-                    )
-                    sent += 1
-                except Exception as error:
-                    errors.append((display_name, f"no se pudo enviar a Telegram: {error}"))
-                finally:
-                    file_path.unlink(missing_ok=True)
-
-            title = "✅ Descarga de carpeta terminada" if sent else "❌ No se pudo enviar ningún archivo"
-            details = [f"Enviados: {sent}/{len(files)} archivo(s)."]
-            if selection.get("truncated"):
-                details.append(f"La carpeta superó el límite; se procesaron como máximo {len(files)} archivos.")
-            if selection.get("skipped_native"):
-                details.append(f"Se omitieron {selection['skipped_native']} documento(s) nativo(s) de Google.")
-            if errors:
-                details.append("Fallidos: " + "; ".join(
-                    f"{html.escape(name)} ({html.escape(reason[:120])})" for name, reason in errors[:8]
-                ))
-                if len(errors) > 8:
-                    details.append(f"Y {len(errors) - 8} error(es) más.")
-            await status_msg.edit_text(
-                f"<b>{title}</b>\n" + "\n".join(details),
-                parse_mode=enums.ParseMode.HTML,
-            )
-        finally:
-            await asyncio.to_thread(shutil.rmtree, job_dir, ignore_errors=True)
-
     @app.on_message(filters.text & filters.regex(r'https?://'))
     async def handle_url(client, message: Message):
         url = _extract_url(message.text)
@@ -461,7 +304,6 @@ def register(app, download_dir):
         is_mega      = MEGADownloader.is_mega_url(url)
         is_mediafire = MediaFireDownloader.is_mediafire_url(url)
         is_drive     = DriveDownloader.is_drive_url(url)
-        is_drive_folder = is_drive and DriveDownloader.is_drive_folder_url(url)
         is_drime     = DrimeDownloader.is_drime_url(url)
         is_gofile    = GoFileDownloader.is_gofile_url(url)
 
@@ -499,66 +341,6 @@ def register(app, download_dir):
 
         # ── Descarga ──────────────────────────────────────────────────────────
         try:
-            if is_drive_folder:
-                folder = await asyncio.to_thread(
-                    DriveDownloader.list_public_folder_files,
-                    url,
-                    max_files=max_drive_folder_files,
-                )
-                files = folder["files"]
-                buttons = []
-                for entry in files[:30]:
-                    filename = str(entry.get("relative_path") or entry.get("name") or "archivo")
-                    size = _drive_file_size(entry)
-                    size_text = f"{size / (1024 * 1024):.1f} MB" if size else "tamaño desconocido"
-                    label = f"📥 {filename} ({size_text})"
-                    if len(label) > 64:
-                        label = label[:61] + "…"
-                    selector_id = _new_drive_selection({
-                        "user_id": user_id,
-                        "mode": "one",
-                        "file": entry,
-                        "folder_name": folder["name"],
-                        "skipped_native": folder.get("skipped_native", 0),
-                    })
-                    buttons.append([InlineKeyboardButton(
-                        label, callback_data=f"gd:{user_id}:{selector_id}"
-                    )])
-
-                all_selector_id = _new_drive_selection({
-                    "user_id": user_id,
-                    "mode": "all",
-                    "files": files,
-                    "folder_name": folder["name"],
-                    "truncated": folder.get("truncated", False),
-                    "skipped_native": folder.get("skipped_native", 0),
-                })
-                all_label = (
-                    f"⬇️ Descargar primeros {len(files)} archivos"
-                    if folder.get("truncated")
-                    else f"⬇️ Descargar todo ({len(files)})"
-                )
-                buttons.append([InlineKeyboardButton(
-                    all_label, callback_data=f"gd:{user_id}:{all_selector_id}"
-                )])
-
-                folder_name = html.escape(str(folder.get("name") or "Carpeta de Drive"))
-                note = ""
-                if len(files) > 30:
-                    note += "\nSe muestran los primeros 30 archivos para selección individual; Descargar todo incluye la lista completa."
-                if folder.get("truncated"):
-                    note += f"\nSe muestran/procesan como máximo {len(files)} archivos."
-                if folder.get("skipped_native"):
-                    note += f"\nSe omiten {folder['skipped_native']} documento(s) nativo(s) de Google."
-                await status_msg.edit_text(
-                    f"📂 <b>Carpeta pública de Google Drive</b>\n"
-                    f"📁 {folder_name}\nEncontré {len(files)} archivos descargables. "
-                    f"Elige uno o descarga todo:{note}",
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                    parse_mode=enums.ParseMode.HTML,
-                )
-                return
-
             if is_gofile:
                 share = await asyncio.to_thread(GoFileDownloader.list_shared_files, url)
                 entries = share["files"]
@@ -735,12 +517,6 @@ def register(app, download_dir):
             file_path.unlink(missing_ok=True)
             logger.info("🗑️ Archivo temporal eliminado")
 
-        except DriveFolderError as e:
-            logger.warning("Error en carpeta de Google Drive: %s", e)
-            await status_msg.edit_text(
-                f"❌ <b>Error de Google Drive</b>\n{html.escape(str(e))}",
-                parse_mode=enums.ParseMode.HTML,
-            )
         except GoFileDownloadError as e:
             logger.warning("Error en enlace GoFile: %s", e)
             await status_msg.edit_text(
@@ -852,51 +628,6 @@ def register(app, download_dir):
         finally:
             async with gofile_busy_lock:
                 gofile_busy_users.discard(owner_id)
-
-    @app.on_callback_query(filters.regex(r"^gd:\d+:[a-f0-9]{12}$"))
-    async def drive_folder_download_callback(client, query):
-        parts = (query.data or "").split(":", 2)
-        if len(parts) != 3 or query.message is None:
-            await query.answer("Este botón de Drive no es válido.", show_alert=True)
-            return
-        _, owner_id, selector_id = parts
-        try:
-            owner_id = int(owner_id)
-        except ValueError:
-            await query.answer("Este botón de Drive no es válido.", show_alert=True)
-            return
-        if not query.from_user or query.from_user.id != owner_id:
-            await query.answer("Este selector pertenece a otra persona.", show_alert=True)
-            return
-
-        async with drive_busy_lock:
-            if owner_id in drive_busy_users:
-                await query.answer("Ya tienes una descarga de Drive en curso.", show_alert=True)
-                return
-            selection = drive_selections.get(selector_id)
-            if not selection or selection.get("user_id") != owner_id:
-                await query.answer("Este selector venció. Vuelve a enviar el enlace.", show_alert=True)
-                return
-            drive_busy_users.add(owner_id)
-            drive_selections.pop(selector_id, None)
-
-        await query.answer("Preparando descarga de Drive…")
-        try:
-            await _download_and_send_drive_selection(
-                query.message, query.message, selection, user_id=owner_id
-            )
-        except Exception as error:
-            logger.exception("Error procesando selección de carpeta Drive")
-            try:
-                await query.message.edit_text(
-                    f"❌ Error procesando Drive: {html.escape(str(error)[:400])}",
-                    parse_mode=enums.ParseMode.HTML,
-                )
-            except Exception:
-                pass
-        finally:
-            async with drive_busy_lock:
-                drive_busy_users.discard(owner_id)
 
 
 # ── Helper de screenshots ──────────────────────────────────────────────────────
