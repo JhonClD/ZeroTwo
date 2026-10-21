@@ -29,7 +29,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Área | Función |
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
-| Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile. |
+| Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile; seleccionar archivos de carpetas públicas de Drive, Drime y GoFile. |
 | Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar capturas del inicio, cuartos, mitad y final antes del video. |
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
@@ -45,6 +45,8 @@ En Linux, si no existe `megadl`, el descargador de MEGA puede usar una compilaci
 Para torrents en Linux, si no existe `aria2c`, ZeroTwo prepara automáticamente una compilación estática de aria2 1.37.0 para x86_64/ARM64/ARMv7, valida los hashes SHA-256 del archivo y del ejecutable y la guarda bajo `.runtime/`, sin permisos root. El binario proviene del [proyecto comunitario aria2-static-build](https://github.com/abcfy2/aria2-static-build/releases/tag/1.37.0); el hosting necesita HTTPS saliente a GitHub y permiso para ejecutar archivos del proyecto. Esto no evita restricciones del proveedor sobre tráfico BitTorrent.
 
 GoFile admite enlaces públicos `https://gofile.io/d/ID`: los enlaces de un solo archivo se descargan directamente y las carpetas muestran un selector para elegir un archivo. No hace falta una cuenta personal ni una API key; el bot crea una cuenta invitada anónima sin correo y reutiliza su token mientras está en ejecución. El tamaño máximo por archivo es 1800 MB por defecto y se puede ajustar con `ZERO_TWO_GOFILE_MAX_MB` (50–4096 MB). GoFile puede cambiar su token web o bloquear IPs de hosting, por lo que el acceso desde BotKeep no se puede garantizar si el proveedor bloquea esas conexiones.
+
+Los enlaces públicos de Drive a **archivos individuales** siguen descargándose sin API ni credenciales. Si pegas una **carpeta**, el bot requiere `GOOGLE_DRIVE_API_KEY` para enumerar sus archivos y muestra un botón por elemento, además de **Descargar todo**. La descarga total respeta por defecto un máximo de 50 archivos, 1800 MB por archivo y 4096 MB sumados; se puede ajustar con `ZERO_TWO_DRIVE_FOLDER_MAX_FILES` (1–200), `ZERO_TWO_DRIVE_MAX_MB` (50–4096) y `ZERO_TWO_DRIVE_ALL_MAX_MB` (100–16384). Los archivos nativos de Google Docs/Sheets/Slides no se incluyen en el selector.
 
 ## Requisitos
 
@@ -278,7 +280,15 @@ En Termux, utiliza `python` en lugar de `python3` si ambos comandos no apuntan a
 
 ## Google Drive (opcional)
 
-Las descargas de archivos compartidos como **Cualquier persona con el enlace** usan HTTP directo y no requieren API, credenciales ni servicios de Google. Los archivos privados o restringidos no se pueden descargar sin autenticación. Los videos públicos descargados reciben la misma vista previa de capturas que los videos de MEGA y MediaFire.
+Las descargas de archivos compartidos como **Cualquier persona con el enlace** usan HTTP directo y no requieren API, credenciales ni servicios de Google. El listado de archivos dentro de una carpeta pública sí usa una API key de Google Drive; esto no es OAuth y no concede acceso a carpetas privadas. Los archivos privados o restringidos no se pueden descargar sin autenticación. Los videos públicos descargados reciben la misma vista previa de capturas que los videos de MEGA y MediaFire.
+
+### Descargar carpetas públicas
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), selecciona un proyecto y habilita **Google Drive API**.
+2. Crea una **API key** desde APIs y servicios → Credenciales. Restringe la clave a Google Drive API y, si el hosting tiene una IP saliente fija, considera también restringirla a esa IP.
+3. Guarda la clave como variable de entorno `GOOGLE_DRIVE_API_KEY` en el panel o en el entorno donde arranca el bot. No la pegues en Telegram, en el repositorio ni en registros.
+
+Pega el enlace de una carpeta pública con acceso **Cualquier persona con el enlace (Lector)**. El bot mostrará una opción por archivo y un botón **Descargar todo**. Solo las carpetas ofrecen el selector; los enlaces a archivos individuales mantienen la descarga directa sin API key. Las claves de API no sirven para saltar permisos ni descargar contenido privado.
 
 OAuth/API se necesita para la **subida directa** de archivos a tu Google Drive. Como alternativa de subida sin API, ZeroTwo puede guardar archivos en el almacenamiento compartido de Android para que una aplicación de sincronización los transfiera.
 
@@ -331,7 +341,7 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/start` | Inicia el bot. |
 | `/help` | Muestra la ayuda detallada. |
 | `/download` | Inicia una descarga desde MEGA o MediaFire. |
-| `/gdrive <enlace_o_id>` | Descarga un archivo público de Google Drive, sin OAuth/API. |
+| `/gdrive <enlace_o_id>` | Descarga un archivo público de Drive sin API; para carpetas públicas muestra el selector y requiere `GOOGLE_DRIVE_API_KEY`. |
 | Enlace público de Drime | Pégalo directamente; descarga el archivo compartido o permite elegir uno dentro de una carpeta. No requiere token API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |

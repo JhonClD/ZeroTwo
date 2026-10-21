@@ -6,6 +6,7 @@ Las dependencias de Google OAuth/API solo se requieren para subir archivos.
 import asyncio
 import logging
 import mimetypes
+import os
 import re
 import subprocess
 from email.message import Message as EmailMessage
@@ -24,11 +25,16 @@ PUBLIC_LINK_HELP = (
     'En Drive abre ⋮ > Administrar acceso > Acceso general > '
     'Cualquier persona con el enlace (Lector), guarda y copia el enlace nuevo.'
 )
+DRIVE_API_FILES_URL = 'https://www.googleapis.com/drive/v3/files'
+
+
+class DriveFolderError(Exception):
+    """Error al enumerar una carpeta pública de Google Drive."""
 
 # ── Importación opcional de las librerías de Google ───────────────────────────
 try:
-    from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
@@ -74,6 +80,7 @@ def _extract_file_id(url_or_id: str) -> str:
     """Extrae el ID de archivo de una URL de Drive o lo devuelve tal cual."""
     import re
     patterns = [
+        r'/(?:drive/)?(?:u/\d+/)?folders/([a-zA-Z0-9_-]+)',
         r'/(?:file|document|spreadsheets|presentation)/d/([a-zA-Z0-9_-]+)',
         r'id=([a-zA-Z0-9_-]+)',
         r'^([a-zA-Z0-9_-]{25,})$',
@@ -181,27 +188,42 @@ def _drive_filename(response, file_id: str) -> str:
     return filename or f'drive_file_{file_id}'
 
 
-def _download_public_drive_file(file_id: str, output_dir: Path, progress_update=None) -> Path:
+def _download_public_drive_file(
+    file_id: str, output_dir: Path, progress_update=None, max_bytes: int | None = None
+) -> Path:
     """Descarga un enlace público de Drive por HTTP y guarda el nombre real."""
     session = requests.Session()
     response = _open_public_drive_response(session, file_id)
     output_path = output_dir / _drive_filename(response, file_id)
-    total = int(response.headers.get('Content-Length') or 0)
+    try:
+        total = max(0, int(response.headers.get('Content-Length') or 0))
+    except (TypeError, ValueError):
+        total = 0
+    if max_bytes and total > max_bytes:
+        response.close()
+        raise ValueError(f'El archivo supera el límite configurado de {max_bytes // (1024 * 1024)} MB.')
     downloaded = 0
+    partial_path = output_path.with_name(output_path.name + '.part')
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
-        with output_path.open('wb') as output:
+        with partial_path.open('wb') as output:
             for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
                 if not chunk:
                     continue
+                if max_bytes and downloaded + len(chunk) > max_bytes:
+                    raise ValueError(
+                        f'La descarga superó el límite configurado de {max_bytes // (1024 * 1024)} MB.'
+                    )
                 output.write(chunk)
                 downloaded += len(chunk)
                 if progress_update:
                     progress_update(downloaded, total)
         if downloaded == 0:
             raise ValueError('Google Drive devolvió un archivo vacío.')
+        partial_path.replace(output_path)
         return output_path
     except Exception:
+        partial_path.unlink(missing_ok=True)
         output_path.unlink(missing_ok=True)
         raise
     finally:
@@ -290,6 +312,166 @@ class DriveDownloader:
         return bool(re.search(r'drive\.google\.com|docs\.google\.com', url, re.IGNORECASE))
 
     @staticmethod
+    def is_drive_folder_url(url: str) -> bool:
+        """Reconoce enlaces de carpeta; los enlaces de archivos siguen su ruta habitual."""
+        try:
+            parsed = urlparse(url)
+        except (TypeError, ValueError):
+            return False
+        host = (parsed.hostname or '').lower()
+        if host not in {'drive.google.com', 'www.drive.google.com'}:
+            return False
+        return bool(re.search(r'/(?:drive/)?(?:u/\d+/)?folders/[a-zA-Z0-9_-]+(?:/|$)', parsed.path))
+
+    @staticmethod
+    def _folder_id(url_or_id: str) -> str:
+        match = re.search(r'/(?:drive/)?(?:u/\d+/)?folders/([a-zA-Z0-9_-]+)', url_or_id)
+        folder_id = match.group(1) if match else url_or_id.strip()
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{10,200}', folder_id):
+            raise DriveFolderError('No pude extraer el ID de la carpeta de Drive.')
+        return folder_id
+
+    @staticmethod
+    def _api_request(url: str, params: dict) -> dict:
+        try:
+            response = requests.get(url, params=params, headers=DRIVE_HEADERS, timeout=(10, 35))
+        except requests.RequestException as error:
+            raise DriveFolderError(
+                'No pude conectar con la API de Google Drive. Revisa la conexión saliente del hosting.'
+            ) from error
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise DriveFolderError(
+                f'Google Drive devolvió una respuesta inválida (HTTP {response.status_code}).'
+            ) from error
+        if not isinstance(payload, dict):
+            raise DriveFolderError('Google Drive devolvió datos de carpeta con formato inesperado.')
+        if response.status_code >= 400 or payload.get('error'):
+            error = payload.get('error') or {}
+            message = str(error.get('message') or '') if isinstance(error, dict) else ''
+            if response.status_code in (401, 403):
+                raise DriveFolderError(
+                    'Google rechazó la API key o el acceso público a la carpeta. '
+                    'Verifica que Drive API esté habilitada y que el enlace sea público.'
+                )
+            if response.status_code == 404:
+                raise DriveFolderError('La carpeta no existe o no es accesible públicamente.')
+            detail = f' Detalle: {message[:180]}' if message else ''
+            raise DriveFolderError(f'La API de Drive respondió HTTP {response.status_code}.{detail}')
+        return payload
+
+    @classmethod
+    def list_public_folder_files(
+        cls, url_or_id: str, api_key: str | None = None, max_files: int = 100, max_depth: int = 5
+    ) -> dict:
+        """Enumera archivos descargables bajo una carpeta pública usando una API key."""
+        folder_id = cls._folder_id(url_or_id)
+        api_key = (api_key or os.getenv('GOOGLE_DRIVE_API_KEY') or os.getenv('DRIVE_API_KEY') or '').strip()
+        if not api_key:
+            raise DriveFolderError(
+                'Para listar una carpeta pública de Drive, configura GOOGLE_DRIVE_API_KEY en el panel. '
+                'No necesitas API key para descargar un archivo individual.'
+            )
+        max_files = max(1, min(500, int(max_files)))
+        max_depth = max(1, min(10, int(max_depth)))
+        root = cls._api_request(
+            f'{DRIVE_API_FILES_URL}/{folder_id}',
+            {'key': api_key, 'fields': 'id,name,mimeType', 'supportsAllDrives': 'true'},
+        )
+        if root.get('mimeType') != 'application/vnd.google-apps.folder':
+            raise DriveFolderError('El enlace de Drive no apunta a una carpeta.')
+
+        files = []
+        visited_folders = set()
+        skipped_native = [0]
+        truncated = [False]
+
+        def add_file(item: dict, path_parts: list[str]):
+            if len(files) >= max_files:
+                truncated[0] = True
+                return
+            file_id = str(item.get('id') or '')
+            name = str(item.get('name') or '').strip()
+            if not file_id or not name:
+                return
+            try:
+                size = max(0, int(item.get('size') or 0))
+            except (TypeError, ValueError):
+                size = 0
+            relative_path = '/'.join(path_parts + [name])
+            files.append({
+                'id': file_id,
+                'name': name,
+                'size': size,
+                'mimeType': str(item.get('mimeType') or 'application/octet-stream'),
+                'folder_path': '/'.join(path_parts),
+                'relative_path': relative_path,
+                'webViewLink': item.get('webViewLink'),
+            })
+
+        def walk(current_folder_id: str, path_parts: list[str], depth: int):
+            if len(files) >= max_files:
+                truncated[0] = True
+                return
+            if depth > max_depth or current_folder_id in visited_folders:
+                truncated[0] = True
+                return
+            visited_folders.add(current_folder_id)
+            page_token = None
+            while True:
+                params = {
+                    'key': api_key,
+                    'q': f"'{current_folder_id}' in parents and trashed = false",
+                    'pageSize': 1000,
+                    'fields': 'nextPageToken,files(id,name,mimeType,size,webViewLink,shortcutDetails(targetId,targetMimeType))',
+                    'supportsAllDrives': 'true',
+                    'includeItemsFromAllDrives': 'true',
+                    'orderBy': 'name',
+                }
+                if page_token:
+                    params['pageToken'] = page_token
+                result = cls._api_request(DRIVE_API_FILES_URL, params)
+                for item in result.get('files') or []:
+                    mime_type = str(item.get('mimeType') or '')
+                    name = str(item.get('name') or '').strip()
+                    if mime_type == 'application/vnd.google-apps.folder':
+                        walk(str(item.get('id') or ''), path_parts + [name], depth + 1)
+                    elif mime_type == 'application/vnd.google-apps.shortcut':
+                        shortcut = item.get('shortcutDetails') or {}
+                        target_id = str(shortcut.get('targetId') or '')
+                        target_type = str(shortcut.get('targetMimeType') or '')
+                        if target_id and target_type == 'application/vnd.google-apps.folder':
+                            walk(target_id, path_parts + [name], depth + 1)
+                        elif target_id and not target_type.startswith('application/vnd.google-apps.'):
+                            target = dict(item)
+                            target['id'] = target_id
+                            target['mimeType'] = target_type or 'application/octet-stream'
+                            add_file(target, path_parts)
+                    elif mime_type.startswith('application/vnd.google-apps.'):
+                        skipped_native[0] += 1
+                    else:
+                        add_file(item, path_parts)
+                    if len(files) >= max_files:
+                        truncated[0] = True
+                        return
+                page_token = result.get('nextPageToken')
+                if not page_token:
+                    break
+
+        walk(folder_id, [], 0)
+        if not files:
+            suffix = ' Solo encontré documentos nativos de Google, que este descargador no exporta.' if skipped_native[0] else ''
+            raise DriveFolderError('La carpeta no contiene archivos descargables.' + suffix)
+        return {
+            'folder_id': folder_id,
+            'name': str(root.get('name') or 'Carpeta de Drive'),
+            'files': files,
+            'truncated': truncated[0],
+            'skipped_native': skipped_native[0],
+        }
+
+    @staticmethod
     async def get_file_info(url_or_id: str) -> dict | None:
         """Retorna metadatos básicos de un archivo público, sin usar la API."""
         response = None
@@ -312,7 +494,9 @@ class DriveDownloader:
                 response.close()
 
     @staticmethod
-    async def download(url_or_id: str, output_dir: Path, progress_callback=None) -> tuple[bool, Path | None, str | None]:
+    async def download(
+        url_or_id: str, output_dir: Path, progress_callback=None, max_bytes: int | None = None
+    ) -> tuple[bool, Path | None, str | None]:
         """
         Descarga un archivo de Google Drive.
 
@@ -337,7 +521,7 @@ class DriveDownloader:
                 progress_state[:] = [downloaded, total]
 
             task = asyncio.create_task(asyncio.to_thread(
-                _download_public_drive_file, file_id, output_dir, progress_update
+                _download_public_drive_file, file_id, output_dir, progress_update, max_bytes
             ))
             last_reported = -10
             while not task.done():
