@@ -24,7 +24,6 @@ from downloaders.drive_downloader import (
 )
 from downloaders.gofile_downloader import GoFileDownloader, GoFileDownloadError
 from utils import VideoProcessor
-from utils.transfer_status import TransferProgress, format_bytes, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,11 @@ def _extract_url(text: str | None) -> str | None:
     if not match:
         return None
     return match.group(0).rstrip('.,;:)]}')
+
+
+def _progress_bar(pct: int, width: int = 10) -> str:
+    filled = int(width * pct / 100)
+    return '▓' * filled + '░' * (width - filled)
 
 
 def register(app, download_dir):
@@ -89,7 +93,7 @@ def register(app, download_dir):
     ):
         if user_id is None:
             user_id = message.from_user.id if message.from_user else 0
-        filename, expected_size, _ = _file_label(entry)
+        filename, expected_size, size_text = _file_label(entry)
         max_bytes = max_drime_mb * 1024 * 1024
         if expected_size and expected_size > max_bytes:
             await status_msg.edit_text(
@@ -105,9 +109,9 @@ def register(app, download_dir):
             if expected_size and shutil.disk_usage(job_dir).free < expected_size + 64 * 1024 * 1024:
                 raise DrimeDownloadError("No hay suficiente espacio libre en el hosting para este archivo.")
 
-            download_meter = TransferProgress()
+            escaped_name = html.escape(filename)
             await status_msg.edit_text(
-                render_transfer_status("Descargando", "Drime", filename, 0, expected_size, download_meter),
+                f"☁️ <b>Descargando desde Drime</b>\n{escaped_name}\n📦 {size_text}\n0%",
                 parse_mode=enums.ParseMode.HTML,
             )
             loop = asyncio.get_running_loop()
@@ -124,9 +128,7 @@ def register(app, download_dir):
                 async def update_status():
                     try:
                         await status_msg.edit_text(
-                            render_transfer_status(
-                                "Descargando", "Drime", filename, current, total, download_meter
-                            ),
+                            f"☁️ <b>Descargando desde Drime</b>\n{escaped_name}\n📦 {size_text}\n{_progress_bar(pct)} {pct}%",
                             parse_mode=enums.ParseMode.HTML,
                         )
                     except Exception:
@@ -145,11 +147,10 @@ def register(app, download_dir):
             )
             file_size = file_size_bytes / (1024 * 1024)
             await status_msg.edit_text(
-                f"✅ <b>Descarga completada</b> · Drime\n{format_file_info(file_path, 'Drime')}\n"
-                f"📤 Enviando a Telegram…",
+                f"✅ <b>Descarga de Drime completada</b>\n{escaped_name}\n"
+                f"📦 {file_size:.1f} MB\n📤 Enviando a Telegram…",
                 parse_mode=enums.ParseMode.HTML,
             )
-            upload_meter = TransferProgress()
             last_upload_pct = [-10]
 
             async def upload_progress(current, total):
@@ -161,9 +162,8 @@ def register(app, download_dir):
                 last_upload_pct[0] = pct
                 try:
                     await status_msg.edit_text(
-                        render_transfer_status(
-                            "Subiendo", "Telegram · Drime", filename, current, total, upload_meter
-                        ),
+                        f"📤 <b>Enviando desde Drime a Telegram</b>\n{escaped_name}\n"
+                        f"{_progress_bar(pct)} {pct}%",
                         parse_mode=enums.ParseMode.HTML,
                     )
                 except Exception:
@@ -206,7 +206,7 @@ def register(app, download_dir):
     async def _download_and_send_gofile(message, status_msg, share, entry, user_id=None):
         if user_id is None:
             user_id = message.from_user.id if message.from_user else 0
-        filename, expected_size, _ = _gofile_file_label(entry)
+        filename, expected_size, size_text = _gofile_file_label(entry)
         max_bytes = max_gofile_mb * 1024 * 1024
         if expected_size and expected_size > max_bytes:
             await status_msg.edit_text(
@@ -222,9 +222,9 @@ def register(app, download_dir):
             if expected_size and shutil.disk_usage(job_dir).free < expected_size + 64 * 1024 * 1024:
                 raise GoFileDownloadError("No hay suficiente espacio libre en el hosting para este archivo.")
 
-            download_meter = TransferProgress()
+            escaped_name = html.escape(filename)
             await status_msg.edit_text(
-                render_transfer_status("Descargando", "GoFile", filename, 0, expected_size, download_meter),
+                f"☁️ <b>Descargando desde GoFile</b>\n{escaped_name}\n📦 {size_text}\n0%",
                 parse_mode=enums.ParseMode.HTML,
             )
             loop = asyncio.get_running_loop()
@@ -241,9 +241,8 @@ def register(app, download_dir):
                 async def update_status():
                     try:
                         await status_msg.edit_text(
-                            render_transfer_status(
-                                "Descargando", "GoFile", filename, current, total, download_meter
-                            ),
+                            f"☁️ <b>Descargando desde GoFile</b>\n{escaped_name}\n📦 {size_text}\n"
+                            f"{_progress_bar(pct)} {pct}%",
                             parse_mode=enums.ParseMode.HTML,
                         )
                     except Exception:
@@ -266,11 +265,10 @@ def register(app, download_dir):
             )
             file_size = downloaded_bytes / (1024 * 1024)
             await status_msg.edit_text(
-                f"✅ <b>Descarga completada</b> · GoFile\n{format_file_info(file_path, 'GoFile')}\n"
-                f"📤 Enviando a Telegram…",
+                f"✅ <b>Descarga de GoFile completada</b>\n{escaped_name}\n"
+                f"📦 {file_size:.1f} MB\n📤 Enviando a Telegram…",
                 parse_mode=enums.ParseMode.HTML,
             )
-            upload_meter = TransferProgress()
             last_upload_pct = [-10]
 
             async def upload_progress(current, total):
@@ -282,9 +280,8 @@ def register(app, download_dir):
                 last_upload_pct[0] = pct
                 try:
                     await status_msg.edit_text(
-                        render_transfer_status(
-                            "Subiendo", "Telegram · GoFile", filename, current, total, upload_meter
-                        ),
+                        f"📤 <b>Enviando desde GoFile a Telegram</b>\n{escaped_name}\n"
+                        f"{_progress_bar(pct)} {pct}%",
                         parse_mode=enums.ParseMode.HTML,
                     )
                 except Exception:
@@ -375,12 +372,11 @@ def register(app, download_dir):
                 per_download_limit = min(max_file_bytes, remaining_total_bytes) if is_all else max_file_bytes
                 await status_msg.edit_text(
                     f"☁️ <b>Google Drive: {'descargando todo' if is_all else 'descarga seleccionada'}</b>\n"
-                    f"📁 {folder_name}\n📄 {escaped_name}\n"
-                    f"📦 {format_bytes(expected_size) if expected_size else 'tamaño desconocido'} · Archivo {index}/{len(files)}",
+                    f"📁 {folder_name}\n📄 {escaped_name}\n📦 Archivo {index}/{len(files)}",
                     parse_mode=enums.ParseMode.HTML,
                 )
 
-                progress_message = f"{index}/{len(files)} · {display_name}"
+                progress_message = f"📁 {index}/{len(files)} · {escaped_name}"
 
                 async def drive_progress(text, prefix=progress_message):
                     try:
@@ -408,24 +404,18 @@ def register(app, download_dir):
                     continue
                 actual_total_bytes += file_size
 
-                upload_meter = TransferProgress()
-                last_upload_pct = [-10]
-
-                async def upload_progress(current, total, prefix=progress_message, name=display_name, meter=upload_meter):
+                async def upload_progress(current, total, prefix=progress_message):
                     if not total:
                         return
                     pct = min(100, int(current * 100 / total))
-                    if pct - last_upload_pct[0] >= 10 or pct == 100:
+                    if pct % 20 < 2 or pct == 100:
                         try:
                             await status_msg.edit_text(
-                                render_transfer_status(
-                                    "Subiendo", "Telegram · Google Drive", name, current, total, meter, prefix
-                                ),
+                                f"📤 <b>Enviando desde Drive a Telegram</b>\n{prefix}\n{_progress_bar(pct)} {pct}%",
                                 parse_mode=enums.ParseMode.HTML,
                             )
                         except Exception:
                             pass
-                        last_upload_pct[0] = pct
 
                 try:
                     await message.reply_document(
@@ -662,16 +652,16 @@ def register(app, download_dir):
                 )
                 return
 
-            file_size_bytes = file_path.stat().st_size
-            file_size = file_size_bytes / (1024 * 1024)
+            file_size = file_path.stat().st_size / (1024 * 1024)
             file_ext  = file_path.suffix.lower()
             filename  = file_path.name
 
             logger.info(f"✅ Descarga completa: {filename} ({file_size:.1f} MB)")
 
             await status_msg.edit_text(
-                f"✅ <b>Descarga completada</b> · {html.escape(service)}\n"
-                f"{format_file_info(file_path, service)}\n"
+                f"✅ <b>Descarga completada</b>\n"
+                f"📄 {filename}\n"
+                f"📦 {file_size:.1f} MB\n"
                 f"📤 Enviando a Telegram…",
                 parse_mode=enums.ParseMode.HTML
             )
@@ -682,19 +672,20 @@ def register(app, download_dir):
 
             # ── Progreso de envío a Telegram ──────────────────────────────────
             last_pct = [-10]
-            upload_meter = TransferProgress()
 
             async def send_progress(current, total):
-                if not total:
-                    return
                 pct = int(current / total * 100)
                 if pct - last_pct[0] >= 10:
-                    logger.info(f"📤 Enviando {pct}% ({current}/{total} bytes)")
+                    mb_c = current / (1024 ** 2)
+                    mb_t = total   / (1024 ** 2)
+                    bar  = _progress_bar(pct)
+                    logger.info(f"📤 Enviando {pct}% ({mb_c:.1f}/{mb_t:.1f} MB)")
                     try:
                         await status_msg.edit_text(
-                            render_transfer_status(
-                                "Subiendo", "Telegram", filename, current, total, upload_meter
-                            ),
+                            f"📤 <b>Enviando a Telegram</b>\n"
+                            f"📄 {filename}\n"
+                            f"{bar} {pct}%\n"
+                            f"💾 {mb_c:.1f} / {mb_t:.1f} MB",
                             parse_mode=enums.ParseMode.HTML
                         )
                     except Exception:

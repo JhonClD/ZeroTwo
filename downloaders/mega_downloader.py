@@ -8,29 +8,13 @@ import shutil
 import subprocess
 from pathlib import Path
 from downloaders.portable_megatools import ensure_megatools
-from utils.transfer_status import TransferProgress, parse_bytes, render_transfer_status
 
 logger = logging.getLogger(__name__)
 
-_PROGRESS_RE = re.compile(
-    r"([\d.]+)%\s+of\s+([\d.]+)\s*([A-Za-z]+)(?:,\s*([\d.]+)\s*([A-Za-z]+/s))?",
-    re.IGNORECASE,
-)
 
-
-def parse_megatools_progress(line: str) -> tuple[float, int, int, int | None] | None:
-    """Extrae porcentaje, bytes actuales/totales y velocidad de megatools."""
-    match = _PROGRESS_RE.search(line or "")
-    if not match:
-        return None
-    percent = min(100.0, max(0.0, float(match.group(1))))
-    total = parse_bytes(f"{match.group(2)} {match.group(3)}")
-    if not total:
-        return None
-    current = int(total * percent / 100)
-    speed_text = f"{match.group(4)} {match.group(5)}" if match.group(4) and match.group(5) else ""
-    speed = parse_bytes(speed_text.removesuffix("/s")) if speed_text else None
-    return percent, current, total, speed
+def _progress_bar(pct: int, width: int = 10) -> str:
+    filled = int(width * pct / 100)
+    return '▓' * filled + '░' * (width - filled)
 
 
 class MEGADownloader:
@@ -69,10 +53,8 @@ class MEGADownloader:
 
             if progress_callback:
                 await progress_callback(
-                    render_transfer_status(
-                        "Descargando", "MEGA", "archivo de MEGA", 0, 0, TransferProgress(),
-                        context="Conectando…",
-                    )
+                    "🔷 <b>Descargando de MEGA</b>\n"
+                    "⏳ Iniciando conexión…"
                 )
 
             cmd = [
@@ -94,7 +76,6 @@ class MEGADownloader:
 
             last_pct    = [-10]
             filename    = None
-            meter = TransferProgress()
 
             for raw_line in process.stdout:
                 line = raw_line.strip()
@@ -104,21 +85,23 @@ class MEGADownloader:
                 logger.info(f"[MEGA] {line}")
 
                 # megatools muestra líneas como:  45.23% of 234.50 MB, 3.20 MB/s
-                progress = parse_megatools_progress(line)
-                if progress:
-                    pct, current_bytes, total_bytes, speed_bytes = progress
+                m = re.search(r'([\d.]+)%\s+of\s+([\d.]+)\s*(\w+)', line)
+                if m:
+                    pct      = float(m.group(1))
+                    total    = float(m.group(2))
+                    unit     = m.group(3)
                     pct_int  = int(pct)
 
                     # Terminal: siempre
-                    logger.info(f"📥 MEGA {pct:.1f}% — {current_bytes}/{total_bytes} bytes")
+                    logger.info(f"📥 MEGA {pct:.1f}% de {total:.1f} {unit}")
 
                     # Telegram: cada 10 %
                     if pct_int - last_pct[0] >= 10 and progress_callback:
+                        bar = _progress_bar(pct_int)
                         await progress_callback(
-                            render_transfer_status(
-                                "Descargando", "MEGA", Path(filename).name if filename else "archivo de MEGA",
-                                current_bytes, total_bytes, meter, speed_override=speed_bytes,
-                            )
+                            f"🔷 <b>Descargando de MEGA</b>\n"
+                            f"{bar} {pct_int}%\n"
+                            f"💾 {total:.1f} {unit} totales"
                         )
                         last_pct[0] = pct_int
                     continue
