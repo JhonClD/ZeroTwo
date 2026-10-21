@@ -57,6 +57,7 @@ class DrimeDownloaderTests(unittest.TestCase):
         self.assertIsNone(DrimeDownloader.share_hash("https://example.com/drive/s/abcdefgh"))
         self.assertIsNone(DrimeDownloader.share_hash("https://app.drime.cloud/account-settings"))
 
+    @patch.dict("os.environ", {"DRIME_API_TOKEN": ""})
     @patch("downloaders.drime_downloader.requests.get")
     def test_lists_public_folder_entries_without_account_token(self, mock_get):
         mock_get.return_value = FakeResponse(data=_listing())
@@ -65,6 +66,25 @@ class DrimeDownloaderTests(unittest.TestCase):
         self.assertEqual(result["share_id"], 175546)
         self.assertEqual(result["files"][0]["hash"], ENTRY_HASH)
         self.assertNotIn("Authorization", mock_get.call_args.kwargs["headers"])
+
+    @patch.dict("os.environ", {"DRIME_API_TOKEN": "test-token"})
+    @patch("downloaders.drime_downloader.requests.get")
+    def test_adds_configured_api_token_to_share_request(self, mock_get):
+        mock_get.return_value = FakeResponse(data=_listing())
+        DrimeDownloader.list_shared_files(SHARE_URL)
+        self.assertEqual(
+            mock_get.call_args.kwargs["headers"]["Authorization"],
+            "Bearer test-token",
+        )
+
+    @patch("downloaders.drime_downloader.requests.get")
+    def test_reports_cloudflare_challenge_separately_from_private_share(self, mock_get):
+        mock_get.return_value = FakeResponse(
+            status_code=403,
+            headers={"cf-mitigated": "challenge", "Content-Type": "text/html"},
+        )
+        with self.assertRaisesRegex(DrimeDownloadError, "Cloudflare está bloqueando"):
+            DrimeDownloader.list_shared_files(SHARE_URL)
 
     @patch("downloaders.drime_downloader.requests.get")
     def test_lists_single_file_share_from_link_entry(self, mock_get):

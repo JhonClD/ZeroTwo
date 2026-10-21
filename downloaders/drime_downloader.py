@@ -1,6 +1,7 @@
 """Descarga archivos desde enlaces públicos compartidos de Drime Cloud."""
 from __future__ import annotations
 
+import os
 import re
 import time
 from pathlib import Path
@@ -18,12 +19,33 @@ _HEADERS = {
 }
 
 
+def _request_headers(referer: str) -> dict[str, str]:
+    """Añade el token oficial opcional sin guardarlo en el código."""
+    headers = {**_HEADERS, "Referer": referer}
+    token = os.getenv("DRIME_API_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _is_cloudflare_challenge(response) -> bool:
+    return str(response.headers.get("cf-mitigated", "")).lower() == "challenge"
+
+
+def _cloudflare_error() -> DrimeDownloadError:
+    return DrimeDownloadError(
+        "Cloudflare está bloqueando las solicitudes del hosting del bot. "
+        "El token API no evita ese desafío; pide a Drime que autorice la IP saliente del hosting "
+        "o usa el botón Download del enlace en el navegador."
+    )
+
+
 class DrimeDownloadError(RuntimeError):
     """Error legible al consultar o descargar un enlace de Drime."""
 
 
 class DrimeDownloader:
-    """Cliente de enlaces públicos Drime; no requiere token de cuenta."""
+    """Cliente de enlaces públicos Drime con soporte opcional para API token."""
 
     @staticmethod
     def is_drime_url(url: str) -> bool:
@@ -56,12 +78,14 @@ class DrimeDownloader:
                 response = requests.get(
                     f"{_API_BASE}/shareable-links/{share_hash}",
                     params={"withEntries": "true", "page": page, "order": "updated_at:desc"},
-                    headers={**_HEADERS, "Referer": referer},
+                    headers=_request_headers(referer),
                     timeout=(15, 45),
                 )
             except requests.RequestException as error:
                 raise DrimeDownloadError(f"No se pudo conectar con Drime: {error}") from error
 
+            if _is_cloudflare_challenge(response):
+                raise _cloudflare_error()
             if response.status_code in {401, 403, 404, 410, 423}:
                 raise DrimeDownloadError(
                     "El enlace Drime está privado, vencido, protegido con contraseña o no permite acceder. "
@@ -147,11 +171,13 @@ class DrimeDownloader:
             response = requests.get(
                 f"{_API_BASE}/file-entries/download/{entry_hash}",
                 params={"shareable_link": share_id, "password": "null"},
-                headers={**_HEADERS, "Referer": referer},
+                headers=_request_headers(referer),
                 stream=True,
                 allow_redirects=True,
                 timeout=(20, 180),
             )
+            if _is_cloudflare_challenge(response):
+                raise _cloudflare_error()
             if response.status_code in {401, 403, 404, 410, 423}:
                 raise DrimeDownloadError(
                     "Drime rechazó la descarga. Comprueba que el enlace siga público y permita descargar."
