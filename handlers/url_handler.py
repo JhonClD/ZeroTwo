@@ -855,7 +855,14 @@ def register(app, download_dir):
                     last_pct[0] = pct
 
             # ── Enviar archivo ────────────────────────────────────────────────
-            caption = f"✅ Descargado de {service}\n📄 {filename}"
+            if is_mediafire:
+                display_title = Path(filename).stem
+                caption = (
+                    f"<b>Title:</b> {html.escape(display_title)}\n"
+                    f"<b>┖ Size:</b> {format_bytes(file_size_bytes)}"
+                )
+            else:
+                caption = f"✅ Descargado de {service}\n📄 {filename}"
 
             try:
                 if file_ext in VIDEO_EXTS:

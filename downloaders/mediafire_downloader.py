@@ -120,7 +120,10 @@ class MediaFireDownloader:
                 filename = 'mediafire_file'
 
             filename = re.sub(r'\s+', ' ', filename).strip()
-            filename = re.sub(r'[^\w\s\-\.]', '_', filename)
+            # Mantener títulos legibles, incluidos corchetes y paréntesis.
+            # Solo sustituimos caracteres problemáticos para nombres de archivo.
+            filename = re.sub(r'[/\\:*?"<>|\x00]', '_', filename)
+            filename = re.sub(r'\s+', ' ', filename).strip()
 
             # Si el nombre quedó sin extensión reconocible (pasa cuando ninguno
             # de los patrones de arriba matchea bien), la sacamos del propio
