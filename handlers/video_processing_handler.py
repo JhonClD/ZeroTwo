@@ -48,6 +48,33 @@ def _elapsed_text(seconds: float) -> str:
     return f"{seconds // 60}m {seconds % 60}s"
 
 
+def _template_status(
+    *,
+    video_name: str,
+    percent: float,
+    status: str,
+    elapsed: float,
+    user_mention: str,
+    user_id: int,
+    info: str = "Encode | -c:v libx264 -vb plantilla",
+    mode: str = "#Leech | #Pyrogram",
+    processed: str | None = None,
+    cancel_text: str = "cancel_en_espera",
+) -> str:
+    processed_line = f"<b>┠ Processed:</b> {processed}\n" if processed else ""
+    return (
+        f"<b>{html.escape(video_name)}</b>\n"
+        f"┃ [{_progress_bar(percent, 13)}] {max(0, min(100, percent)):05.2f}%\n"
+        f"{processed_line}"
+        f"<b>┠ Status:</b> {html.escape(status)}\n"
+        f"<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> {_elapsed_text(elapsed)}\n"
+        f"<b>┠ Info:</b> {html.escape(info)}\n"
+        f"<b>┠ Mode:</b> {html.escape(mode)}\n"
+        f"<b>┠ User:</b> {html.escape(user_mention)} <b>| ID:</b> <code>{user_id}</code>\n"
+        f"<b>┖</b><code> {html.escape(cancel_text)}</code>"
+    )
+
+
 def register(app, user_states: dict, work_dir: Path) -> None:
     """Registra handlers del flujo; user_states se conserva por compatibilidad de app."""
     del user_states
@@ -81,16 +108,20 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             InlineKeyboardButton("Cancelar proceso", callback_data=f"vp:cancel:{job_id}"),
         ]])
 
-    async def _download_progress(current: int, total: int, status: Message, timer: list[float], job_id: str):
+    async def _download_progress(current: int, total: int, status: Message, timer: list[float], job_id: str, state: dict):
         now = time.monotonic()
         if now - timer[0] < 3 and current < total:
             return
         timer[0] = now
         percent = current * 100 / total if total else 0
-        text = (
-            "📥 <b>Preparando video</b>\n"
-            f"{_progress_bar(percent)} {percent:.0f}%\n"
-            f"{current / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MB"
+        user = state["request"].from_user
+        user_mention = f"@{user.username}" if user and user.username else (user.first_name if user else "Desconocido")
+        user_id = user.id if user else state["owner_id"]
+        text = _template_status(
+            video_name=state["display_name"], percent=percent, status="Downloading",
+            elapsed=time.monotonic() - state["started_at"], user_mention=user_mention, user_id=user_id,
+            info="Download | Telegram", mode="#Leech | #Pyrogram",
+            processed=f"{current / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MiB",
         )
         try:
             await status.edit_text(text, reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML)
@@ -166,7 +197,14 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             await message.reply_text(f"El video supera el límite de procesamiento de {max_input_mb} MB configurado en este hosting.")
             return
         try:
-            status = await message.reply_text("📥 <b>Preparando el video…</b>", parse_mode=enums.ParseMode.HTML)
+            initial_name = getattr(media, "file_name", None) or "video"
+            user = message.from_user
+            user_mention = f"@{user.username}" if user and user.username else (user.first_name if user else "Desconocido")
+            status = await message.reply_text(
+                _template_status(video_name=initial_name, percent=0, status="En cola…", elapsed=0,
+                                 user_mention=user_mention, user_id=owner_id),
+                parse_mode=enums.ParseMode.HTML,
+            )
         except Exception:
             admitting_users.discard(owner_id)
             raise
@@ -201,7 +239,11 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         admitting_users.discard(owner_id)
         user_flow[owner_id] = job_id
         try:
-            await status.edit_text("📥 <b>Preparando el video…</b>", reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML)
+            await status.edit_text(
+                _template_status(video_name=state["display_name"], percent=0, status="Downloading", elapsed=0,
+                                 user_mention=user_mention, user_id=owner_id, info="Download | Telegram"),
+                reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
+            )
             async with preparation_slot:
                 reserved_outputs = sum(
                     flow["source"].stat().st_size
@@ -215,7 +257,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 await source_message.download(
                     file_name=str(source),
                     progress=_download_progress,
-                    progress_args=(status, timer, job_id),
+                    progress_args=(status, timer, job_id, state),
                 )
                 if not source.exists() or source.stat().st_size == 0:
                     raise VideoProcessingError("Telegram no entregó un archivo de video válido.")
@@ -292,15 +334,9 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         user = state["request"].from_user
         user_mention = f"@{user.username}" if user and user.username else (user.first_name if user else "Desconocido")
         user_id = user.id if user else state["owner_id"]
-        text = (
-            f"<b>{html.escape(state['display_name'])}</b>\n"
-            f"┃ [{_progress_bar(percent, 13)}] {percent:05.2f}%\n"
-            f"<b>┠ Status:</b> {html.escape(stage)}\n"
-            f"<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> {_elapsed_text(elapsed)}\n"
-            f"<b>┠ Info:</b> Encode | -c:v libx264 -vb plantilla\n"
-            f"<b>┠ Mode:</b> #Leech | #Pyrogram\n"
-            f"<b>┠ User:</b> {html.escape(user_mention)} <b>| ID:</b> <code>{user_id}</code>\n"
-            f"<b>┖</b> cancel_en_espera"
+        text = _template_status(
+            video_name=state["display_name"], percent=percent, status=stage, elapsed=elapsed,
+            user_mention=user_mention, user_id=user_id,
         )
         try:
             await state["status"].edit_text(text, reply_markup=_cancel_markup(state["job_id"]), parse_mode=enums.ParseMode.HTML)
@@ -321,10 +357,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     commands, temporary_files = build_target_size_commands(
                         state["source"].name, output.name, bitrate=bitrate, threads=threads,
                     )
-                    await state["status"].edit_text(
-                        f"⏳ <b>Encodeo de plantilla en dos pasadas</b>\nObjetivo aproximado: {state['target_size']:g} MB",
-                        reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
-                    )
+                    await _progress(state, 0, duration, f"En cola · objetivo {state['target_size']:g} MB")
                     total_steps = len(commands)
                     for step, command in enumerate(commands, start=1):
                         async def size_progress(current, total, step=step):
@@ -339,10 +372,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     commands, temporary_files = build_compression_commands(
                         state["source"].name, output.name, bitrate=bitrate, preset=preset, scale=scale, threads=threads,
                     )
-                    await state["status"].edit_text(
-                        "⚙️ <b>Encodeo de plantilla en dos pasadas…</b>",
-                        reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
-                    )
+                    await _progress(state, 0, state["media"]["duration"], "En cola · encodeo")
                     total_steps = len(commands)
                     for step, command in enumerate(commands, start=1):
                         async def compression_progress(current, total, step=step):
@@ -362,11 +392,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                         preset=os.getenv("ZERO_TWO_HARDSUB_PRESET", "medium"),
                         threads=threads,
                     )
-                    await state["status"].edit_text(
-                        "📝 <b>Encodeo de anime y quemado de subtítulos…</b>\n"
-                        "Extrayendo pistas y preparando la primera pasada…",
-                        reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
-                    )
+                    await _progress(state, 0, state["media"]["duration"], "En cola · subtítulos y encodeo")
                     total_steps = len(commands)
                     for step, command in enumerate(commands, start=1):
                         async def template_progress(current, total, step=step):
@@ -393,6 +419,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 _, thumbnail = await asyncio.to_thread(VideoProcessor.get_video_meta, output, thumb)
                 size_mb = output.stat().st_size / (1024 * 1024)
                 caption += f"\n📦 {size_mb:.1f} MB"
+                await _progress(state, 100, state["media"]["duration"], "Encodeo completado · enviando video")
                 await state["request"].reply_video(
                     video=str(output),
                     thumb=thumbnail,
@@ -401,7 +428,16 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     supports_streaming=True,
                 )
                 try:
-                    await state["status"].edit_text("✅ <b>Proceso terminado y video enviado.</b>", parse_mode=enums.ParseMode.HTML)
+                    user = state["request"].from_user
+                    user_mention = f"@{user.username}" if user and user.username else (user.first_name if user else "Desconocido")
+                    user_id = user.id if user else state["owner_id"]
+                    await state["status"].edit_text(
+                        _template_status(
+                            video_name=state["display_name"], percent=100, status="Completado · video enviado",
+                            elapsed=time.monotonic() - state["started_at"], user_mention=user_mention, user_id=user_id,
+                            info=f"Encode finalizado · {size_mb:.1f} MiB", cancel_text="proceso_finalizado",
+                        ), parse_mode=enums.ParseMode.HTML,
+                    )
                 except Exception:
                     pass
         except asyncio.CancelledError:
