@@ -22,7 +22,7 @@ _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
 async def _send_file(message, path: Path, status: Message, source_label: str, torrent_context=None):
     size = path.stat().st_size / (1024 * 1024)
-    caption = f"✅ Torrent descargado\n📄 {path.name}\n📦 {size:.1f} MB"
+    caption = f"Title: {path.name}\n┖ Size: {size:.1f} MB"
     last = [-10]
     meter = TransferProgress()
     if torrent_context:
