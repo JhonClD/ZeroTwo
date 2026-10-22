@@ -515,10 +515,25 @@ def register(app, download_dir):
         user_dir = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
-        status_msg = await message.reply_text(
-            f"📥 <b>Iniciando descarga desde {service}…</b>",
-            parse_mode=enums.ParseMode.HTML
-        )
+        if is_mediafire:
+            user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+            status_msg = await message.reply_text(
+                "<b>MediaFire</b>\n"
+                "┃ [□□□□□□□□□□□□□] 00.00%\n"
+                "<b>┠ Status:</b> En cola...\n"
+                "<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> 0m 0s\n"
+                "<b>┠ Mode:</b> #Download | #Mediafire\n"
+                f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
+                "<b>┖</b> cancel_en_espera",
+                reply_to_message_id=message.id,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        else:
+            status_msg = await message.reply_text(
+                f"📥 <b>Iniciando descarga desde {service}…</b>",
+                parse_mode=enums.ParseMode.HTML
+            )
 
         # ── Callback de progreso → Telegram ──────────────────────────────────
         async def tg_progress(text: str):
@@ -679,6 +694,21 @@ def register(app, download_dir):
                 downloader = lambda: DriveDownloader.download(url, user_dir, tg_progress)
 
             async def queued_notice(position):
+                if is_mediafire:
+                    user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+                    await status_msg.edit_text(
+                        "<b>MediaFire</b>\n"
+                        "┃ [□□□□□□□□□□□□□] 00.00%\n"
+                        "<b>┠ Status:</b> En cola...\n"
+                        f"<b>┠ Queue:</b> posición {position}\n"
+                        "<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> 0m 0s\n"
+                        "<b>┠ Mode:</b> #Download | #Mediafire\n"
+                        f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
+                        "<b>┖</b> cancel_en_espera",
+                        parse_mode=enums.ParseMode.HTML,
+                        disable_web_page_preview=True,
+                    )
+                    return
                 await status_msg.edit_text(
                     f"⏳ <b>{downloader_label}</b> está ocupado.\n"
                     f"📋 Descarga añadida a la cola — posición <b>{position}</b>.",
