@@ -747,7 +747,6 @@ def register(app, download_dir):
                     f"┃ 📂 Carpeta pública\n"
                     f"┠ Nombre: {folder_name}\n"
                     f"┠ Archivos: {count} | Total: {total_size_text}\n"
-                    f"┠ Expira en: 60s / Expired\n"
                     f"┗ Mode: #Select | #GoFile{more}\n\n"
                     "Elige cuál quieres descargar:",
                     reply_markup=InlineKeyboardMarkup(buttons),
