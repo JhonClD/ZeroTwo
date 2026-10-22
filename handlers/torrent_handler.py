@@ -20,16 +20,27 @@ logger = logging.getLogger(__name__)
 _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
 
-async def _send_file(message, path: Path, status: Message, source_label: str):
+async def _send_file(message, path: Path, status: Message, source_label: str, torrent_context=None):
     size = path.stat().st_size / (1024 * 1024)
     caption = f"✅ Torrent descargado\n📄 {path.name}\n📦 {size:.1f} MB"
     last = [-10]
     meter = TransferProgress()
-    await status.edit_text(
-        f"✅ <b>Descarga torrent completada</b>\n{format_file_info(path, 'Torrent')}\n"
-        f"📤 Preparando envío · {source_label}",
-        parse_mode=enums.ParseMode.HTML,
-    )
+    if torrent_context:
+        await status.edit_text(
+            _torrent_status(
+                path.name, path.stat().st_size, path.stat().st_size,
+                "Preparando envío", torrent_context["queue_position"], 0,
+                (torrent_context["seeds"], torrent_context["peers"]),
+                torrent_context["started_at"], torrent_context["task_id"],
+            ),
+            parse_mode=enums.ParseMode.HTML,
+        )
+    else:
+        await status.edit_text(
+            f"✅ <b>Descarga torrent completada</b>\n{format_file_info(path, 'Torrent')}\n"
+            f"📤 Preparando envío · {source_label}",
+            parse_mode=enums.ParseMode.HTML,
+        )
 
     async def progress(current, total):
         if not total:
@@ -70,10 +81,12 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
     try:
         meter = TransferProgress()
         last_update = [0.0]
+        last_stats = [None, None]
         loop = asyncio.get_running_loop()
         queue_position = 1 + download_queue.pending
 
         def torrent_progress(current, total, speed=None, seeds=None, peer_count=None):
+            last_stats[:] = [seeds, peer_count]
             now = time.monotonic()
             if now - last_update[0] < 1.5 and total and current < total:
                 return
@@ -114,7 +127,16 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
             await status.edit_text(f"❌ <b>Error torrent</b>\n<code>{error[:900]}</code>", parse_mode=enums.ParseMode.HTML)
             return
         for index, path in enumerate(files):
-            await _send_file(message, path, status, f"archivo {index + 1}/{len(files)}")
+            await _send_file(
+                message, path, status, f"archivo {index + 1}/{len(files)}",
+                torrent_context={
+                    "queue_position": queue_position,
+                    "seeds": last_stats[0],
+                    "peers": last_stats[1],
+                    "started_at": started_at,
+                    "task_id": task_id,
+                },
+            )
         await status.delete()
     except Exception as error:
         logger.error("Error en descarga torrent", exc_info=True)
