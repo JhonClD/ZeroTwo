@@ -517,15 +517,21 @@ def register(app, download_dir):
         user_dir.mkdir(exist_ok=True)
 
         if is_mediafire:
+            task_id = uuid.uuid4().hex[:4].upper()
             user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
             status_msg = await message.reply_text(
                 "<b>MediaFire</b>\n"
                 "┃ [□□□□□□□□□□□□□] 00.00%\n"
+                "<b>┠ Size:</b> 0.0 / 0.0 MiB\n"
                 "<b>┠ Status:</b> En cola...\n"
-                "<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> 0m 0s\n"
+                "<b>┠ Queue:</b> posición 1 de 1\n"
+                "<b>┠ Speed:</b> 0.00 MiB/s <b>| Avg:</b> 0.00 MiB/s\n"
+                "<b>┠ ETA:</b> — | <b>Elapsed:</b> 0m 0s\n"
+                f"<b>┠ User:</b> {user_mention}\n"
+                f"<b>┠ Task ID:</b> #{task_id}\n"
                 "<b>┠ Mode:</b> #Download | #Mediafire\n"
-                f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
-                "<b>┖</b> cancel_en_espera",
+                f"<b>┠ ID:</b> <code>{user_id}</code>\n"
+                f"<b>┗ Cancelar:</b> /cancel {task_id}",
                 reply_to_message_id=message.id,
                 parse_mode=enums.ParseMode.HTML,
                 disable_web_page_preview=True,
@@ -546,15 +552,30 @@ def register(app, download_dir):
                 speed_mib = (speed_bytes or 0) / (1024 * 1024)
                 elapsed = max(0, int(time.monotonic() - started_at))
                 elapsed_text = f"{elapsed // 60}m {elapsed % 60}s"
+                current_mib = max(0, int(current or 0)) / (1024 * 1024)
+                total_mib = max(0, int(total or 0)) / (1024 * 1024)
+                average_mib = current_mib / elapsed if elapsed else 0
+                eta_seconds = (
+                    max(0, total_mib - current_mib) / speed_mib
+                    if speed_mib > 0 and total_mib else 0
+                )
+                eta_text = f"{int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s"
+                queue_position = 1
+                queue_total = max(1, 1 + download_queue.pending)
                 safe_filename = html.escape(Path(str(filename or "MediaFire")).name)
                 return (
                     f"<b>{safe_filename}</b>\n"
                     f"┃ [{bar}] {percent:05.2f}%\n"
-                    f"<b>┠ Status:</b> {html.escape(str(stage))}\n"
-                    f"<b>┠ Speed:</b> {speed_mib:.2f} MiB/s <b>| Elapsed:</b> {elapsed_text}\n"
+                    f"<b>┠ Size:</b> {current_mib:.1f} / {total_mib:.1f} MiB\n"
+                    f"<b>┠ Status:</b> {html.escape(str(stage))}...\n"
+                    f"<b>┠ Queue:</b> posición {queue_position} de {queue_total}\n"
+                    f"<b>┠ Speed:</b> {speed_mib:.2f} MiB/s <b>| Avg:</b> {average_mib:.2f} MiB/s\n"
+                    f"<b>┠ ETA:</b> {eta_text} <b>| Elapsed:</b> {elapsed_text}\n"
+                    f"<b>┠ User:</b> {user_mention}\n"
+                    f"<b>┠ Task ID:</b> #{task_id}\n"
                     f"<b>┠ Mode:</b> #{mode} | #Mediafire\n"
-                    f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
-                    "<b>┖</b> cancel_en_espera"
+                    f"<b>┠ ID:</b> <code>{user_id}</code>\n"
+                    f"<b>┗ Cancelar:</b> /cancel {task_id}"
                 )
 
             return render
@@ -724,15 +745,19 @@ def register(app, download_dir):
             async def queued_notice(position):
                 if is_mediafire:
                     user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+                    queue_total = max(position, 1 + download_queue.pending)
                     await status_msg.edit_text(
                         "<b>MediaFire</b>\n"
                         "┃ [□□□□□□□□□□□□□] 00.00%\n"
                         "<b>┠ Status:</b> En cola...\n"
-                        f"<b>┠ Queue:</b> posición {position}\n"
-                        "<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> 0m 0s\n"
+                        f"<b>┠ Queue:</b> posición {position} de {queue_total}\n"
+                        "<b>┠ Speed:</b> 0.00 MiB/s <b>| Avg:</b> 0.00 MiB/s\n"
+                        "<b>┠ ETA:</b> — | <b>Elapsed:</b> 0m 0s\n"
+                        f"<b>┠ User:</b> {user_mention}\n"
+                        f"<b>┠ Task ID:</b> #{task_id}\n"
                         "<b>┠ Mode:</b> #Download | #Mediafire\n"
-                        f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
-                        "<b>┖</b> cancel_en_espera",
+                        f"<b>┠ ID:</b> <code>{user_id}</code>\n"
+                        f"<b>┗ Cancelar:</b> /cancel {task_id}",
                         parse_mode=enums.ParseMode.HTML,
                         disable_web_page_preview=True,
                     )
