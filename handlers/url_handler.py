@@ -181,7 +181,7 @@ def register(app, download_dir):
 
             await message.reply_document(
                 document=str(file_path),
-                caption=f"✅ Descargado de Drime\n📄 {filename}\n📦 {file_size:.1f} MB",
+                caption=f"Title: {filename}\n┖ Size: {file_size:.1f} MB",
                 progress=upload_progress,
             )
             await status_msg.delete()
