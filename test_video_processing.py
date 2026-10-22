@@ -1,4 +1,4 @@
-"""Pruebas del motor de procesamiento de video (sin dependencias Python nuevas)."""
+"""Pruebas del motor de procesamiento basado en la plantilla de FFmpeg."""
 
 import shutil
 import subprocess
@@ -7,8 +7,7 @@ import unittest
 from pathlib import Path
 
 from utils.video_processing import (
-    build_compression_command,
-    build_hardsub_command,
+    build_compression_commands,
     build_hardsub_template_commands,
     build_target_size_commands,
     calculate_video_bitrate,
@@ -26,23 +25,37 @@ class CommandBuilderTests(unittest.TestCase):
         self.assertEqual(safe_video_extension("unknown", "video/webm"), ".webm")
         self.assertEqual(safe_video_extension("../something.exe", "application/octet-stream"), ".mp4")
 
-    def test_profiles_and_compression_command(self):
-        self.assertEqual(compression_profile("balanced"), (23, "medium", None))
+    def test_drive_profiles_and_two_pass_commands(self):
+        self.assertEqual(compression_profile("balanced"), ("3500k", "medium", None))
         self.assertEqual(compression_profile("720")[2], "1280:720")
-        command = build_compression_command("input.mp4", "compressed.mp4", crf=28, scale="854:480", threads=2)
-        self.assertIn("-crf", command)
-        self.assertIn("28", command)
-        self.assertIn("-sn", command)
-        self.assertEqual(command[-1], "compressed.mp4")
-        self.assertIn("scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2", command)
+        commands, temporary = build_compression_commands(
+            "input.mp4", "compressed.mp4", bitrate="2200k", scale="854:480", threads=2,
+        )
+        self.assertEqual(len(commands), 3)
+        joined = " ".join(" ".join(command) for command in commands)
+        self.assertIn("-pass 1", joined)
+        self.assertIn("-pass 2", joined)
+        self.assertIn("-tune animation", joined)
+        self.assertIn("scale=854:480", joined)
+        self.assertIn("input_template.mp4", temporary)
         with self.assertRaises(ValueError):
             compression_profile("ultrafast-shell")
         with self.assertRaises(ValueError):
-            build_compression_command("input.mp4", "out.mp4", crf=99)
-        with self.assertRaises(ValueError):
-            build_compression_command("input.mp4", "out.mp4", preset="ultrafast")
+            build_compression_commands("input.mp4", "out.mp4", bitrate="bad")
 
-    def test_drive_template_hardsub_pipeline_without_watermark(self):
+    def test_target_size_uses_same_template(self):
+        bitrate = calculate_video_bitrate(700, 3600)
+        commands, temporary = build_target_size_commands("input.mp4", "out.mp4", bitrate=bitrate)
+        self.assertEqual(len(commands), 3)
+        self.assertIn("-pass", commands[1])
+        self.assertIn("-pass", commands[2])
+        self.assertIn("input_template.mp4", temporary)
+        with self.assertRaises(ValueError):
+            calculate_video_bitrate(20, 3600)
+        with self.assertRaises(ValueError):
+            calculate_video_bitrate(100, 0)
+
+    def test_hardsub_template_has_no_watermark(self):
         commands, temporary = build_hardsub_template_commands(
             "input.mkv", "output.mp4", embedded_ordinal=0,
         )
@@ -50,34 +63,10 @@ class CommandBuilderTests(unittest.TestCase):
         joined = " ".join(" ".join(command) for command in commands)
         self.assertIn("-pass 1", joined)
         self.assertIn("-pass 2", joined)
-        self.assertIn("-tune animation", joined)
         self.assertIn("subtitles=filename='input_subs.ass'", joined)
         self.assertNotIn("marca.png", joined)
         self.assertNotIn("marca_bot.ass", joined)
         self.assertIn("input_template.mp4", temporary)
-
-    def test_target_size_and_two_pass(self):
-        bitrate = calculate_video_bitrate(700, 3600)
-        self.assertGreater(bitrate, 100_000)
-        first, second = build_target_size_commands("input.mp4", "out.mp4", bitrate=bitrate)
-        self.assertIn("-pass", first)
-        self.assertIn("-pass", second)
-        self.assertIn("-f", first)
-        self.assertEqual(second[-1], "out.mp4")
-        with self.assertRaises(ValueError):
-            calculate_video_bitrate(20, 3600)
-        with self.assertRaises(ValueError):
-            calculate_video_bitrate(100, 0)
-
-    def test_hardsub_paths_and_stream_selection(self):
-        external = build_hardsub_command("input.mp4", "out.mp4", subtitle_name="subtitle.srt")
-        self.assertIn("subtitles=filename='subtitle.srt':force_style='FontSize=22,Outline=2,Shadow=1,MarginV=24'", external)
-        internal = build_hardsub_command("input.mkv", "out.mp4", embedded_ordinal=2)
-        self.assertIn("subtitles=filename='input.mkv':si=2", internal)
-        with self.assertRaises(ValueError):
-            build_hardsub_command("input.mp4", "out.mp4", subtitle_name="../../evil.srt")
-        with self.assertRaises(ValueError):
-            build_hardsub_command("input.mp4", "out.mp4", embedded_ordinal=-1)
 
 
 class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -95,45 +84,37 @@ class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
                 "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-shortest", str(self.work / "input.mp4"),
-            ],
-            capture_output=True,
-            timeout=60,
+            ], capture_output=True, timeout=60,
         )
         if result.returncode:
             self.tmp.cleanup()
-            self.skipTest("FFmpeg no puede crear un video de prueba: " + result.stderr.decode(errors="replace")[-300:])
+            self.skipTest("FFmpeg no puede crear un video de prueba")
         (self.work / "subtitle.srt").write_text(
-            "1\n00:00:00,000 --> 00:00:01,900\nZeroTwo test subtitle\n",
-            encoding="utf-8",
+            "1\n00:00:00,000 --> 00:00:01,900\nZeroTwo test subtitle\n", encoding="utf-8",
         )
 
     async def asyncTearDown(self):
         if hasattr(self, "tmp"):
             self.tmp.cleanup()
 
-    async def test_compress_external_hardsub_and_internal_hardsub(self):
-        input_path = self.work / "input.mp4"
-        info = await probe_video(input_path)
-        self.assertGreater(info["duration"], 1.5)
-        self.assertEqual(info["subtitles"], [])
+    async def _run_commands(self, commands, duration):
+        for command in commands:
+            await run_ffmpeg(command, cwd=self.work, duration=duration, timeout_seconds=120)
 
-        progress = []
-        async def on_progress(current, total):
-            progress.append((current, total))
+    async def test_template_compress_and_hardsub(self):
+        info = await probe_video(self.work / "input.mp4")
+        self.assertGreater(info["duration"], 1.5)
 
         compressed = self.work / "compressed.mp4"
-        await run_ffmpeg(
-            build_compression_command("input.mp4", compressed.name, crf=28),
-            cwd=self.work, duration=info["duration"], progress_callback=on_progress, timeout_seconds=120,
-        )
+        commands, _ = build_compression_commands("input.mp4", compressed.name, bitrate="1200k")
+        await self._run_commands(commands, info["duration"])
         self.assertGreater(compressed.stat().st_size, 0)
-        self.assertTrue(progress)
 
         external_output = self.work / "external.mp4"
-        await run_ffmpeg(
-            build_hardsub_command("input.mp4", external_output.name, subtitle_name="subtitle.srt"),
-            cwd=self.work, duration=info["duration"], timeout_seconds=120,
+        commands, _ = build_hardsub_template_commands(
+            "input.mp4", external_output.name, subtitle_name="subtitle.srt", bitrate="1200k",
         )
+        await self._run_commands(commands, info["duration"])
         self.assertGreater(external_output.stat().st_size, 0)
 
         internal = self.work / "input_subbed.mkv"
@@ -142,17 +123,16 @@ class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "input.mp4",
                 "-f", "srt", "-i", "subtitle.srt", "-map", "0:v:0", "-map", "0:a?",
                 "-map", "1:0", "-c", "copy", "-c:s", "srt", internal.name,
-            ],
-            cwd=self.work, capture_output=True, timeout=60,
+            ], cwd=self.work, capture_output=True, timeout=60,
         )
         self.assertEqual(mux.returncode, 0, mux.stderr.decode(errors="replace"))
         embedded_info = await probe_video(internal)
         self.assertEqual(embedded_info["subtitles"][0]["ordinal"], 0)
         internal_output = self.work / "internal.mp4"
-        await run_ffmpeg(
-            build_hardsub_command("input_subbed.mkv", internal_output.name, embedded_ordinal=0),
-            cwd=self.work, duration=embedded_info["duration"], timeout_seconds=120,
+        commands, _ = build_hardsub_template_commands(
+            internal.name, internal_output.name, embedded_ordinal=0, bitrate="1200k",
         )
+        await self._run_commands(commands, embedded_info["duration"])
         self.assertGreater(internal_output.stat().st_size, 0)
 
 

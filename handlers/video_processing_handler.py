@@ -18,7 +18,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from utils import VideoProcessor
 from utils.video_processing import (
     VideoProcessingError,
-    build_compression_command,
+    build_compression_commands,
     build_hardsub_template_commands,
     build_target_size_commands,
     calculate_video_bitrate,
@@ -301,35 +301,38 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     duration = float(state["media"]["duration"])
                     bitrate = calculate_video_bitrate(state["target_size"], duration)
                     output = state["job_dir"] / "compressed.mp4"
-                    first, second = build_target_size_commands(
+                    commands, temporary_files = build_target_size_commands(
                         state["source"].name, output.name, bitrate=bitrate, threads=threads,
                     )
                     await state["status"].edit_text(
-                        f"⏳ <b>Compresión de dos pasadas</b>\nObjetivo aproximado: {state['target_size']:g} MB\nPrimera pasada…",
+                        f"⏳ <b>Encodeo de plantilla en dos pasadas</b>\nObjetivo aproximado: {state['target_size']:g} MB",
                         reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
                     )
-                    async def first_progress(current, total):
-                        await _progress(state, current, total * 2, "Compresión · pasada 1/2")
-                    async def second_progress(current, total):
-                        await _progress(state, total + current, total * 2, "Compresión · pasada 2/2")
-                    await run_ffmpeg(first, cwd=state["job_dir"], duration=duration, progress_callback=first_progress, timeout_seconds=timeout)
-                    await run_ffmpeg(second, cwd=state["job_dir"], duration=duration, progress_callback=second_progress, timeout_seconds=timeout)
-                    for path in state["job_dir"].glob("twopass*"):
-                        path.unlink(missing_ok=True)
+                    total_steps = len(commands)
+                    for step, command in enumerate(commands, start=1):
+                        async def size_progress(current, total, step=step):
+                            await _progress(state, (step - 1) * total + current, total * total_steps, f"Encodeo · paso {step}/{total_steps}")
+                        await run_ffmpeg(command, cwd=state["job_dir"], duration=duration, progress_callback=size_progress, timeout_seconds=timeout)
+                    for temporary_file in temporary_files:
+                        (state["job_dir"] / temporary_file).unlink(missing_ok=True)
                     caption = f"✅ Compresión completada · objetivo aproximado {state['target_size']:g} MB"
                 elif state["mode"] == "compress":
-                    crf, preset, scale = compression_profile(state["profile"])
+                    bitrate, preset, scale = compression_profile(state["profile"])
                     output = state["job_dir"] / "compressed.mp4"
-                    command = build_compression_command(
-                        state["source"].name, output.name, crf=crf, preset=preset, scale=scale, threads=threads,
+                    commands, temporary_files = build_compression_commands(
+                        state["source"].name, output.name, bitrate=bitrate, preset=preset, scale=scale, threads=threads,
                     )
                     await state["status"].edit_text(
-                        "⚙️ <b>Comprimiendo video…</b>",
+                        "⚙️ <b>Encodeo de plantilla en dos pasadas…</b>",
                         reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
                     )
-                    async def compression_progress(current, total):
-                        await _progress(state, current, total, "Comprimiendo")
-                    await run_ffmpeg(command, cwd=state["job_dir"], duration=state["media"]["duration"], progress_callback=compression_progress, timeout_seconds=timeout)
+                    total_steps = len(commands)
+                    for step, command in enumerate(commands, start=1):
+                        async def compression_progress(current, total, step=step):
+                            await _progress(state, (step - 1) * total + current, total * total_steps, f"Encodeo · paso {step}/{total_steps}")
+                        await run_ffmpeg(command, cwd=state["job_dir"], duration=state["media"]["duration"], progress_callback=compression_progress, timeout_seconds=timeout)
+                    for temporary_file in temporary_files:
+                        (state["job_dir"] / temporary_file).unlink(missing_ok=True)
                     caption = f"✅ Video comprimido · perfil {state['profile']}"
                 else:
                     output = state["job_dir"] / "subtitled.mp4"
