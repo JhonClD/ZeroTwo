@@ -37,6 +37,36 @@ IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
 
 
+def _compact_progress_renderer(started_at, service_name, task_id):
+    """Construye la plantilla compacta para descargas seleccionadas o directas."""
+    def render(stage, filename, current, total, meter, speed=None):
+        snapshot = meter.snapshot(current, total)
+        percent = snapshot["percent"] or 0
+        filled = min(13, int(13 * percent / 100))
+        bar = "■" * filled + "□" * (13 - filled)
+        speed_bytes = speed if speed is not None else snapshot["speed"]
+        speed_mib = (speed_bytes or 0) / (1024 * 1024)
+        elapsed = max(0, int(time.monotonic() - started_at))
+        current_mib = max(0, int(current or 0)) / (1024 * 1024)
+        total_mib = max(0, int(total or 0)) / (1024 * 1024)
+        eta_seconds = ((total_mib - current_mib) / speed_mib
+                       if speed_mib > 0 and total_mib else None)
+        eta_text = "—" if eta_seconds is None else f"{int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s"
+        safe_filename = html.escape(Path(str(filename or service_name)).name)
+        return (
+            f"<b>{safe_filename}</b>\n"
+            f"┃ [{bar}] {percent:05.2f}%\n"
+            f"┠ Size: {current_mib:.1f} / {total_mib:.1f} MiB\n"
+            f"┠ Status: {html.escape(str(stage))}...\n"
+            f"┠ Queue: posición 1\n"
+            f"┠ Speed: {speed_mib:.2f} MiB/s | ETA: {eta_text}\n"
+            f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
+            f"┠ Mode: #Download | #{service_name}\n"
+            f"┗ Cancelar: /cancel {task_id}"
+        )
+    return render
+
+
 def _extract_url(text: str | None) -> str | None:
     """Obtiene el enlace del texto aunque venga precedido por `/mf` u otro comando."""
     if not text:
@@ -598,37 +628,9 @@ def register(app, download_dir):
 
             return render
 
-        def compact_status_renderer(started_at, service_name):
-            def render(stage, filename, current, total, meter, speed=None):
-                snapshot = meter.snapshot(current, total)
-                percent = snapshot["percent"] or 0
-                filled = min(13, int(13 * percent / 100))
-                bar = "■" * filled + "□" * (13 - filled)
-                speed_bytes = speed if speed is not None else snapshot["speed"]
-                speed_mib = (speed_bytes or 0) / (1024 * 1024)
-                elapsed = max(0, int(time.monotonic() - started_at))
-                current_mib = max(0, int(current or 0)) / (1024 * 1024)
-                total_mib = max(0, int(total or 0)) / (1024 * 1024)
-                eta_seconds = ((total_mib - current_mib) / speed_mib
-                               if speed_mib > 0 and total_mib else None)
-                eta_text = "—" if eta_seconds is None else f"{int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s"
-                safe_filename = html.escape(Path(str(filename or service_name)).name)
-                return (
-                    f"<b>{safe_filename}</b>\n"
-                    f"┃ [{bar}] {percent:05.2f}%\n"
-                    f"┠ Size: {current_mib:.1f} / {total_mib:.1f} MiB\n"
-                    f"┠ Status: {html.escape(str(stage))}...\n"
-                    f"┠ Queue: posición 1\n"
-                    f"┠ Speed: {speed_mib:.2f} MiB/s | ETA: {eta_text}\n"
-                    f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
-                    f"┠ Mode: #Download | #{service_name}\n"
-                    f"┗ Cancelar: /cancel {task_id}"
-                )
-            return render
-
         download_status_renderer = progress_status_renderer(time.monotonic()) if progress_template else None
-        gofile_renderer = compact_status_renderer(time.monotonic(), "GoFile") if is_gofile else None
-        drime_renderer = compact_status_renderer(time.monotonic(), "Drime") if is_drime else None
+        gofile_renderer = _compact_progress_renderer(time.monotonic(), "GoFile", task_id) if is_gofile else None
+        drime_renderer = _compact_progress_renderer(time.monotonic(), "Drime", task_id) if is_drime else None
 
         # ── Callback de progreso → Telegram ──────────────────────────────────
         async def tg_progress(text: str):
@@ -1013,7 +1015,10 @@ def register(app, download_dir):
             if entry is None:
                 await query.message.edit_text("❌ El archivo ya no aparece en esta carpeta compartida.")
                 return
-            await _download_and_send_drime(query.message, query.message, share, entry, user_id=owner_id)
+            await _download_and_send_drime(
+                query.message, query.message, share, entry, user_id=owner_id,
+                status_renderer=_compact_progress_renderer(time.monotonic(), "Drime", uuid.uuid4().hex[:4].upper()),
+            )
         except DrimeDownloadError as error:
             await query.message.edit_text(f"❌ <b>Error de Drime</b>\n{html.escape(str(error))}", parse_mode=enums.ParseMode.HTML)
         except Exception as error:
@@ -1066,6 +1071,7 @@ def register(app, download_dir):
                 selection["share"],
                 selection["entry"],
                 user_id=owner_id,
+                status_renderer=_compact_progress_renderer(time.monotonic(), "GoFile", uuid.uuid4().hex[:4].upper()),
             )
         except Exception as error:
             logger.exception("Error procesando selección GoFile")
