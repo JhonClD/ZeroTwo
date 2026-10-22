@@ -88,7 +88,8 @@ def register(app, download_dir):
         return name or "archivo_drime", size, size_text
 
     async def _download_and_send_drime(
-        message: Message, status_msg: Message, share: dict, entry: dict, user_id: int | None = None
+        message: Message, status_msg: Message, share: dict, entry: dict,
+        user_id: int | None = None, status_renderer=None
     ):
         if user_id is None:
             user_id = message.from_user.id if message.from_user else 0
@@ -110,7 +111,10 @@ def register(app, download_dir):
 
             download_meter = TransferProgress()
             await status_msg.edit_text(
-                render_transfer_status("Descargando", "Drime", filename, 0, expected_size, download_meter),
+                status_renderer("Descargando", filename, 0, expected_size, download_meter)
+                if status_renderer else render_transfer_status(
+                    "Descargando", "Drime", filename, 0, expected_size, download_meter
+                ),
                 parse_mode=enums.ParseMode.HTML,
             )
             loop = asyncio.get_running_loop()
@@ -127,7 +131,8 @@ def register(app, download_dir):
                 async def update_status():
                     try:
                         await status_msg.edit_text(
-                            render_transfer_status(
+                            status_renderer("Descargando", filename, current, total, download_meter)
+                            if status_renderer else render_transfer_status(
                                 "Descargando", "Drime", filename, current, total, download_meter
                             ),
                             parse_mode=enums.ParseMode.HTML,
@@ -148,7 +153,8 @@ def register(app, download_dir):
             )
             file_size = file_size_bytes / (1024 * 1024)
             await status_msg.edit_text(
-                f"✅ <b>Descarga completada</b> · Drime\n{format_file_info(file_path, 'Drime')}\n"
+                status_renderer("Enviando a Telegram", filename, file_size_bytes, file_size_bytes, download_meter)
+                if status_renderer else f"✅ <b>Descarga completada</b> · Drime\n{format_file_info(file_path, 'Drime')}\n"
                 f"📤 Enviando a Telegram…",
                 parse_mode=enums.ParseMode.HTML,
             )
@@ -164,7 +170,8 @@ def register(app, download_dir):
                 last_upload_pct[0] = pct
                 try:
                     await status_msg.edit_text(
-                        render_transfer_status(
+                        status_renderer("Enviando a Telegram", filename, current, total, upload_meter)
+                        if status_renderer else render_transfer_status(
                             "Subiendo", "Telegram · Drime", filename, current, total, upload_meter
                         ),
                         parse_mode=enums.ParseMode.HTML,
@@ -524,7 +531,7 @@ def register(app, download_dir):
         user_dir = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
-        progress_template = is_mediafire or is_mega or is_gofile or (is_drive and not is_drive_folder)
+        progress_template = is_mediafire or is_mega or is_gofile or is_drime or (is_drive and not is_drive_folder)
         task_id = uuid.uuid4().hex[:4].upper()
         user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
         service_tag = "GoogleDrive" if service == "Google Drive" else service
@@ -591,7 +598,7 @@ def register(app, download_dir):
 
             return render
 
-        def gofile_status_renderer(started_at):
+        def compact_status_renderer(started_at, service_name):
             def render(stage, filename, current, total, meter, speed=None):
                 snapshot = meter.snapshot(current, total)
                 percent = snapshot["percent"] or 0
@@ -605,7 +612,7 @@ def register(app, download_dir):
                 eta_seconds = ((total_mib - current_mib) / speed_mib
                                if speed_mib > 0 and total_mib else None)
                 eta_text = "—" if eta_seconds is None else f"{int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s"
-                safe_filename = html.escape(Path(str(filename or "GoFile")).name)
+                safe_filename = html.escape(Path(str(filename or service_name)).name)
                 return (
                     f"<b>{safe_filename}</b>\n"
                     f"┃ [{bar}] {percent:05.2f}%\n"
@@ -614,13 +621,14 @@ def register(app, download_dir):
                     f"┠ Queue: posición 1\n"
                     f"┠ Speed: {speed_mib:.2f} MiB/s | ETA: {eta_text}\n"
                     f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
-                    f"┠ Mode: #Download | #GoFile\n"
+                    f"┠ Mode: #Download | #{service_name}\n"
                     f"┗ Cancelar: /cancel {task_id}"
                 )
             return render
 
         download_status_renderer = progress_status_renderer(time.monotonic()) if progress_template else None
-        gofile_renderer = gofile_status_renderer(time.monotonic()) if is_gofile else None
+        gofile_renderer = compact_status_renderer(time.monotonic(), "GoFile") if is_gofile else None
+        drime_renderer = compact_status_renderer(time.monotonic(), "Drime") if is_drime else None
 
         # ── Callback de progreso → Telegram ──────────────────────────────────
         async def tg_progress(text: str):
@@ -747,7 +755,9 @@ def register(app, download_dir):
                             return
                         drime_busy_users.add(user_id)
                     try:
-                        await _download_and_send_drime(message, status_msg, share, entries[0])
+                        await _download_and_send_drime(
+                            message, status_msg, share, entries[0], status_renderer=drime_renderer
+                        )
                     finally:
                         async with drime_busy_lock:
                             drime_busy_users.discard(user_id)
