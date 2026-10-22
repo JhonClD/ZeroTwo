@@ -32,6 +32,7 @@ async def _send_file(message, path: Path, status: Message, source_label: str, to
                 "Preparando envío", torrent_context["queue_position"], 0,
                 (torrent_context["seeds"], torrent_context["peers"]),
                 torrent_context["started_at"], torrent_context["task_id"],
+                show_peers=False,
             ),
             parse_mode=enums.ParseMode.HTML,
         )
@@ -56,6 +57,7 @@ async def _send_file(message, path: Path, status: Message, source_label: str, to
                     torrent_context["queue_position"], None,
                     (torrent_context["seeds"], torrent_context["peers"]),
                     torrent_context["started_at"], torrent_context["task_id"], meter,
+                    show_peers=False,
                 )
             else:
                 text = render_transfer_status(
@@ -152,7 +154,7 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
 
 
 def _torrent_status(name, current, total, stage, queue_position, speed, peers,
-                    started_at, task_id, meter=None):
+                    started_at, task_id, meter=None, show_peers=True):
     """Renderiza el formato compacto de progreso solicitado para torrents."""
     meter = meter or TransferProgress()
     snapshot = meter.snapshot(current, total)
@@ -163,21 +165,25 @@ def _torrent_status(name, current, total, stage, queue_position, speed, peers,
     speed_text = f"↓ {(speed_bytes or 0) / (1024 ** 2):.2f} MiB/s"
     eta = ((total - current) / speed_bytes if speed_bytes and total else None)
     elapsed = max(0, int(time.monotonic() - started_at))
-    seeds = peers[0] if isinstance(peers, tuple) else "—"
-    peer_count = peers[1] if isinstance(peers, tuple) else "—"
     size_text = f"{format_bytes(current)} / {format_bytes(total)}"
-    return (
+    lines = [
         f"<b>{escape(Path(str(name or 'Torrent')).name)}</b>\n"
         f"┃ [{bar}] {percent:05.2f}%\n"
         f"┠ Size: {size_text}\n"
         f"┠ Status: {escape(stage)}...\n"
         f"┠ Queue: posición {queue_position}\n"
         f"┠ Speed: {speed_text} | ETA: {format_duration(eta)}\n"
-        f"┠ Seeds: {seeds} | Peers: {peer_count}\n"
+    ]
+    if show_peers:
+        seeds = peers[0] if isinstance(peers, tuple) else "—"
+        peer_count = peers[1] if isinstance(peers, tuple) else "—"
+        lines.append(f"┠ Seeds: {seeds} | Peers: {peer_count}\n")
+    lines.extend([
         f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
         f"┠ Mode: #Download | #Torrent\n"
         f"┗ Cancelar: /cancel {task_id}"
-    )
+    ])
+    return "".join(lines)
 
 
 def register(app, download_dir: Path):
