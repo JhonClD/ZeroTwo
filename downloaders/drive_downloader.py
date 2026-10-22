@@ -7,6 +7,7 @@ import asyncio
 import logging
 import mimetypes
 import os
+import random
 import re
 import subprocess
 from email.message import Message as EmailMessage
@@ -272,34 +273,54 @@ def _seconds_to_ts(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:06.3f}"
 
 
-async def take_video_screenshots(video_path: Path, work_dir: Path, prefix: str = "shot") -> list[Path]:
+def format_preview_timestamp(seconds: float) -> str:
+    """Convierte segundos a una posición legible para la leyenda del preview."""
+    total_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+async def take_video_screenshots(
+    video_path: Path, work_dir: Path, prefix: str = "shot"
+) -> list[tuple[Path, float]]:
     """
-    Captura 5 screenshots del video en:
-      inicio(5%), cuarto(25%), mitad(50%), tres cuartos(75%), casi final(95%)
-    Devuelve lista de paths generados.
+    Captura 10 screenshots en posiciones aleatorias del video.
+
+    El video se divide en diez tramos iguales y se escoge un instante
+    aleatorio dentro de cada tramo. Así los previews cambian en cada
+    descarga, pero siguen cubriendo toda la duración y no se agrupan en una
+    sola zona del video. Se devuelven en orden cronológico junto con los
+    segundos exactos de cada captura para rotular cada imagen en Telegram.
     """
     duration = _get_video_duration(video_path)
-    if duration < 5:
-        logger.warning("⚠️ Video demasiado corto para screenshots")
+    if duration <= 0:
+        logger.warning("⚠️ No se pudo obtener una duración válida para screenshots")
         return []
 
-    positions = {
-        "inicio":      0.05,
-        "cuarto":      0.25,
-        "mitad":       0.50,
-        "tres_cuartos":0.75,
-        "final":       0.95,
-    }
+    preview_count = 10
+    # Dejamos un pequeño margen en los extremos para evitar frames negros o
+    # incompletos. Cada tramo recibe una posición distinta y aleatoria.
+    start_ratio, end_ratio = 0.05, 0.95
+    tramo = (end_ratio - start_ratio) / preview_count
+    positions = [
+        random.uniform(
+            start_ratio + index * tramo,
+            start_ratio + (index + 1) * tramo,
+        )
+        for index in range(preview_count)
+    ]
 
     shots = []
-    for name, ratio in positions.items():
+    for index, ratio in enumerate(positions, start=1):
         ts = _seconds_to_ts(duration * ratio)
-        out = work_dir / f"{prefix}_{name}.jpg"
+        preview_seconds = duration * ratio
+        out = work_dir / f"{prefix}_{index:02d}.jpg"
         if _take_screenshot(video_path, ts, out):
-            shots.append(out)
-            logger.info(f"📸 Screenshot '{name}' en {ts}: OK")
+            shots.append((out, preview_seconds))
+            logger.info(f"📸 Screenshot {index}/{preview_count} en {ts}: OK")
         else:
-            logger.warning(f"⚠️ Screenshot '{name}' en {ts}: falló")
+            logger.warning(f"⚠️ Screenshot {index}/{preview_count} en {ts}: falló")
 
     return shots
 

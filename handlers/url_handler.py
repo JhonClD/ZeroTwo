@@ -20,6 +20,7 @@ from downloaders.drime_downloader import DrimeDownloader, DrimeDownloadError
 from downloaders.drive_downloader import (
     DriveDownloader,
     DriveFolderError,
+    format_preview_timestamp,
     take_video_screenshots,
 )
 from downloaders.gofile_downloader import GoFileDownloader, GoFileDownloadError
@@ -911,15 +912,23 @@ def register(app, download_dir):
 # ── Helper de screenshots ──────────────────────────────────────────────────────
 
 async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, prefix: str):
-    """Captura 5 screenshots y los envía como álbum."""
+    """Captura 10 screenshots aleatorios y los envía como álbum."""
     logger.info("📸 Capturando screenshots del video…")
     shots = await take_video_screenshots(video_path, work_dir, prefix=prefix)
     if not shots:
         return
 
     from pyrogram.types import InputMediaPhoto
-    media_group = [InputMediaPhoto(str(s)) for s in shots]
-    media_group[0] = InputMediaPhoto(str(shots[0]), caption="🎬 <b>Preview del video</b>")
+    media_group = [
+        InputMediaPhoto(
+            str(path),
+            caption=(
+                f"🎬 Preview {index}/{len(shots)}\n"
+                f"⏱ Posición: {format_preview_timestamp(seconds)}"
+            ),
+        )
+        for index, (path, seconds) in enumerate(shots, start=1)
+    ]
 
     try:
         await message.reply_media_group(media=media_group)
@@ -927,5 +936,5 @@ async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, 
     except Exception as e:
         logger.warning(f"⚠️ Error enviando screenshots: {e}")
     finally:
-        for s in shots:
-            s.unlink(missing_ok=True)
+        for path, _seconds in shots:
+            path.unlink(missing_ok=True)

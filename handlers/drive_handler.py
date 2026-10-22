@@ -8,7 +8,12 @@ from html import escape
 from pathlib import Path
 from pyrogram import filters, enums
 from pyrogram.types import Message
-from downloaders.drive_downloader import DriveDownloader, DriveUploader, take_video_screenshots
+from downloaders.drive_downloader import (
+    DriveDownloader,
+    DriveUploader,
+    format_preview_timestamp,
+    take_video_screenshots,
+)
 from utils.transfer_status import TransferProgress, format_bytes, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
@@ -274,7 +279,7 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
 # ── Helpers internos ──────────────────────────────────────────────────────────
 
 async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, prefix: str):
-    """Captura y envía 5 screenshots del video como álbum de fotos."""
+    """Captura y envía 10 screenshots aleatorios del video como álbum."""
     logger.info("📸 Capturando screenshots del video…")
     shots = await take_video_screenshots(video_path, work_dir, prefix=prefix)
 
@@ -283,11 +288,16 @@ async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, 
         return
 
     from pyrogram.types import InputMediaPhoto
-    media_group = [InputMediaPhoto(str(s)) for s in shots]
-    media_group[0] = InputMediaPhoto(
-        str(shots[0]),
-        caption="🎬 <b>Preview del video</b>",
-    )
+    media_group = [
+        InputMediaPhoto(
+            str(path),
+            caption=(
+                f"🎬 Preview {index}/{len(shots)}\n"
+                f"⏱ Posición: {format_preview_timestamp(seconds)}"
+            ),
+        )
+        for index, (path, seconds) in enumerate(shots, start=1)
+    ]
 
     try:
         await message.reply_media_group(media=media_group)
@@ -295,8 +305,8 @@ async def _send_screenshots(message: Message, video_path: Path, work_dir: Path, 
     except Exception as e:
         logger.warning(f"⚠️ Error enviando screenshots: {e}")
     finally:
-        for s in shots:
-            s.unlink(missing_ok=True)
+        for path, _seconds in shots:
+            path.unlink(missing_ok=True)
 
 
 async def _send_file(message: Message, file_path: Path, file_ext: str, filename: str, service: str, progress):
