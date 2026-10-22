@@ -805,14 +805,25 @@ def register(app, download_dir):
             # Screenshots si es video
             if file_ext in VIDEO_EXTS:
                 if is_mediafire:
-                    await status_msg.edit_text(
+                    # La plantilla inicial ya cumplió su función durante la
+                    # descarga. La eliminamos para que el nuevo estado de
+                    # subida aparezca debajo del álbum de previews.
+                    try:
+                        await status_msg.delete()
+                    except Exception:
+                        pass
+                await _send_screenshots(message, file_path, user_dir, service.lower().replace(' ', '_'))
+
+                if is_mediafire:
+                    status_msg = await message.reply_text(
                         mediafire_download_renderer(
-                            "Generando preview", filename, file_size_bytes, file_size_bytes,
+                            "Preparando subida", filename, file_size_bytes, file_size_bytes,
                             TransferProgress(),
                         ),
+                        reply_to_message_id=message.id,
                         parse_mode=enums.ParseMode.HTML,
+                        disable_web_page_preview=True,
                     )
-                await _send_screenshots(message, file_path, user_dir, service.lower().replace(' ', '_'))
 
             # ── Progreso de envío a Telegram ──────────────────────────────────
             last_pct = [-10]
