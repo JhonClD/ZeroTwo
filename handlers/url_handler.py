@@ -25,6 +25,7 @@ from downloaders.drive_downloader import (
 )
 from downloaders.gofile_downloader import GoFileDownloader, GoFileDownloadError
 from utils import VideoProcessor
+from utils.download_queue import download_queue
 from utils.transfer_status import TransferProgress, format_bytes, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
@@ -392,11 +393,29 @@ def register(app, download_dir):
                     except Exception:
                         pass
 
-                success, file_path, error = await DriveDownloader.download(
-                    str(entry.get("id") or ""),
-                    job_dir,
-                    progress_callback=drive_progress,
-                    max_bytes=per_download_limit,
+                async def queued_drive_download(
+                    entry=entry,
+                    job_dir=job_dir,
+                    drive_progress=drive_progress,
+                    per_download_limit=per_download_limit,
+                ):
+                    return await DriveDownloader.download(
+                        str(entry.get("id") or ""),
+                        job_dir,
+                        progress_callback=drive_progress,
+                        max_bytes=per_download_limit,
+                    )
+
+                async def queued_notice(position, escaped_name=escaped_name):
+                    await status_msg.edit_text(
+                        f"⏳ <b>Google Drive</b> está ocupado.\n"
+                        f"📋 Archivo añadido a la cola — posición <b>{position}</b>.\n"
+                        f"📄 {escaped_name}",
+                        parse_mode=enums.ParseMode.HTML,
+                    )
+
+                success, file_path, error = await download_queue.run(
+                    "Google Drive", queued_drive_download, on_queued=queued_notice
                 )
                 if not success or not file_path:
                     errors.append((display_name, str(error or "falló la descarga")))
@@ -650,11 +669,25 @@ def register(app, download_dir):
                 )
                 return
             if is_mega:
-                success, file_path, error = await MEGADownloader.download(url, user_dir, tg_progress)
+                downloader_label = "MEGA"
+                downloader = lambda: MEGADownloader.download(url, user_dir, tg_progress)
             elif is_mediafire:
-                success, file_path, error = await MediaFireDownloader.download(url, user_dir, tg_progress)
+                downloader_label = "MediaFire"
+                downloader = lambda: MediaFireDownloader.download(url, user_dir, tg_progress)
             else:
-                success, file_path, error = await DriveDownloader.download(url, user_dir, tg_progress)
+                downloader_label = "Google Drive"
+                downloader = lambda: DriveDownloader.download(url, user_dir, tg_progress)
+
+            async def queued_notice(position):
+                await status_msg.edit_text(
+                    f"⏳ <b>{downloader_label}</b> está ocupado.\n"
+                    f"📋 Descarga añadida a la cola — posición <b>{position}</b>.",
+                    parse_mode=enums.ParseMode.HTML,
+                )
+
+            success, file_path, error = await download_queue.run(
+                downloader_label, downloader, on_queued=queued_notice
+            )
 
             if not success:
                 await status_msg.edit_text(

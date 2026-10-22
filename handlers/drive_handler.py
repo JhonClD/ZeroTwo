@@ -14,6 +14,7 @@ from downloaders.drive_downloader import (
     format_preview_timestamp,
     take_video_screenshots,
 )
+from utils.download_queue import download_queue
 from utils.transfer_status import TransferProgress, format_bytes, format_file_info, render_transfer_status
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,18 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
             except Exception:
                 pass
 
-        success, file_path, error = await DriveDownloader.download(url_or_id, user_dir, tg_progress)
+        async def queued_notice(position):
+            await status_msg.edit_text(
+                f"⏳ <b>Google Drive</b> está ocupado.\n"
+                f"📋 Descarga añadida a la cola — posición <b>{position}</b>.",
+                parse_mode=enums.ParseMode.HTML,
+            )
+
+        success, file_path, error = await download_queue.run(
+            "Google Drive",
+            lambda: DriveDownloader.download(url_or_id, user_dir, tg_progress),
+            on_queued=queued_notice,
+        )
 
         if not success:
             await status_msg.edit_text(

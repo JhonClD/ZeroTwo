@@ -29,7 +29,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Área | Función |
 | --- | --- |
 | Telegram | Recibir enlaces y archivos mediante un bot. |
-| Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile; seleccionar archivos de carpetas públicas de Drive, Drime y GoFile. |
+| Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile; seleccionar archivos de carpetas públicas de Drive, Drime y GoFile. Las descargas de archivos se procesan en una cola FIFO para evitar ejecuciones simultáneas. |
 | Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar 10 capturas aleatorias distribuidas durante todo el video antes del video. |
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
