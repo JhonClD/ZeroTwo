@@ -110,8 +110,15 @@ class DrimeDownloader:
                     isinstance(direct_entry, dict)
                     and direct_entry.get("type") != "folder"
                     and direct_entry.get("hash")
-                    and direct_entry.get("name")
                 ):
+                    if not direct_entry.get("name"):
+                        direct_entry["name"] = (
+                            direct_entry.get("filename")
+                            or direct_entry.get("file_name")
+                            or direct_entry.get("path")
+                        )
+                    if not direct_entry.get("name"):
+                        raise DrimeDownloadError("Drime no entregó el nombre del archivo compartido.")
                     files.append(direct_entry)
                 try:
                     link_id = int(current_link["id"])
@@ -130,10 +137,13 @@ class DrimeDownloader:
             else:
                 page_data = []
             if isinstance(page_data, list):
-                files.extend(
-                    entry for entry in page_data
-                    if isinstance(entry, dict) and entry.get("hash") and entry.get("name")
-                )
+                for entry in page_data:
+                    if not isinstance(entry, dict) or not entry.get("hash"):
+                        continue
+                    if not entry.get("name"):
+                        entry["name"] = entry.get("filename") or entry.get("file_name") or entry.get("path")
+                    if entry.get("name"):
+                        files.append(entry)
             if page >= pages_to_read:
                 break
 
@@ -142,7 +152,13 @@ class DrimeDownloader:
         for entry in files:
             if not _HASH_RE.fullmatch(str(entry.get("hash", ""))):
                 raise DrimeDownloadError("Drime entregó un identificador de archivo no válido.")
-        return {"share_hash": share_hash, "share_id": link_id, "files": files}
+        share_name = current_link.get("name") or current_link.get("title") or current_link.get("original_name")
+        return {
+            "share_hash": share_hash,
+            "share_id": link_id,
+            "name": str(share_name or "Carpeta de Drime"),
+            "files": files,
+        }
 
     @staticmethod
     def download_file(

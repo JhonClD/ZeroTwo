@@ -561,7 +561,7 @@ def register(app, download_dir):
         user_dir = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
-        progress_template = is_mediafire or is_mega or is_gofile or is_drime or (is_drive and not is_drive_folder)
+        progress_template = is_mediafire or is_mega or (is_drive and not is_drive_folder)
         task_id = uuid.uuid4().hex[:4].upper()
         user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
         service_tag = "GoogleDrive" if service == "Google Drive" else service
