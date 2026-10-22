@@ -517,7 +517,8 @@ class DriveDownloader:
 
     @staticmethod
     async def download(
-        url_or_id: str, output_dir: Path, progress_callback=None, max_bytes: int | None = None
+        url_or_id: str, output_dir: Path, progress_callback=None, max_bytes: int | None = None,
+        status_renderer=None,
     ) -> tuple[bool, Path | None, str | None]:
         """
         Descarga un archivo de Google Drive.
@@ -532,11 +533,14 @@ class DriveDownloader:
             download_meter = TransferProgress()
             if progress_callback:
                 try:
-                    await progress_callback(
-                        "📥 <b>Descargando enlace público de Drive</b>\n"
+                    text = (
+                        status_renderer("Conectando", "archivo de Drive", 0, 0, download_meter)
+                        if status_renderer
+                        else "📥 <b>Descargando enlace público de Drive</b>\n"
                         "🔓 No se requiere API para archivos compartidos públicamente.\n"
                         "⏳ Iniciando…"
                     )
+                    await progress_callback(text)
                 except Exception:
                     pass
 
@@ -555,11 +559,18 @@ class DriveDownloader:
                     if pct - last_reported >= 10 and progress_callback:
                         logger.info(f"📥 Drive {pct}% — {downloaded}/{total} bytes")
                         try:
-                            await progress_callback(
-                                render_transfer_status(
+                            text = (
+                                status_renderer(
+                                    "Descargando", filename or "archivo de Drive", downloaded, total, download_meter,
+                                )
+                                if status_renderer
+                                else render_transfer_status(
                                     "Descargando", "Google Drive", filename or "archivo de Drive",
                                     downloaded, total, download_meter,
                                 )
+                            )
+                            await progress_callback(
+                                text
                             )
                         except Exception:
                             pass

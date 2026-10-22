@@ -41,7 +41,9 @@ class MEGADownloader:
         return bool(re.search(r'mega\.(nz|co\.nz)', url, re.IGNORECASE))
 
     @staticmethod
-    async def download(url: str, output_dir: Path, progress_callback=None) -> tuple[bool, Path | None, str | None]:
+    async def download(
+        url: str, output_dir: Path, progress_callback=None, status_renderer=None
+    ) -> tuple[bool, Path | None, str | None]:
         """
         Descarga un archivo de MEGA.
         progress_callback(text) → actualiza el mensaje de Telegram.
@@ -68,11 +70,16 @@ class MEGADownloader:
                 return False, None, "❌ Megatools está presente, pero su comprobación de versión falló."
 
             if progress_callback:
-                await progress_callback(
-                    render_transfer_status(
+                text = (
+                    status_renderer("Conectando", "archivo de MEGA", 0, 0, TransferProgress())
+                    if status_renderer
+                    else render_transfer_status(
                         "Descargando", "MEGA", "archivo de MEGA", 0, 0, TransferProgress(),
                         context="Conectando…",
                     )
+                )
+                await progress_callback(
+                    text
                 )
 
             cmd = [
@@ -114,11 +121,19 @@ class MEGADownloader:
 
                     # Telegram: cada 10 %
                     if pct_int - last_pct[0] >= 10 and progress_callback:
-                        await progress_callback(
-                            render_transfer_status(
+                        text = (
+                            status_renderer(
+                                "Descargando", Path(filename).name if filename else "archivo de MEGA",
+                                current_bytes, total_bytes, meter, speed_bytes,
+                            )
+                            if status_renderer
+                            else render_transfer_status(
                                 "Descargando", "MEGA", Path(filename).name if filename else "archivo de MEGA",
                                 current_bytes, total_bytes, meter, speed_override=speed_bytes,
                             )
+                        )
+                        await progress_callback(
+                            text
                         )
                         last_pct[0] = pct_int
                     continue

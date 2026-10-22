@@ -4,6 +4,8 @@ Comandos: /gdrive <url_o_id>  |  /gdrive_upload (luego enviar archivo)  |  /gdri
 """
 
 import logging
+import time
+import uuid
 from html import escape
 from pathlib import Path
 from pyrogram import filters, enums
@@ -53,9 +55,56 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
         user_dir  = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
+        task_id = uuid.uuid4().hex[:4].upper()
+        user_mention = getattr(message.from_user, "mention", None) or escape(str(user_id))
+
+        def drive_status_renderer(started_at, mode="Download", queue_position=1):
+            def render(stage, filename, current, total, meter, speed=None):
+                snapshot = meter.snapshot(current, total)
+                percent = snapshot["percent"] or 0
+                filled = min(13, int(13 * percent / 100))
+                bar = "■" * filled + "□" * (13 - filled)
+                speed_bytes = speed if speed is not None else snapshot["speed"]
+                speed_mib = (speed_bytes or 0) / (1024 * 1024)
+                elapsed = max(0, int(time.monotonic() - started_at))
+                current_mib = max(0, int(current or 0)) / (1024 * 1024)
+                total_mib = max(0, int(total or 0)) / (1024 * 1024)
+                average_mib = current_mib / elapsed if elapsed else 0
+                eta_seconds = max(0, total_mib - current_mib) / speed_mib if speed_mib and total_mib else 0
+                return (
+                    f"<b>{escape(Path(str(filename or 'Google Drive')).name)}</b>\n"
+                    f"┃ [{bar}] {percent:05.2f}%\n"
+                    f"<b>┠ Size:</b> {current_mib:.1f} / {total_mib:.1f} MiB\n"
+                    f"<b>┠ Status:</b> {escape(str(stage))}...\n"
+                    f"<b>┠ Queue:</b> posición {queue_position} de {max(queue_position, 1 + download_queue.pending)}\n"
+                    f"<b>┠ Speed:</b> {speed_mib:.2f} MiB/s <b>| Avg:</b> {average_mib:.2f} MiB/s\n"
+                    f"<b>┠ ETA:</b> {int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s <b>| Elapsed:</b> {elapsed // 60}m {elapsed % 60}s\n"
+                    f"<b>┠ User:</b> {user_mention}\n"
+                    f"<b>┠ Task ID:</b> #{task_id}\n"
+                    f"<b>┠ Mode:</b> #{mode} | #GoogleDrive\n"
+                    f"<b>┠ ID:</b> <code>{user_id}</code>\n"
+                    f"<b>┗ Cancelar:</b> /cancel {task_id}"
+                )
+
+            return render
+
+        download_status_renderer = drive_status_renderer(time.monotonic())
         status_msg = await message.reply_text(
-            "☁️ <b>Conectando con Google Drive…</b>",
-            parse_mode=enums.ParseMode.HTML
+            f"<b>Google Drive</b>\n"
+            "┃ [□□□□□□□□□□□□□] 00.00%\n"
+            "<b>┠ Size:</b> 0.0 / 0.0 MiB\n"
+            "<b>┠ Status:</b> En cola...\n"
+            "<b>┠ Queue:</b> posición 1 de 1\n"
+            "<b>┠ Speed:</b> 0.00 MiB/s <b>| Avg:</b> 0.00 MiB/s\n"
+            "<b>┠ ETA:</b> — | <b>Elapsed:</b> 0m 0s\n"
+            f"<b>┠ User:</b> {user_mention}\n"
+            f"<b>┠ Task ID:</b> #{task_id}\n"
+            "<b>┠ Mode:</b> #Download | #GoogleDrive\n"
+            f"<b>┠ ID:</b> <code>{user_id}</code>\n"
+            f"<b>┗ Cancelar:</b> /cancel {task_id}",
+            reply_to_message_id=message.id,
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True,
         )
 
         async def tg_progress(text):
@@ -66,14 +115,17 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
 
         async def queued_notice(position):
             await status_msg.edit_text(
-                f"⏳ <b>Google Drive</b> está ocupado.\n"
-                f"📋 Descarga añadida a la cola — posición <b>{position}</b>.",
+                drive_status_renderer(time.monotonic(), "Download", position)(
+                    "En cola", "Google Drive", 0, 0, TransferProgress()
+                ),
                 parse_mode=enums.ParseMode.HTML,
             )
 
         success, file_path, error = await download_queue.run(
             "Google Drive",
-            lambda: DriveDownloader.download(url_or_id, user_dir, tg_progress),
+            lambda: DriveDownloader.download(
+                url_or_id, user_dir, tg_progress, status_renderer=download_status_renderer
+            ),
             on_queued=queued_notice,
         )
 
@@ -87,18 +139,34 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
         file_ext  = file_path.suffix.lower()
         filename  = file_path.name
 
+        file_size_bytes = file_path.stat().st_size
         await status_msg.edit_text(
-            f"✅ <b>Descarga completada</b> · Google Drive\n{format_file_info(file_path, 'Google Drive')}\n📤 Enviando…",
-            parse_mode=enums.ParseMode.HTML
+            download_status_renderer(
+                "Descarga completada", filename, file_size_bytes, file_size_bytes, TransferProgress()
+            ),
+            parse_mode=enums.ParseMode.HTML,
         )
 
         # Screenshots si es video
         if file_ext in VIDEO_EXTS:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
             await _send_screenshots(message, file_path, user_dir, "drive")
+            status_msg = await message.reply_text(
+                download_status_renderer(
+                    "Preparando subida", filename, file_size_bytes, file_size_bytes, TransferProgress()
+                ),
+                reply_to_message_id=message.id,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
 
         # Enviar archivo
         last_pct = [-10]
         upload_meter = TransferProgress()
+        upload_status_renderer = drive_status_renderer(time.monotonic(), "Upload")
         async def upload_progress(current, total):
             if not total:
                 return
@@ -107,10 +175,7 @@ def register(app, user_states, download_dir, default_folder_id=None, sync_dir=No
                 logger.info(f"📤 Telegram upload {pct}% ({current}/{total} bytes)")
                 try:
                     await status_msg.edit_text(
-                        render_transfer_status(
-                            "Subiendo", "Telegram · Google Drive", filename,
-                            current, total, upload_meter,
-                        ),
+                        upload_status_renderer("Subiendo a Telegram", filename, current, total, upload_meter),
                         parse_mode=enums.ParseMode.HTML,
                     )
                 except Exception:

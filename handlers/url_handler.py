@@ -516,11 +516,14 @@ def register(app, download_dir):
         user_dir = download_dir / f"user_{user_id}"
         user_dir.mkdir(exist_ok=True)
 
-        if is_mediafire:
-            task_id = uuid.uuid4().hex[:4].upper()
-            user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+        progress_template = is_mediafire or is_mega or (is_drive and not is_drive_folder)
+        task_id = uuid.uuid4().hex[:4].upper()
+        user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+        service_tag = "GoogleDrive" if service == "Google Drive" else service
+
+        if progress_template:
             status_msg = await message.reply_text(
-                "<b>MediaFire</b>\n"
+                f"<b>{html.escape(service)}</b>\n"
                 "┃ [□□□□□□□□□□□□□] 00.00%\n"
                 "<b>┠ Size:</b> 0.0 / 0.0 MiB\n"
                 "<b>┠ Status:</b> En cola...\n"
@@ -529,7 +532,7 @@ def register(app, download_dir):
                 "<b>┠ ETA:</b> — | <b>Elapsed:</b> 0m 0s\n"
                 f"<b>┠ User:</b> {user_mention}\n"
                 f"<b>┠ Task ID:</b> #{task_id}\n"
-                "<b>┠ Mode:</b> #Download | #Mediafire\n"
+                f"<b>┠ Mode:</b> #Download | #{service_tag}\n"
                 f"<b>┠ ID:</b> <code>{user_id}</code>\n"
                 f"<b>┗ Cancelar:</b> /cancel {task_id}",
                 reply_to_message_id=message.id,
@@ -542,7 +545,7 @@ def register(app, download_dir):
                 parse_mode=enums.ParseMode.HTML
             )
 
-        def mediafire_status_renderer(started_at, mode="Download"):
+        def progress_status_renderer(started_at, mode="Download"):
             def render(stage, filename, current, total, meter, speed=None):
                 snapshot = meter.snapshot(current, total)
                 percent = snapshot["percent"] or 0
@@ -562,7 +565,7 @@ def register(app, download_dir):
                 eta_text = f"{int(eta_seconds) // 60}m {int(eta_seconds) % 60:02d}s"
                 queue_position = 1
                 queue_total = max(1, 1 + download_queue.pending)
-                safe_filename = html.escape(Path(str(filename or "MediaFire")).name)
+                safe_filename = html.escape(Path(str(filename or service)).name)
                 return (
                     f"<b>{safe_filename}</b>\n"
                     f"┃ [{bar}] {percent:05.2f}%\n"
@@ -573,14 +576,14 @@ def register(app, download_dir):
                     f"<b>┠ ETA:</b> {eta_text} <b>| Elapsed:</b> {elapsed_text}\n"
                     f"<b>┠ User:</b> {user_mention}\n"
                     f"<b>┠ Task ID:</b> #{task_id}\n"
-                    f"<b>┠ Mode:</b> #{mode} | #Mediafire\n"
+                    f"<b>┠ Mode:</b> #{mode} | #{service_tag}\n"
                     f"<b>┠ ID:</b> <code>{user_id}</code>\n"
                     f"<b>┗ Cancelar:</b> /cancel {task_id}"
                 )
 
             return render
 
-        mediafire_download_renderer = mediafire_status_renderer(time.monotonic()) if is_mediafire else None
+        download_status_renderer = progress_status_renderer(time.monotonic()) if progress_template else None
 
         # ── Callback de progreso → Telegram ──────────────────────────────────
         async def tg_progress(text: str):
@@ -732,22 +735,25 @@ def register(app, download_dir):
                 return
             if is_mega:
                 downloader_label = "MEGA"
-                downloader = lambda: MEGADownloader.download(url, user_dir, tg_progress)
+                downloader = lambda: MEGADownloader.download(
+                    url, user_dir, tg_progress, status_renderer=download_status_renderer
+                )
             elif is_mediafire:
                 downloader_label = "MediaFire"
                 downloader = lambda: MediaFireDownloader.download(
-                    url, user_dir, tg_progress, status_renderer=mediafire_download_renderer
+                    url, user_dir, tg_progress, status_renderer=download_status_renderer
                 )
             else:
                 downloader_label = "Google Drive"
-                downloader = lambda: DriveDownloader.download(url, user_dir, tg_progress)
+                downloader = lambda: DriveDownloader.download(
+                    url, user_dir, tg_progress, status_renderer=download_status_renderer
+                )
 
             async def queued_notice(position):
-                if is_mediafire:
-                    user_mention = getattr(message.from_user, "mention", None) or html.escape(username)
+                if progress_template:
                     queue_total = max(position, 1 + download_queue.pending)
                     await status_msg.edit_text(
-                        "<b>MediaFire</b>\n"
+                        f"<b>{html.escape(service)}</b>\n"
                         "┃ [□□□□□□□□□□□□□] 00.00%\n"
                         "<b>┠ Status:</b> En cola...\n"
                         f"<b>┠ Queue:</b> posición {position} de {queue_total}\n"
@@ -755,7 +761,7 @@ def register(app, download_dir):
                         "<b>┠ ETA:</b> — | <b>Elapsed:</b> 0m 0s\n"
                         f"<b>┠ User:</b> {user_mention}\n"
                         f"<b>┠ Task ID:</b> #{task_id}\n"
-                        "<b>┠ Mode:</b> #Download | #Mediafire\n"
+                        f"<b>┠ Mode:</b> #Download | #{service_tag}\n"
                         f"<b>┠ ID:</b> <code>{user_id}</code>\n"
                         f"<b>┗ Cancelar:</b> /cancel {task_id}",
                         parse_mode=enums.ParseMode.HTML,
@@ -786,9 +792,9 @@ def register(app, download_dir):
 
             logger.info(f"✅ Descarga completa: {filename} ({file_size:.1f} MB)")
 
-            if is_mediafire:
+            if progress_template:
                 await status_msg.edit_text(
-                    mediafire_download_renderer(
+                    download_status_renderer(
                         "Descarga completada", filename, file_size_bytes, file_size_bytes,
                         TransferProgress(),
                     ),
@@ -804,7 +810,7 @@ def register(app, download_dir):
 
             # Screenshots si es video
             if file_ext in VIDEO_EXTS:
-                if is_mediafire:
+                if progress_template:
                     # La plantilla inicial ya cumplió su función durante la
                     # descarga. La eliminamos para que el nuevo estado de
                     # subida aparezca debajo del álbum de previews.
@@ -814,9 +820,9 @@ def register(app, download_dir):
                         pass
                 await _send_screenshots(message, file_path, user_dir, service.lower().replace(' ', '_'))
 
-                if is_mediafire:
+                if progress_template:
                     status_msg = await message.reply_text(
-                        mediafire_download_renderer(
+                        download_status_renderer(
                             "Preparando subida", filename, file_size_bytes, file_size_bytes,
                             TransferProgress(),
                         ),
@@ -828,7 +834,7 @@ def register(app, download_dir):
             # ── Progreso de envío a Telegram ──────────────────────────────────
             last_pct = [-10]
             upload_meter = TransferProgress()
-            mediafire_upload_renderer = mediafire_status_renderer(time.monotonic(), "Upload") if is_mediafire else None
+            upload_status_renderer = progress_status_renderer(time.monotonic(), "Upload") if progress_template else None
 
             async def send_progress(current, total):
                 if not total:
@@ -838,10 +844,10 @@ def register(app, download_dir):
                     logger.info(f"📤 Enviando {pct}% ({current}/{total} bytes)")
                     try:
                         progress_text = (
-                            mediafire_upload_renderer(
+                            upload_status_renderer(
                                 "Subiendo a Telegram", filename, current, total, upload_meter,
                             )
-                            if is_mediafire
+                            if progress_template
                             else render_transfer_status(
                                 "Subiendo", "Telegram", filename, current, total, upload_meter,
                             )
