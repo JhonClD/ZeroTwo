@@ -153,7 +153,7 @@ def _scale_filter(scale: str | None) -> str | None:
 def _remux_command(input_name: str, media_name: str) -> list[str]:
     return [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning", "-progress", "pipe:1",
-        "-i", input_name, "-map", "0:v:0", "-map", "0:a?", "-c", "copy", media_name,
+        "-i", input_name, "-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "copy", media_name,
     ]
 
 
@@ -168,20 +168,21 @@ def _pass_command(
     passlog: str,
     video_filter: str | None = None,
 ) -> list[str]:
+    temp_name = f"{Path(output_name).stem}_temp.mp4"
     command = [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning", "-progress", "pipe:1",
-        "-i", media_name, "-map", "0:v:0", "-c:v", "libx264", "-b:v", bitrate,
-        "-preset", preset, "-tune", "animation", "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-i", media_name, "-map", "0:v:0", "-c:v", "libx264", "-vb", bitrate,
+        "-preset", preset, "-tune", "animation", "-profile:v", "high10", "-pix_fmt", "yuv420p",
         "-color_primaries", "1", "-color_range", "1", "-color_trc", "1", "-colorspace", "1",
         "-threads", str(threads), "-pass", str(pass_number), "-passlogfile", passlog,
     ]
     if video_filter:
         command += ["-vf", video_filter]
     if pass_number == 1:
-        command += ["-an", "-sn", "-f", "null", os.devnull]
+        command += ["-map", "0:a?", "-an", "-sn", "-f", "mp4", temp_name]
     else:
         command += [
-            "-map", "0:a?", "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100",
+            "-map", "0:a?", "-c:a", "aac", "-ab", "128k", "-ac", "2", "-ar", "44100",
             "-movflags", "+faststart", "-sn", output_name,
         ]
     return command
@@ -201,18 +202,19 @@ def _template_commands(
 ) -> tuple[list[list[str]], list[str]]:
     _validate_bitrate(bitrate)
     _validate_preset(preset)
-    vf_parts = [value for value in (_scale_filter(scale), subtitle_filter) if value]
-    video_filter = ",".join(vf_parts) if vf_parts else None
+    scale_filter = _scale_filter(scale)
+    vf_parts = [value for value in (scale_filter, subtitle_filter) if value]
+    final_filter = ",".join(vf_parts) if vf_parts else None
     stem = Path(input_name).stem
     media_name = f"{stem}_template.mp4"
-    passlog = f"{stem}_2pass"
+    passlog = f"{stem}_template.mp4_2pass.log"
     commands = list(extra_commands or [])
     commands += [
         _remux_command(input_name, media_name),
-        _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=1, passlog=passlog, video_filter=video_filter),
-        _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=2, passlog=passlog, video_filter=video_filter),
+        _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=1, passlog=passlog, video_filter=scale_filter),
+        _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=2, passlog=passlog, video_filter=final_filter),
     ]
-    temporary = [media_name, f"{passlog}-0.log", f"{passlog}-0.log.mbtree"] + list(extra_files or [])
+    temporary = [media_name, f"{Path(output_name).stem}_temp.mp4", f"{passlog}-0.log", f"{passlog}-0.log.mbtree"] + list(extra_files or [])
     return commands, temporary
 
 
