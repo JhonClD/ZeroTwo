@@ -747,8 +747,7 @@ def register(app, download_dir):
                     f"┃ 📂 Carpeta pública\n"
                     f"┠ Nombre: {folder_name}\n"
                     f"┠ Archivos: {count} | Total: {total_size_text}\n"
-                    f"┗ Mode: #Select | #GoFile{more}\n\n"
-                    "Elige cuál quieres descargar:",
+                    f"┗ Mode: #Select | #GoFile{more}",
                     reply_markup=InlineKeyboardMarkup(buttons),
                     parse_mode=enums.ParseMode.HTML,
                 )
