@@ -160,9 +160,6 @@ class MediaFireDownloader:
         Retorna (success, file_path, error_msg).
         """
         try:
-            if progress_callback:
-                await progress_callback("🔶 <b>MediaFire</b>\n🔍 Obteniendo enlace de descarga…")
-
             direct_url, filename = await MediaFireDownloader.get_direct_link(url)
             if not direct_url:
                 return False, None, "❌ No se pudo obtener el enlace de descarga de MediaFire."
