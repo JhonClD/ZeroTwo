@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -535,6 +536,31 @@ def register(app, download_dir):
                 parse_mode=enums.ParseMode.HTML
             )
 
+        def mediafire_status_renderer(started_at, mode="Download"):
+            def render(stage, filename, current, total, meter, speed=None):
+                snapshot = meter.snapshot(current, total)
+                percent = snapshot["percent"] or 0
+                filled = min(13, int(13 * percent / 100))
+                bar = "■" * filled + "□" * (13 - filled)
+                speed_bytes = speed if speed is not None else snapshot["speed"]
+                speed_mib = (speed_bytes or 0) / (1024 * 1024)
+                elapsed = max(0, int(time.monotonic() - started_at))
+                elapsed_text = f"{elapsed // 60}m {elapsed % 60}s"
+                safe_filename = html.escape(Path(str(filename or "MediaFire")).name)
+                return (
+                    f"<b>{safe_filename}</b>\n"
+                    f"┃ [{bar}] {percent:05.2f}%\n"
+                    f"<b>┠ Status:</b> {html.escape(str(stage))}\n"
+                    f"<b>┠ Speed:</b> {speed_mib:.2f} MiB/s <b>| Elapsed:</b> {elapsed_text}\n"
+                    f"<b>┠ Mode:</b> #{mode} | #Mediafire\n"
+                    f"<b>┠ User:</b> {user_mention} <b>| ID:</b> <code>{user_id}</code>\n"
+                    "<b>┖</b> cancel_en_espera"
+                )
+
+            return render
+
+        mediafire_download_renderer = mediafire_status_renderer(time.monotonic()) if is_mediafire else None
+
         # ── Callback de progreso → Telegram ──────────────────────────────────
         async def tg_progress(text: str):
             try:
@@ -688,7 +714,9 @@ def register(app, download_dir):
                 downloader = lambda: MEGADownloader.download(url, user_dir, tg_progress)
             elif is_mediafire:
                 downloader_label = "MediaFire"
-                downloader = lambda: MediaFireDownloader.download(url, user_dir, tg_progress)
+                downloader = lambda: MediaFireDownloader.download(
+                    url, user_dir, tg_progress, status_renderer=mediafire_download_renderer
+                )
             else:
                 downloader_label = "Google Drive"
                 downloader = lambda: DriveDownloader.download(url, user_dir, tg_progress)
@@ -733,20 +761,38 @@ def register(app, download_dir):
 
             logger.info(f"✅ Descarga completa: {filename} ({file_size:.1f} MB)")
 
-            await status_msg.edit_text(
-                f"✅ <b>Descarga completada</b> · {html.escape(service)}\n"
-                f"{format_file_info(file_path, service)}\n"
-                f"📤 Enviando a Telegram…",
-                parse_mode=enums.ParseMode.HTML
-            )
+            if is_mediafire:
+                await status_msg.edit_text(
+                    mediafire_download_renderer(
+                        "Descarga completada", filename, file_size_bytes, file_size_bytes,
+                        TransferProgress(),
+                    ),
+                    parse_mode=enums.ParseMode.HTML,
+                )
+            else:
+                await status_msg.edit_text(
+                    f"✅ <b>Descarga completada</b> · {html.escape(service)}\n"
+                    f"{format_file_info(file_path, service)}\n"
+                    f"📤 Enviando a Telegram…",
+                    parse_mode=enums.ParseMode.HTML
+                )
 
             # Screenshots si es video
             if file_ext in VIDEO_EXTS:
+                if is_mediafire:
+                    await status_msg.edit_text(
+                        mediafire_download_renderer(
+                            "Generando preview", filename, file_size_bytes, file_size_bytes,
+                            TransferProgress(),
+                        ),
+                        parse_mode=enums.ParseMode.HTML,
+                    )
                 await _send_screenshots(message, file_path, user_dir, service.lower().replace(' ', '_'))
 
             # ── Progreso de envío a Telegram ──────────────────────────────────
             last_pct = [-10]
             upload_meter = TransferProgress()
+            mediafire_upload_renderer = mediafire_status_renderer(time.monotonic(), "Upload") if is_mediafire else None
 
             async def send_progress(current, total):
                 if not total:
@@ -755,10 +801,17 @@ def register(app, download_dir):
                 if pct - last_pct[0] >= 10:
                     logger.info(f"📤 Enviando {pct}% ({current}/{total} bytes)")
                     try:
+                        progress_text = (
+                            mediafire_upload_renderer(
+                                "Subiendo a Telegram", filename, current, total, upload_meter,
+                            )
+                            if is_mediafire
+                            else render_transfer_status(
+                                "Subiendo", "Telegram", filename, current, total, upload_meter,
+                            )
+                        )
                         await status_msg.edit_text(
-                            render_transfer_status(
-                                "Subiendo", "Telegram", filename, current, total, upload_meter
-                            ),
+                            progress_text,
                             parse_mode=enums.ParseMode.HTML
                         )
                     except Exception:

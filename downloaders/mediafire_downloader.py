@@ -143,10 +143,17 @@ class MediaFireDownloader:
             return None, None
 
     @staticmethod
-    async def download(url: str, output_dir: Path, progress_callback=None) -> tuple[bool, Path | None, str | None]:
+    async def download(
+        url: str,
+        output_dir: Path,
+        progress_callback=None,
+        status_renderer=None,
+    ) -> tuple[bool, Path | None, str | None]:
         """
         Descarga un archivo de MediaFire.
         progress_callback(text) → actualiza el mensaje de Telegram.
+        status_renderer(stage, filename, current, total, meter, speed) → texto opcional
+        para personalizar la tarjeta de progreso.
         Retorna (success, file_path, error_msg).
         """
         try:
@@ -181,17 +188,23 @@ class MediaFireDownloader:
                     if now - last_unknown_update[0] < 2:
                         return
                     last_unknown_update[0] = now
-                await progress_callback(
-                    render_transfer_status(
+                text = (
+                    status_renderer("Descargando", filename, current, total, meter, speed)
+                    if status_renderer
+                    else render_transfer_status(
                         "Descargando", "MediaFire", filename, current, total, meter,
                         speed_override=speed,
                     )
                 )
+                await progress_callback(text)
 
             if progress_callback:
-                await progress_callback(
-                    render_transfer_status("Descargando", "MediaFire", filename, 0, 0, meter)
+                text = (
+                    status_renderer("Descargando", filename, 0, 0, meter)
+                    if status_renderer
+                    else render_transfer_status("Descargando", "MediaFire", filename, 0, 0, meter)
                 )
+                await progress_callback(text)
 
             async def _requests_fallback():
                 state = [0, 0]
@@ -214,9 +227,12 @@ class MediaFireDownloader:
                 size_mb = size / (1024 * 1024)
                 logger.info(f"✅ MediaFire descargado: {filename} ({size_mb:.1f} MB) con requests")
                 if progress_callback:
-                    await progress_callback(
-                        render_transfer_status("Descarga completada", "MediaFire", filename, size, size, meter)
+                    text = (
+                        status_renderer("Descarga completada", filename, size, size, meter)
+                        if status_renderer
+                        else render_transfer_status("Descarga completada", "MediaFire", filename, size, size, meter)
                     )
+                    await progress_callback(text)
                 return True, output_path, None
 
             # Priorizar clientes del sistema, pero no exigir herramientas que
