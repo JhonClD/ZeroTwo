@@ -19,7 +19,7 @@ from utils import VideoProcessor
 from utils.video_processing import (
     VideoProcessingError,
     build_compression_command,
-    build_hardsub_command,
+    build_hardsub_template_commands,
     build_target_size_commands,
     calculate_video_bitrate,
     compression_profile,
@@ -318,10 +318,10 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                         path.unlink(missing_ok=True)
                     caption = f"✅ Compresión completada · objetivo aproximado {state['target_size']:g} MB"
                 elif state["mode"] == "compress":
-                    crf, _, scale = compression_profile(state["profile"])
+                    crf, preset, scale = compression_profile(state["profile"])
                     output = state["job_dir"] / "compressed.mp4"
                     command = build_compression_command(
-                        state["source"].name, output.name, crf=crf, scale=scale, threads=threads,
+                        state["source"].name, output.name, crf=crf, preset=preset, scale=scale, threads=threads,
                     )
                     await state["status"].edit_text(
                         "⚙️ <b>Comprimiendo video…</b>",
@@ -333,21 +333,37 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     caption = f"✅ Video comprimido · perfil {state['profile']}"
                 else:
                     output = state["job_dir"] / "subtitled.mp4"
-                    command = build_hardsub_command(
+                    commands, temporary_files = build_hardsub_template_commands(
                         state["source"].name,
                         output.name,
                         subtitle_name=state.get("external_subtitle"),
                         embedded_ordinal=state.get("subtitle_ordinal"),
+                        bitrate=os.getenv("ZERO_TWO_HARDSUB_BITRATE", "4800k"),
+                        preset=os.getenv("ZERO_TWO_HARDSUB_PRESET", "medium"),
                         threads=threads,
                     )
                     await state["status"].edit_text(
-                        "📝 <b>Quemando subtítulos…</b>",
+                        "📝 <b>Encodeo de anime y quemado de subtítulos…</b>\n"
+                        "Extrayendo pistas y preparando la primera pasada…",
                         reply_markup=_cancel_markup(job_id), parse_mode=enums.ParseMode.HTML,
                     )
-                    async def subtitle_progress(current, total):
-                        await _progress(state, current, total, "Quemando subtítulos")
-                    await run_ffmpeg(command, cwd=state["job_dir"], duration=state["media"]["duration"], progress_callback=subtitle_progress, timeout_seconds=timeout)
-                    caption = "✅ Subtítulos quemados"
+                    total_steps = len(commands)
+                    for step, command in enumerate(commands, start=1):
+                        async def template_progress(current, total, step=step):
+                            await _progress(
+                                state, (step - 1) * total + current, total * total_steps,
+                                f"Encodeo · paso {step}/{total_steps}",
+                            )
+                        await run_ffmpeg(
+                            command,
+                            cwd=state["job_dir"],
+                            duration=state["media"]["duration"],
+                            progress_callback=template_progress,
+                            timeout_seconds=timeout,
+                        )
+                    for temporary_file in temporary_files:
+                        (state["job_dir"] / temporary_file).unlink(missing_ok=True)
+                    caption = "✅ Encodeo y subtítulos quemados"
 
                 if not output.exists() or output.stat().st_size == 0:
                     raise VideoProcessingError("FFmpeg no generó un archivo de salida.")

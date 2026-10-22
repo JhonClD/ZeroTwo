@@ -9,6 +9,7 @@ from pathlib import Path
 from utils.video_processing import (
     build_compression_command,
     build_hardsub_command,
+    build_hardsub_template_commands,
     build_target_size_commands,
     calculate_video_bitrate,
     compression_profile,
@@ -26,7 +27,7 @@ class CommandBuilderTests(unittest.TestCase):
         self.assertEqual(safe_video_extension("../something.exe", "application/octet-stream"), ".mp4")
 
     def test_profiles_and_compression_command(self):
-        self.assertEqual(compression_profile("balanced"), (23, "veryfast", None))
+        self.assertEqual(compression_profile("balanced"), (23, "medium", None))
         self.assertEqual(compression_profile("720")[2], "1280:720")
         command = build_compression_command("input.mp4", "compressed.mp4", crf=28, scale="854:480", threads=2)
         self.assertIn("-crf", command)
@@ -38,6 +39,22 @@ class CommandBuilderTests(unittest.TestCase):
             compression_profile("ultrafast-shell")
         with self.assertRaises(ValueError):
             build_compression_command("input.mp4", "out.mp4", crf=99)
+        with self.assertRaises(ValueError):
+            build_compression_command("input.mp4", "out.mp4", preset="ultrafast")
+
+    def test_drive_template_hardsub_pipeline_without_watermark(self):
+        commands, temporary = build_hardsub_template_commands(
+            "input.mkv", "output.mp4", embedded_ordinal=0,
+        )
+        self.assertEqual(len(commands), 4)
+        joined = " ".join(" ".join(command) for command in commands)
+        self.assertIn("-pass 1", joined)
+        self.assertIn("-pass 2", joined)
+        self.assertIn("-tune animation", joined)
+        self.assertIn("subtitles=filename='input_subs.ass'", joined)
+        self.assertNotIn("marca.png", joined)
+        self.assertNotIn("marca_bot.ass", joined)
+        self.assertIn("input_template.mp4", temporary)
 
     def test_target_size_and_two_pass(self):
         bitrate = calculate_video_bitrate(700, 3600)

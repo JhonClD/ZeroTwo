@@ -38,11 +38,11 @@ def safe_video_extension(filename: str, mime_type: str | None = None) -> str:
 def compression_profile(profile: str) -> tuple[int, str, str | None]:
     """Devuelve CRF, preset y resolución máxima de un preset cerrado."""
     profiles = {
-        "balanced": (23, "veryfast", None),
-        "smaller": (28, "veryfast", None),
-        "quality": (20, "veryfast", None),
-        "720": (23, "veryfast", "1280:720"),
-        "480": (25, "veryfast", "854:480"),
+        "balanced": (23, "medium", None),
+        "smaller": (28, "medium", None),
+        "quality": (20, "medium", None),
+        "720": (23, "medium", "1280:720"),
+        "480": (25, "medium", "854:480"),
     }
     try:
         return profiles[profile]
@@ -140,8 +140,11 @@ def _base_command(input_name: str, output_name: str, threads: int) -> list[str]:
         "-progress", "pipe:1", "-i", input_name,
         "-map_metadata", "0", "-map_chapters", "0", "-map", "0:v:0", "-map", "0:a?",
         "-threads", str(threads),
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-sn", output_name,
+        "-c:v", "libx264", "-preset", "medium", "-tune", "animation",
+        "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-color_primaries", "1", "-color_range", "1", "-color_trc", "1", "-colorspace", "1",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100",
+        "-movflags", "+faststart", "-sn", output_name,
     ]
 
 
@@ -150,12 +153,16 @@ def build_compression_command(
     output_name: str,
     *,
     crf: int = 23,
+    preset: str = "medium",
     scale: str | None = None,
     threads: int = 2,
 ) -> list[str]:
     if not 18 <= crf <= 32:
         raise ValueError("El CRF debe estar entre 18 y 32.")
+    if preset not in {"superfast", "veryfast", "fast", "medium"}:
+        raise ValueError("Preset de FFmpeg no permitido.")
     command = _base_command(input_name, output_name, threads)
+    command[command.index("-preset") + 1] = preset
     if scale:
         if scale not in {"1280:720", "854:480"}:
             raise ValueError("Resolución no permitida.")
@@ -170,14 +177,16 @@ def _base_target_command(input_name: str, output_name: str, *, bitrate: int, pas
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
         "-progress", "pipe:1", "-i", input_name,
         "-map_metadata", "0", "-map", "0:v:0", "-c:v", "libx264",
-        "-preset", "veryfast", "-b:v", str(bitrate), "-pix_fmt", "yuv420p",
+        "-preset", "medium", "-tune", "animation", "-profile:v", "high",
+        "-b:v", str(bitrate), "-pix_fmt", "yuv420p",
+        "-color_primaries", "1", "-color_range", "1", "-color_trc", "1", "-colorspace", "1",
         "-threads", str(threads), "-pass", str(pass_number), "-passlogfile", passlog,
     ]
     if pass_number == 1:
         command.extend(["-an", "-sn", "-f", "null", os.devnull])
     else:
         command.extend([
-            "-map", "0:a?", "-c:a", "aac", "-b:a", "128k",
+            "-map", "0:a?", "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100",
             "-movflags", "+faststart", "-sn", output_name,
         ])
     return command
@@ -225,10 +234,77 @@ def build_hardsub_command(
     return command + [
         "-map_metadata", "0", "-map_chapters", "0", "-map", "0:v:0", "-map", "0:a?",
         "-vf", filter_arg,
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-threads", str(threads),
+        "-c:v", "libx264", "-preset", "medium", "-tune", "animation", "-profile:v", "high",
+        "-crf", "23", "-pix_fmt", "yuv420p",
+        "-color_primaries", "1", "-color_range", "1", "-color_trc", "1", "-colorspace", "1",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100", "-threads", str(threads),
         "-movflags", "+faststart", "-sn", output_name,
     ]
+
+
+def build_hardsub_template_commands(
+    input_name: str,
+    output_name: str,
+    *,
+    subtitle_name: str | None = None,
+    embedded_ordinal: int | None = None,
+    bitrate: str = "4800k",
+    preset: str = "medium",
+    threads: int = 2,
+) -> tuple[list[list[str]], list[str]]:
+    """Construye la secuencia de encodeo de las plantillas del Drive.
+
+    La secuencia es: extraer subtítulo (si es interno), extraer video/audio sin
+    recodificar, primera pasada, segunda pasada con el subtítulo quemado. No
+    incluye ``marca.png``, ``marca_bot.ass`` ni ningún overlay.
+    """
+    if (subtitle_name is None) == (embedded_ordinal is None):
+        raise ValueError("Debe indicarse una pista interna o un archivo externo de subtítulos.")
+    if preset not in {"superfast", "veryfast", "fast", "medium"}:
+        raise ValueError("Preset de FFmpeg no permitido.")
+    if not re.fullmatch(r"\d+(?:k|M)?", bitrate):
+        raise ValueError("Bitrate de video no válido.")
+
+    stem = Path(input_name).stem
+    media_name = f"{stem}_template.mp4"
+    extracted_subtitle = subtitle_name or f"{stem}_subs.ass"
+    passlog = f"{stem}_2pass"
+    filter_arg = f"subtitles=filename='{_escape_filter_filename(extracted_subtitle)}'"
+    commands: list[list[str]] = []
+
+    if embedded_ordinal is not None:
+        if embedded_ordinal < 0:
+            raise ValueError("Pista interna no válida.")
+        commands.append([
+            "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
+            "-progress", "pipe:1", "-i", input_name,
+            "-map", f"0:s:{embedded_ordinal}", extracted_subtitle,
+        ])
+
+    commands.append([
+        "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
+        "-progress", "pipe:1", "-i", input_name,
+        "-map", "0:v:0", "-map", "0:a?", "-c", "copy", media_name,
+    ])
+    commands.append([
+        "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
+        "-progress", "pipe:1", "-i", media_name,
+        "-map", "0:v:0", "-an", "-c:v", "libx264", "-b:v", bitrate,
+        "-preset", preset, "-tune", "animation", "-profile:v", "high",
+        "-pix_fmt", "yuv420p", "-threads", str(threads),
+        "-pass", "1", "-passlogfile", passlog, "-f", "null", os.devnull,
+    ])
+    commands.append([
+        "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
+        "-progress", "pipe:1", "-i", media_name,
+        "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-b:v", bitrate,
+        "-preset", preset, "-tune", "animation", "-profile:v", "high",
+        "-pix_fmt", "yuv420p", "-threads", str(threads),
+        "-color_primaries", "1", "-color_range", "1", "-color_trc", "1", "-colorspace", "1",
+        "-vf", filter_arg, "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100",
+        "-pass", "2", "-passlogfile", passlog, "-movflags", "+faststart", "-sn", output_name,
+    ])
+    return commands, [media_name, extracted_subtitle, f"{passlog}-0.log", f"{passlog}-0.log.mbtree"]
 
 
 async def run_ffmpeg(
