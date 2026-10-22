@@ -35,12 +35,17 @@ logger = logging.getLogger(__name__)
 def _progress_bar(percent: float, width: int = 12) -> str:
     percent = max(0, min(100, percent))
     full = round(width * percent / 100)
-    return "█" * full + "░" * (width - full)
+    return "■" * full + "□" * (width - full)
 
 
 def _duration_text(seconds: float) -> str:
     seconds = max(0, int(seconds))
     return f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+
+
+def _elapsed_text(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    return f"{seconds // 60}m {seconds % 60}s"
 
 
 def register(app, user_states: dict, work_dir: Path) -> None:
@@ -189,6 +194,8 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             "task": None,
             "prepare_task": asyncio.current_task(),
             "external_task": None,
+            "display_name": getattr(media, "file_name", None) or f"video{extension}",
+            "started_at": time.monotonic(),
         }
         flows[job_id] = state
         admitting_users.discard(owner_id)
@@ -281,9 +288,19 @@ def register(app, user_states: dict, work_dir: Path) -> None:
 
     async def _progress(state: dict, current: float, total: float, stage: str) -> None:
         percent = current * 100 / total if total > 0 else 0
+        elapsed = time.monotonic() - state["started_at"]
+        user = state["request"].from_user
+        user_mention = f"@{user.username}" if user and user.username else (user.first_name if user else "Desconocido")
+        user_id = user.id if user else state["owner_id"]
         text = (
-            f"⚙️ <b>{stage}</b>\n{_progress_bar(percent)} {percent:.0f}%\n"
-            f"⏱ {_duration_text(current)} / {_duration_text(total)}"
+            f"<b>{html.escape(state['display_name'])}</b>\n"
+            f"┃ [{_progress_bar(percent, 13)}] {percent:05.2f}%\n"
+            f"<b>┠ Status:</b> {html.escape(stage)}\n"
+            f"<b>┠ Speed:</b> 0.00 MiB/s <b>| Elapsed:</b> {_elapsed_text(elapsed)}\n"
+            f"<b>┠ Info:</b> Encode | -c:v libx264 -vb plantilla\n"
+            f"<b>┠ Mode:</b> #Leech | #Pyrogram\n"
+            f"<b>┠ User:</b> {html.escape(user_mention)} <b>| ID:</b> <code>{user_id}</code>\n"
+            f"<b>┖</b> cancel_en_espera"
         )
         try:
             await state["status"].edit_text(text, reply_markup=_cancel_markup(state["job_id"]), parse_mode=enums.ParseMode.HTML)
