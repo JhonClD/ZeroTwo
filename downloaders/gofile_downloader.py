@@ -302,7 +302,7 @@ class GoFileDownloader:
             and port in (None, 443)
             and not parsed.username
             and not parsed.password
-            and bool(re.fullmatch(r"store-[a-z0-9-]+\.gofile\.io", host))
+            and bool(re.fullmatch(r"store[a-z0-9-]*\.gofile\.io", host))
         )
 
     @classmethod
