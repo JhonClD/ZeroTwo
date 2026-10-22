@@ -50,13 +50,19 @@ async def _send_file(message, path: Path, status: Message, source_label: str, to
             return
         last[0] = pct
         try:
-            await status.edit_text(
-                render_transfer_status(
+            if torrent_context:
+                text = _torrent_status(
+                    path.name, current, total, "Enviando a Telegram",
+                    torrent_context["queue_position"], None,
+                    (torrent_context["seeds"], torrent_context["peers"]),
+                    torrent_context["started_at"], torrent_context["task_id"], meter,
+                )
+            else:
+                text = render_transfer_status(
                     "Subiendo", "Telegram · Torrent", path.name,
                     current, total, meter, source_label,
-                ),
-                parse_mode=enums.ParseMode.HTML,
-            )
+                )
+            await status.edit_text(text, parse_mode=enums.ParseMode.HTML)
         except Exception:
             pass
 
