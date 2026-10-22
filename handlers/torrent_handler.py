@@ -3,7 +3,9 @@
 import asyncio
 import logging
 import shutil
+import time
 import uuid
+from html import escape
 from pathlib import Path
 
 from pyrogram import enums, filters
@@ -11,7 +13,8 @@ from pyrogram.types import Message
 
 from downloaders.torrent_downloader import TorrentDownloader
 from utils import VideoProcessor
-from utils.transfer_status import TransferProgress, format_file_info, render_transfer_status
+from utils.download_queue import download_queue
+from utils.transfer_status import TransferProgress, format_bytes, format_file_info, format_duration, render_transfer_status
 
 logger = logging.getLogger(__name__)
 _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
@@ -58,33 +61,29 @@ async def _send_file(message, path: Path, status: Message, source_label: str):
 
 async def _run_torrent(message: Message, source, download_dir: Path, source_label="torrent"):
     job_dir = download_dir / f"torrent_{message.from_user.id}_{uuid.uuid4().hex[:8]}"
-    status = await message.reply_text("⏳ Preparando descarga torrent…")
+    task_id = uuid.uuid4().hex[:4].upper()
+    started_at = time.monotonic()
+    torrent_name = Path(str(source)).stem if not str(source).startswith("magnet:") else "Torrent"
+    status = await message.reply_text(
+        _torrent_status(torrent_name, 0, 0, "En cola", 1, 0, None, started_at, task_id)
+    )
     try:
         meter = TransferProgress()
-        last_pct = [-10]
+        last_update = [0.0]
         loop = asyncio.get_running_loop()
-        await status.edit_text(
-            render_transfer_status(
-                "Descargando", "Torrent / aria2", "Preparando metadatos",
-                0, 0, meter, source_label,
-            ),
-            parse_mode=enums.ParseMode.HTML,
-        )
+        queue_position = 1 + download_queue.pending
 
-        def torrent_progress(current, total, speed=None):
-            if total:
-                pct = min(100, int(current * 100 / total))
-                if pct - last_pct[0] < 10 and pct != 100:
-                    return
-                last_pct[0] = pct
+        def torrent_progress(current, total, speed=None, seeds=None, peer_count=None):
+            now = time.monotonic()
+            if now - last_update[0] < 1.5 and total and current < total:
+                return
+            last_update[0] = now
 
             async def update_status():
                 try:
                     await status.edit_text(
-                        render_transfer_status(
-                            "Descargando", "Torrent / aria2", "Descarga torrent",
-                            current, total, meter, source_label, speed_override=speed,
-                        ),
+                        _torrent_status(torrent_name, current, total, "Descargando", queue_position,
+                                        speed, (seeds, peer_count), started_at, task_id, meter),
                         parse_mode=enums.ParseMode.HTML,
                     )
                 except Exception:
@@ -96,8 +95,20 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
             except Exception:
                 pass
 
-        ok, files, error = await asyncio.to_thread(
-            TorrentDownloader.download, source, job_dir, progress_callback=torrent_progress,
+        async def queued_notice(position):
+            await status.edit_text(
+                _torrent_status(torrent_name, 0, 0, "En cola", position, None, None,
+                                started_at, task_id),
+                parse_mode=enums.ParseMode.HTML,
+            )
+
+        async def download_job():
+            return await asyncio.to_thread(
+                TorrentDownloader.download, source, job_dir, progress_callback=torrent_progress,
+            )
+
+        ok, files, error = await download_queue.run(
+            "Torrent", download_job, on_queued=queued_notice,
         )
         if not ok:
             await status.edit_text(f"❌ <b>Error torrent</b>\n<code>{error[:900]}</code>", parse_mode=enums.ParseMode.HTML)
@@ -110,6 +121,35 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
         await status.edit_text(f"❌ Error enviando torrent\n<code>{str(error)[:700]}</code>", parse_mode=enums.ParseMode.HTML)
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def _torrent_status(name, current, total, stage, queue_position, speed, peers,
+                    started_at, task_id, meter=None):
+    """Renderiza el formato compacto de progreso solicitado para torrents."""
+    meter = meter or TransferProgress()
+    snapshot = meter.snapshot(current, total)
+    percent = snapshot["percent"] or 0
+    filled = min(13, int(13 * percent / 100))
+    bar = "■" * filled + "□" * (13 - filled)
+    speed_bytes = speed if speed is not None else snapshot["speed"]
+    speed_text = f"↓ {(speed_bytes or 0) / (1024 ** 2):.2f} MiB/s"
+    eta = ((total - current) / speed_bytes if speed_bytes and total else None)
+    elapsed = max(0, int(time.monotonic() - started_at))
+    seeds = peers[0] if isinstance(peers, tuple) else "—"
+    peer_count = peers[1] if isinstance(peers, tuple) else "—"
+    size_text = f"{format_bytes(current)} / {format_bytes(total)}"
+    return (
+        f"<b>{escape(Path(str(name or 'Torrent')).name)}</b>\n"
+        f"┃ [{bar}] {percent:05.2f}%\n"
+        f"┠ Size: {size_text}\n"
+        f"┠ Status: {escape(stage)}...\n"
+        f"┠ Queue: posición {queue_position}\n"
+        f"┠ Speed: {speed_text} | ETA: {format_duration(eta)}\n"
+        f"┠ Seeds: {seeds} | Peers: {peer_count}\n"
+        f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
+        f"┠ Mode: #Download | #Torrent\n"
+        f"┗ Cancelar: /cancel {task_id}"
+    )
 
 
 def register(app, download_dir: Path):

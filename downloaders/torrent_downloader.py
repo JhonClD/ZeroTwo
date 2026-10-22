@@ -17,10 +17,12 @@ _PROGRESS_RE = re.compile(
     re.IGNORECASE,
 )
 _SPEED_RE = re.compile(r"DL:(?P<speed>[\d.]+\s*[KMGT]?i?B)", re.IGNORECASE)
+_SEEDS_RE = re.compile(r"(?:SEED|SD):(?P<seeds>\d+)", re.IGNORECASE)
+_PEERS_RE = re.compile(r"(?:PEER|CN):(?P<peers>\d+)", re.IGNORECASE)
 
 
-def parse_aria2_progress(line: str) -> tuple[int, int, int | None] | None:
-    """Extrae bytes actuales, totales y velocidad de una línea de aria2c."""
+def parse_aria2_details(line: str) -> tuple[int, int, int | None, int | None, int | None] | None:
+    """Extrae progreso, velocidad, seeds y peers de una línea de aria2c."""
     match = _PROGRESS_RE.search(line or "")
     if not match:
         return None
@@ -30,7 +32,17 @@ def parse_aria2_progress(line: str) -> tuple[int, int, int | None] | None:
     speed = parse_bytes(speed_match.group("speed")) if speed_match else None
     if current is None or total is None or total <= 0:
         return None
-    return current, total, speed
+    seeds_match = _SEEDS_RE.search(line)
+    peers_match = _PEERS_RE.search(line)
+    seeds = int(seeds_match.group("seeds")) if seeds_match else None
+    peers = int(peers_match.group("peers")) if peers_match else None
+    return current, total, speed, seeds, peers
+
+
+def parse_aria2_progress(line: str) -> tuple[int, int, int | None] | None:
+    """Extrae bytes actuales, totales y velocidad conservando la API anterior."""
+    details = parse_aria2_details(line)
+    return details[:3] if details else None
 
 
 class TorrentDownloader:
@@ -110,7 +122,7 @@ class TorrentDownloader:
                 output_tail.append(line)
                 if len(output_tail) > 30:
                     output_tail.pop(0)
-                progress = parse_aria2_progress(line)
+                progress = parse_aria2_details(line)
                 if progress and progress_callback:
                     try:
                         progress_callback(*progress)
