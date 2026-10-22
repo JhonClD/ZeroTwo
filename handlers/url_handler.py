@@ -736,12 +736,20 @@ def register(app, download_dir):
                     callback_data = f"gf:{user_id}:{selector_id}"
                     buttons.append([InlineKeyboardButton(label, callback_data=callback_data)])
                 if not buttons:
-                    raise GoFileDownloadError("No pude crear el selector para los archivos de esta carpeta.")
+                    raise GoFileDownloadError("No pude crear botones para los archivos de esta carpeta.")
+                total_size = sum(max(0, int(item.get("size") or 0)) for item in entries)
+                total_size_text = f"{total_size / (1024 ** 3):.2f} GiB" if total_size else "tamaño desconocido"
+                folder_name = html.escape(str(share.get("name") or "Carpeta de GoFile"))
                 count = "100 o más" if share.get("truncated") else str(len(entries))
                 more = "\nSolo se muestran los primeros 30 archivos." if len(entries) > 30 or share.get("truncated") else ""
                 await status_msg.edit_text(
-                    f"📂 <b>Carpeta pública de GoFile</b>\nEncontré {count} archivos. "
-                    f"Elige cuál quieres descargar:{more}",
+                    f"<b>GoFile</b>\n"
+                    f"┃ 📂 Carpeta pública\n"
+                    f"┠ Nombre: {folder_name}\n"
+                    f"┠ Archivos: {count} | Total: {total_size_text}\n"
+                    f"┠ Expira en: 60s / Expired\n"
+                    f"┗ Mode: #Select | #GoFile{more}\n\n"
+                    "Elige cuál quieres descargar:",
                     reply_markup=InlineKeyboardMarkup(buttons),
                     parse_mode=enums.ParseMode.HTML,
                 )
