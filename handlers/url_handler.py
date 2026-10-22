@@ -783,9 +783,15 @@ def register(app, download_dir):
                 if not buttons:
                     raise DrimeDownloadError("No pude crear botones de selección para los archivos de esta carpeta.")
                 more = "\nSolo se muestran los primeros 30 archivos." if len(entries) > 30 else ""
+                total_size = sum(max(0, int(item.get("file_size") or 0)) for item in entries)
+                total_size_text = f"{total_size / (1024 ** 3):.2f} GiB" if total_size else "tamaño desconocido"
+                folder_name = html.escape(str(share.get("name") or "Carpeta de Drime"))
                 await status_msg.edit_text(
-                    f"📂 <b>Carpeta pública de Drime</b>\nEncontré {len(entries)} archivos. "
-                    f"Elige cuál quieres descargar:{more}",
+                    f"<b>Drime</b>\n"
+                    f"┃ 📂 Carpeta pública\n"
+                    f"┠ Nombre: {folder_name}\n"
+                    f"┠ Archivos: {len(entries)} | Total: {total_size_text}\n"
+                    f"┗ Mode: #Select | #Drime{more}",
                     reply_markup=InlineKeyboardMarkup(buttons),
                     parse_mode=enums.ParseMode.HTML,
                 )
