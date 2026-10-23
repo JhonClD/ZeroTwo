@@ -117,7 +117,7 @@ def register(app, download_dir: Path) -> None:
     password_waiters: dict[tuple[int, int], asyncio.Future] = {}
     user_jobs: dict[tuple[int, int], str] = {}
 
-    @app.on_message(filters.text, group=-2)
+    @app.on_message(filters.text, group=-4)
     async def receive_password(client, message: Message):
         if not message.from_user or message.from_user.is_bot or not message.text or message.text.startswith("/"):
             return
@@ -125,6 +125,21 @@ def register(app, download_dir: Path) -> None:
         future = password_waiters.get(key)
         if future is None or future.done():
             return
+        job_id = user_jobs.get(key)
+        state = jobs.get(job_id) if job_id else None
+        status = state.get("status") if state else None
+        if status is not None:
+            try:
+                await status.edit_text(
+                    f"<b>{html.escape(state.get('display_name', 'archivo.rar'))}</b>\n"
+                    "┃ 🔓 Contraseña recibida\n"
+                    "┠ Status: Verificando contraseña...\n"
+                    f"┠ Mode: #Extract | #RAR\n"
+                    f"┗ Cancelar: /cancel {job_id}",
+                    parse_mode=enums.ParseMode.HTML,
+                )
+            except Exception:
+                pass
         future.set_result(message.text)
         try:
             await message.delete()
@@ -212,6 +227,7 @@ def register(app, download_dir: Path) -> None:
             "cancelled": False,
             "job_dir": job_dir,
             "status": None,
+            "display_name": display_name,
         }
         jobs[job_id] = state
         user_jobs[owner] = job_id

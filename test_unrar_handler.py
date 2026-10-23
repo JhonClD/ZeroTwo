@@ -24,7 +24,7 @@ class UnrarHandlerTests(unittest.TestCase):
         app = FakeApp()
         register(app, Path("downloads"))
         group = next(group for group, handler in app.handlers if handler.__name__ == "receive_password")
-        self.assertLess(group, -1)
+        self.assertLess(group, -3)
 
     def test_rejects_absolute_and_traversal_member_paths(self):
         for name in ("../outside.txt", "folder/../../outside.txt", "/tmp/out.txt", "C:\\Windows\\file.txt", "\\\\server\\share\\file.txt"):
