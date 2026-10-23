@@ -59,9 +59,9 @@ def _status(
     lines = [
         f"<b>{html.escape(Path(filename).name)}</b>\n",
         f"┃ [{bar}] {percent:05.2f}%\n",
-        f"┠ Size: {_mib(current)} / {_mib(total)}\n",
+        f"┠ Size: {_mib(current)} / {_mib(total) if total else 'desconocido'}\n",
         f"┠ Status: {html.escape(stage)}\n",
-        f"┠ Files: {files_current} / {files_total}\n",
+        f"┠ Files: {files_current} / {files_total if files_total else '?'}\n",
     ]
     if stage == "✓ Descomprimido":
         lines.append(f"┠ Time: {_elapsed(elapsed)}\n")
@@ -336,8 +336,6 @@ def register(app, download_dir: Path) -> None:
                 if archive_info is None:
                     archive_info = await asyncio.to_thread(inspect_archive, archive_path, password)
 
-            if archive_info.files == 0:
-                raise ValueError("El archivo RAR no contiene archivos para extraer.")
             required_space = archive_info.total_bytes + archive_path.stat().st_size
             if shutil.disk_usage(job_dir).free < required_space:
                 raise OSError("No space left on device")
@@ -390,10 +388,12 @@ def register(app, download_dir: Path) -> None:
                     except ValueError:
                         raise ValueError("El archivo intentó salir de la carpeta de extracción.")
                     output_files.append(path)
+            if not output_files:
+                raise RuntimeError("archivo corrupto o contraseña incorrecta; no se extrajo ningún archivo")
             total_extracted = sum(path.stat().st_size for path in output_files)
             await status.edit_text(
-                _status(display_name, total_extracted, archive_info.total_bytes,
-                        len(output_files), archive_info.files, started_at, meter, job_id, "✓ Descomprimido"),
+                _status(display_name, total_extracted, total_extracted,
+                        len(output_files), len(output_files), started_at, meter, job_id, "✓ Descomprimido"),
                 parse_mode=enums.ParseMode.HTML,
             )
             for path in sorted(output_files):

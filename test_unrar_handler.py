@@ -55,6 +55,14 @@ class UnrarHandlerTests(unittest.TestCase):
         self.assertIn("Status: ✓ Descomprimido", card)
         self.assertIn("Time:", card)
 
+    def test_progress_supports_unknown_rar_metadata(self):
+        card = _status(
+            "encrypted.rar", 5 * 1024 * 1024, 0, 1, 0,
+            time.monotonic(), TransferProgress(), "ABCD",
+        )
+        self.assertIn("5.0 MiB / desconocido", card)
+        self.assertIn("Files: 1 / ?", card)
+
     def test_extractor_command_handles_password_without_shell(self):
         command = _extract_command("7z", Path("a.rar"), Path("out"), "p a$$")
         self.assertIn("-pp a$$", command)
