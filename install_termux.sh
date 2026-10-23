@@ -18,7 +18,7 @@ pkg update -y && pkg upgrade -y
 
 echo ""
 echo -e "${BLUE}📦 Paso 2/5: Instalando dependencias del sistema...${NC}"
-pkg install -y git python ffmpeg megatools wget curl aria2
+pkg install -y git python ffmpeg megatools wget curl aria2 p7zip
 
 echo ""
 echo -e "${BLUE}📦 Paso 3/5: Instalando dependencias Python...${NC}"
@@ -47,7 +47,7 @@ echo ""
 echo -e "${BLUE}📦 Paso 5/5: Verificando instalación...${NC}"
 
 # Verificar herramientas
-tools=("python" "ffmpeg" "megadl" "wget" "curl" "aria2c")
+tools=("python" "ffmpeg" "megadl" "wget" "curl" "aria2c" "7z")
 all_ok=true
 
 for tool in "${tools[@]}"; do

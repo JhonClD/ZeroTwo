@@ -34,6 +34,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Audio | Extraer audio de videos de YouTube. |
+| Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Se requiere `unrar`, `7zz` o `7z` en el sistema. |
 | Descargas sociales | YouTube con búsqueda y descarga mediante Loader.to (audio MP3 con carátula cuando está disponible y video hasta 720p); muestra título, canal e imagen antes de descargar. También enlaces públicos de Facebook, X/Twitter y TikTok. |
 | Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
@@ -57,6 +58,7 @@ Antes de instalar el proyecto, necesitas lo siguiente:
 | Python | `python` desde Termux | Python 3.9 o superior |
 | Git | `git` desde Termux | Git |
 | FFmpeg/FFprobe | `ffmpeg` | FFmpeg |
+| Extracción RAR | `unrar`, `7zz` o `7z` | `unrar`, `7zz` o `7z` |
 | Descargas MEGA | `megatools` | Megatools; en Windows se recomienda WSL |
 | Torrents/descargas rápidas | `aria2` | aria2 opcional; en Linux, `/torrent` prepara un ejecutable portable si falta |
 | YouTube | Loader.to; FFmpeg/FFprobe | Loader.to; FFmpeg/FFprobe |
@@ -89,7 +91,7 @@ Si ya tienes el repositorio descargado y solo necesitas repetir la instalación,
 
 ```bash
 pkg update -y
-pkg install -y python ffmpeg megatools wget curl aria2
+pkg install -y python ffmpeg megatools wget curl aria2 p7zip
 python -m pip install -r requirements.txt
 python main.py
 ```
@@ -100,7 +102,7 @@ Si prefieres controlar cada paso, utiliza este procedimiento:
 
 ```bash
 pkg update -y && pkg upgrade -y
-pkg install -y git python ffmpeg megatools wget curl aria2
+pkg install -y git python ffmpeg megatools wget curl aria2 p7zip
 
 git clone https://github.com/JhonClD/ZeroTwo.git
 cd ZeroTwo
@@ -142,7 +144,7 @@ Instala las herramientas del sistema, clona el proyecto y crea un entorno virtua
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip ffmpeg megatools wget curl aria2
+sudo apt install -y git python3 python3-venv python3-pip ffmpeg megatools wget curl aria2 p7zip-full
 
 git clone https://github.com/JhonClD/ZeroTwo.git
 cd ZeroTwo
@@ -353,6 +355,8 @@ Las credenciales opcionales deben configurarse mediante variables de entorno; no
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
 | `/torrent` | Responde a un archivo `.torrent` para descargarlo; pega los enlaces `magnet:` directamente. En Linux puede preparar aria2c portable si no está instalado. |
+| `/unrar <nombre.rar>` | Extrae un RAR guardado en la carpeta de descargas. También puedes responder a un documento `.rar` con `/unrar`. Los archivos protegidos solicitan la contraseña por 60 segundos; la respuesta se elimina cuando es posible. Cada archivo extraído se devuelve al chat. |
+| `/cancel <ID>` | Cancela una extracción RAR activa usando el ID mostrado en su estado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
@@ -386,6 +390,10 @@ command -v megadl
 ```
 
 En Termux, reinstálalos con `pkg install -y ffmpeg megatools`. En Ubuntu/Debian, utiliza `sudo apt install -y ffmpeg megatools`. En Windows, revisa el `PATH` o utiliza WSL2.
+
+### `/unrar` indica que no hay extractor RAR
+
+Instala `unrar`, `7zz` o `7z` y verifica que el comando quede disponible en el `PATH`. En Termux usa `pkg install p7zip`; en Debian/Ubuntu, instala `p7zip-full` (o `unrar` si está disponible en los repositorios habilitados).
 
 ### `pip` rechaza la instalación
 

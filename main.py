@@ -163,6 +163,7 @@ from handlers import (
     crunchyroll_notify_handler,
     video_processing_handler,
     video_cover_handler,
+    unrar_handler,
 )
 
 # Registrar handlers
@@ -195,6 +196,7 @@ torrent_handler.register(app, DOWNLOAD_DIR)
 crunchyroll_notify_handler.register(app, WORK_DIR)
 video_processing_handler.register(app, user_states, DOWNLOAD_DIR)
 video_cover_handler.register(app, WORK_DIR, BOT_TOKEN)
+unrar_handler.register(app, DOWNLOAD_DIR)
 
 
 if __name__ == "__main__":
@@ -218,6 +220,9 @@ if __name__ == "__main__":
             continue
         version = "disponible" if available else "no disponible"
         print_status(name, version, ok=available)
+
+    rar_extractor = next((name for name in ("unrar", "7zz", "7z") if shutil.which(name)), None)
+    print_status("Extractor RAR", rar_extractor or "instala unrar o 7z", ok=rar_extractor is not None)
 
     print_section("ESTADO")
     logger.info("  ✓ Bot iniciado correctamente")

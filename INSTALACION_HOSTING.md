@@ -18,7 +18,7 @@ En un VPS Ubuntu/Debian con acceso SSH y permisos `sudo`:
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip ffmpeg megatools wget curl aria2
+sudo apt install -y git python3 python3-venv python3-pip ffmpeg megatools wget curl aria2 p7zip-full
 ```
 
 Comprueba que las herramientas estén instaladas:
@@ -31,6 +31,7 @@ megadl --version
 wget --version
 curl --version
 aria2c --version
+7z
 ```
 
 En un panel como BotKeep, selecciona el runtime Python requerido. El fallback portable de Megatools está preparado para Linux `x86_64` y `aarch64`; en el primer enlace MEGA descarga el ejecutable oficial, verifica sus hashes y lo guarda bajo `.runtime/` dentro del proyecto. Requiere conexión HTTPS saliente a `xff.cz`, permiso de escritura en el directorio del proyecto y unos 10 MB de espacio adicional.
@@ -122,6 +123,7 @@ Vuelve a iniciar el proceso desde el panel.
 - **MEGA no puede preparar Megatools portable:** el primer uso requiere acceso HTTPS a `xff.cz`, escritura dentro de `.runtime/` y permiso para ejecutar archivos del proyecto. Si BotKeep bloquea cualquiera de estos pasos, solicita al proveedor que incluya Megatools/`megadl` en el runtime. En un VPS Ubuntu/Debian, instala el paquete del sistema con `sudo apt update && sudo apt install -y megatools`.
 - **MediaFire no descarga:** tras actualizar, el bot puede recurrir a `requests` si faltan `aria2c`, `wget` y `curl`. Si el registro indica HTTP 403, el hosting está recibiendo una denegación de MediaFire/CDN; confirma si funciona desde otra red y consulta al proveedor por la conexión saliente.
 - **`/torrent` no puede preparar aria2 portable:** comprueba que el hosting permita HTTPS saliente a GitHub y ejecución de `.runtime/aria2-*/aria2c`. Si el mensaje menciona tráfico o conexión torrent, el proveedor podría bloquear DHT, UDP o conexiones salientes de pares; el binario portable no puede eludir esas restricciones. Pide al proveedor habilitar BitTorrent o `aria2c` en el runtime.
+- **`/unrar` indica que falta un extractor:** instala `p7zip-full` o `unrar` en el sistema y comprueba que `7z` o `unrar` esté en el `PATH`. En paneles sin permisos root, pide al proveedor que incluya uno de esos ejecutables.
 - **`ffmpeg` o `ffprobe` no aparecen:** el entorno no incluye las herramientas de procesamiento requeridas. Pide habilitarlas al proveedor o usa un VPS/imagen que las permita instalar.
 - **El quemado de subtítulos informa que no existe `subtitles`:** la build del panel carece de libass. Pide al proveedor una build de FFmpeg compilada con `--enable-libass`/el filtro `subtitles`; la compresión normal no depende de libass.
 - **El bot se apaga al cerrar la consola:** usa el gestor de procesos del panel, no una sesión interactiva temporal.

@@ -80,6 +80,12 @@ def register(app):
 ├ Responde a un archivo .torrent con /torrent
 └ Requiere aria2 instalado en Termux
 
+<b>📦 Archivos RAR</b>
+├ Envía un .rar como documento y responde con /unrar
+├ O usa /unrar nombre_archivo.rar si ya está en tus descargas
+├ Los archivos protegidos solicitan la contraseña en el chat
+└ /cancel ID — Cancelar una extracción activa
+
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━

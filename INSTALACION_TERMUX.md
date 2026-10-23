@@ -42,6 +42,7 @@ El script instalará automáticamente:
 - ✅ Wget
 - ✅ Curl
 - ✅ Aria2c
+- ✅ p7zip (comando `7z`, requerido para `/unrar`)
 - ✅ Pyrogram
 - ✅ TgCrypto
 
@@ -68,7 +69,8 @@ pkg install -y \
   megatools \
   wget \
   curl \
-  aria2
+  aria2 \
+  p7zip
 ```
 
 **Tiempo estimado:** 5-10 minutos
@@ -81,6 +83,7 @@ megadl --version      # Debe mostrar megatools
 wget --version        # Debe mostrar Wget
 curl --version        # Debe mostrar Curl
 aria2c --version      # Debe mostrar aria2c
+7z                    # Debe mostrar la ayuda de 7-Zip
 ```
 
 ### Paso 4: Actualizar pip

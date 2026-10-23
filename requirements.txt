@@ -10,11 +10,14 @@ tgcrypto
 # alternativas portables; aria2c se descarga bajo demanda para /torrent en Linux.
 # En Termux se recomienda instalar aria2 con pkg; en VPS puede instalarse con apt.
 # 
+# Lectura de metadatos y archivos protegidos RAR; la extracción requiere unrar o 7z.
+rarfile
+
 # En Termux (Android):
-#   pkg install python ffmpeg megatools wget curl aria2
+#   pkg install python ffmpeg megatools wget curl aria2 p7zip
 #
 # En Ubuntu/Debian:
-#   apt install python3 python3-pip ffmpeg megatools wget curl aria2
+#   apt install python3 python3-pip ffmpeg megatools wget curl aria2 p7zip-full
 #
 # En macOS:
 #   brew install python ffmpeg megatools wget curl aria2

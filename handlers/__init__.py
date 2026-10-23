@@ -25,6 +25,7 @@ from . import (
     crunchyroll_notify_handler,
     video_processing_handler,
     video_cover_handler,
+    unrar_handler,
 )
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     'crunchyroll_notify_handler',
     'video_processing_handler',
     'video_cover_handler',
+    'unrar_handler',
 ]
