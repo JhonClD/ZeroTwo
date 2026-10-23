@@ -29,6 +29,7 @@ from pyrogram import enums, filters
 from pyrogram.types import Message
 
 from downloaders import MEGADownloader, MediaFireDownloader
+from utils.jkanime_http import JKAnimeFetchError, get_jkanime_text
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +81,9 @@ def _save(path, data):
 
 
 async def _get(url, **kwargs):
-    kwargs.setdefault('headers', HEADERS)
-    kwargs.setdefault('timeout', 20)
-    return await asyncio.to_thread(requests.get, url, **kwargs)
+    headers = kwargs.pop('headers', HEADERS)
+    timeout = kwargs.pop('timeout', 20)
+    return await get_jkanime_text(url, headers=headers, timeout=timeout)
 
 
 def _safe_file(value):
@@ -144,9 +145,8 @@ def _is_owner(message):
 
 async def fetch_latest_episodes() -> list[dict]:
     """Obtiene las tarjetas de episodios en el orden publicado por JKAnime."""
-    response = await _get(JKANIME_URL + '/')
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
+    page_html = await _get(JKANIME_URL + '/')
+    soup = BeautifulSoup(page_html, 'html.parser')
     domain = urlparse(JKANIME_URL).netloc
     result, ids = [], set()
 
@@ -201,9 +201,8 @@ async def fetch_latest_episodes() -> list[dict]:
 
 async def scrape_servers(ep_url: str) -> list[dict]:
     """Extrae downloads/embeds.SUB del estado JavaScript de JKAnime."""
-    response = await _get(ep_url, headers={**HEADERS, 'Referer': JKANIME_URL})
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
+    page_html = await _get(ep_url, headers={**HEADERS, 'Referer': JKANIME_URL})
+    soup = BeautifulSoup(page_html, 'html.parser')
     servers, seen = [], set()
 
     def add(name, url, direct):
@@ -456,7 +455,11 @@ def register(app, work_dir: Path):
     @app.on_message(filters.command('jkcheck'))
     async def check_cmd(client, message: Message):
         await message.reply_text('🔍 Comprobando JKAnime...')
-        count = await check_new(message.chat.id, client)
+        try:
+            count = await check_new(message.chat.id, client)
+        except JKAnimeFetchError as error:
+            await message.reply_text(f'❌ {error}')
+            return
         await message.reply_text(f'✅ {count} episodio(s) nuevo(s).' if count else '✅ Sin episodios nuevos.')
 
     @app.on_message(filters.command('jkexample'))
@@ -465,7 +468,15 @@ def register(app, work_dir: Path):
             count = min(max(int(message.text.split(maxsplit=1)[1]), 1), 10)
         except (IndexError, ValueError):
             count = 1
-        episodes = await fetch_latest_episodes()
+        try:
+            episodes = await fetch_latest_episodes()
+        except JKAnimeFetchError as error:
+            await message.reply_text(f'❌ {error}')
+            return
+        except Exception as error:
+            logger.exception('[jkanime-notify] Error ejecutando /jkexample')
+            await message.reply_text(f'❌ No se pudo consultar JKAnime: {error}')
+            return
         for episode in episodes[:count]:
             _queue.append({'chat_id': message.chat.id, 'ep': episode})
         _create_task(_process_queue())

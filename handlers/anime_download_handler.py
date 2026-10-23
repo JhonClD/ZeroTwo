@@ -17,6 +17,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from downloaders import MEGADownloader, MediaFireDownloader
 from utils.anime_sources import SOURCES, order_servers, scrape_servers, source_for_url
+from utils.jkanime_http import get_jkanime_text
 
 logger = logging.getLogger(__name__)
 _SESSIONS: dict[str, dict] = {}
@@ -45,9 +46,13 @@ def _owner_id(message: Message) -> int:
 async def _search_anime(query: str, site_key: str = "veranimes") -> list[dict]:
     """Busca títulos en el sitio seleccionado."""
     url = _SITE_SEARCH.get(site_key, _SITE_SEARCH["veranimes"]).format(query=quote_plus(query))
-    response = await asyncio.to_thread(requests.get, url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+    if site_key == "jkanime":
+        page_html = await get_jkanime_text(url)
+    else:
+        response = await asyncio.to_thread(requests.get, url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        response.raise_for_status()
+        page_html = response.text
+    soup = BeautifulSoup(page_html, "html.parser")
     results, seen = [], set()
     query_terms = [term for term in re.findall(r"[a-z0-9]+", query.lower()) if len(term) > 2]
     anchors = soup.select("a[href]") if site_key in {"jkanime", "evangelion"} else soup.select("a[href*='/anime/'], a[href*='/media/'], a[href*='/ver/'], a[href*='/post/']")
@@ -74,9 +79,14 @@ async def _search_anime(query: str, site_key: str = "veranimes") -> list[dict]:
 
 
 async def _episodes_for_anime(anime_url: str) -> list[dict]:
-    response = await asyncio.to_thread(requests.get, anime_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    response.raise_for_status()
-    text, soup = response.text, BeautifulSoup(response.text, "html.parser")
+    source = source_for_url(anime_url)
+    if source and source["name"] == "JKAnime":
+        text = await get_jkanime_text(anime_url)
+    else:
+        response = await asyncio.to_thread(requests.get, anime_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        response.raise_for_status()
+        text = response.text
+    soup = BeautifulSoup(text, "html.parser")
     slug = (soup.select_one("[data-sl]") or {}).get("data-sl") if soup.select_one("[data-sl]") else anime_url.rstrip("/").split("/")[-1]
     episodes: list[str] = []
     match = re.search(r"var\s+eps\s*=\s*(\[[^;]+\])", text, re.I)
@@ -91,7 +101,6 @@ async def _episodes_for_anime(anime_url: str) -> list[dict]:
             number = re.search(r"-(\d+)(?:/)?$", href)
             if number and number.group(1) not in episodes:
                 episodes.append(number.group(1))
-    source = source_for_url(anime_url)
     if not episodes:
         return [{"number": "1", "url": anime_url}] if source else []
     if source and source["name"] == "JKAnime":
