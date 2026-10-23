@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 import os
 import shutil
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -26,6 +28,54 @@ VIDEO_EXTENSIONS = frozenset({
 
 def _is_video_file(path: str | Path) -> bool:
     return Path(path).suffix.casefold() in VIDEO_EXTENSIONS
+
+
+def _probe_video(path: str | Path) -> tuple[float, int, int] | None:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width,height,duration:format=duration",
+                "-of", "json", str(path),
+            ],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+        metadata = json.loads(result.stdout)
+        stream = next(iter(metadata.get("streams", [])), {})
+        duration_value = metadata.get("format", {}).get("duration") or stream.get("duration")
+        duration = float(duration_value) if duration_value is not None else 0.0
+        width = int(stream.get("width") or 0)
+        height = int(stream.get("height") or 0)
+        if duration <= 0 or width <= 0 or height <= 0:
+            return None
+        return duration, width, height
+    except (OSError, ValueError, TypeError, StopIteration, subprocess.SubprocessError):
+        return None
+
+
+def _create_video_thumbnail(path: str | Path, thumb_path: str | Path, duration: float) -> str | None:
+    thumb_path = Path(thumb_path)
+    seek = max(0.0, min(duration * 0.1, 30.0))
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{seek:.3f}",
+                "-i", str(path), "-frames:v", "1", "-vf",
+                "scale=320:320:force_original_aspect_ratio=decrease",
+                "-q:v", "9", "-y", str(thumb_path),
+            ],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            check=False, timeout=45,
+        )
+        if result.returncode == 0 and thumb_path.is_file() and thumb_path.stat().st_size <= 200_000:
+            return str(thumb_path)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        thumb_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return None
 
 
 def _mib(value: int | float) -> str:
@@ -410,10 +460,28 @@ def register(app, download_dir: Path) -> None:
                         len(output_files), len(output_files), started_at, meter, job_id, "✓ Descomprimido"),
                 parse_mode=enums.ParseMode.HTML,
             )
-            for path in sorted(output_files):
+            for index, path in enumerate(sorted(output_files)):
                 try:
                     if _is_video_file(path):
-                        await message.reply_video(video=str(path), supports_streaming=True)
+                        video_metadata = await asyncio.to_thread(_probe_video, path)
+                        video_args = {"video": str(path), "supports_streaming": True}
+                        duration = 0.0
+                        if video_metadata:
+                            duration, width, height = video_metadata
+                            video_args.update(
+                                duration=max(1, int(round(duration))),
+                                width=width,
+                                height=height,
+                            )
+                        thumb = await asyncio.to_thread(
+                            _create_video_thumbnail,
+                            path,
+                            job_dir / f"video_preview_{index}.jpg",
+                            duration,
+                        )
+                        if thumb:
+                            video_args["thumb"] = thumb
+                        await message.reply_video(**video_args)
                     else:
                         await message.reply_document(document=str(path))
                 except Exception:

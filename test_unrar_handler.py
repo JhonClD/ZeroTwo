@@ -3,8 +3,12 @@
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from handlers.unrar_handler import _error_reason, _extract_command, _is_video_file, _status, register
+from handlers.unrar_handler import (
+    _create_video_thumbnail, _error_reason, _extract_command, _is_video_file,
+    _probe_video, _status, register,
+)
 from utils.rar_archives import safe_member_path
 from utils.transfer_status import TransferProgress
 
@@ -76,6 +80,28 @@ class UnrarHandlerTests(unittest.TestCase):
         self.assertTrue(_is_video_file("episode.MKV"))
         self.assertTrue(_is_video_file("episode.mp4"))
         self.assertFalse(_is_video_file("subtitles.srt"))
+
+    def test_video_probe_reads_duration_and_dimensions(self):
+        result = Mock(stdout='{"streams":[{"width":1920,"height":1080}],"format":{"duration":"123.5"}}')
+        with patch("handlers.unrar_handler.subprocess.run", return_value=result) as run:
+            self.assertEqual(_probe_video(Path("episode.mkv")), (123.5, 1920, 1080))
+        self.assertIn("ffprobe", run.call_args.args[0][0])
+
+    def test_thumbnail_is_attached_only_when_small_jpeg_is_created(self):
+        with self.subTest("successful thumbnail"):
+            from tempfile import TemporaryDirectory
+            with TemporaryDirectory() as directory:
+                thumbnail = Path(directory) / "preview.jpg"
+
+                def fake_ffmpeg(command, **kwargs):
+                    Path(command[-1]).write_bytes(b"jpeg")
+                    return Mock(returncode=0)
+
+                with patch("handlers.unrar_handler.subprocess.run", side_effect=fake_ffmpeg):
+                    self.assertEqual(
+                        _create_video_thumbnail("episode.mp4", thumbnail, 90.0),
+                        str(thumbnail),
+                    )
 
     def test_error_reason_distinguishes_password_space_and_corruption(self):
         self.assertEqual(_error_reason(2, "Wrong password"), "contraseña incorrecta")

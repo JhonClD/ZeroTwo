@@ -34,7 +34,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Audio | Extraer audio de videos de YouTube. |
-| Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Los archivos de video se envían como videos reproducibles cuando Telegram acepta el formato; los demás se envían como documentos. Se requiere `unrar`, `unar`, `7zz` o `7z` en el sistema. |
+| Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Los videos se envían como videos reproducibles con duración y miniatura cuando FFmpeg está disponible; los demás archivos se envían como documentos. Se requiere `unrar`, `unar`, `7zz` o `7z` en el sistema. |
 | Descargas sociales | YouTube con búsqueda y descarga mediante Loader.to (audio MP3 con carátula cuando está disponible y video hasta 720p); muestra título, canal e imagen antes de descargar. También enlaces públicos de Facebook, X/Twitter y TikTok. |
 | Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
