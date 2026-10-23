@@ -55,6 +55,10 @@ SEEN_FILE = None
 STATE_FILE = None
 
 
+class JKAnimeAccessError(RuntimeError):
+    """JKAnime rechazó la solicitud del host que ejecuta el bot."""
+
+
 def _create_task(coro):
     loop = _loop
     if loop is None:
@@ -82,7 +86,14 @@ def _save(path, data):
 async def _get(url, **kwargs):
     kwargs.setdefault('headers', HEADERS)
     kwargs.setdefault('timeout', 20)
-    return await asyncio.to_thread(requests.get, url, **kwargs)
+    response = await asyncio.to_thread(requests.get, url, **kwargs)
+    hostname = (urlparse(url).hostname or '').lower()
+    if response.status_code == 403 and (hostname == 'jkanime.net' or hostname.endswith('.jkanime.net')):
+        raise JKAnimeAccessError(
+            'JKAnime respondió HTTP 403: Cloudflare/el sitio está bloqueando las solicitudes desde el hosting del bot. '
+            'No es un problema de /jkexample y reintentar no lo soluciona; el acceso debe permitirse desde el proveedor del sitio.'
+        )
+    return response
 
 
 def _safe_file(value):
@@ -456,7 +467,11 @@ def register(app, work_dir: Path):
     @app.on_message(filters.command('jkcheck'))
     async def check_cmd(client, message: Message):
         await message.reply_text('🔍 Comprobando JKAnime...')
-        count = await check_new(message.chat.id, client)
+        try:
+            count = await check_new(message.chat.id, client)
+        except JKAnimeAccessError as error:
+            await message.reply_text(f'❌ {error}')
+            return
         await message.reply_text(f'✅ {count} episodio(s) nuevo(s).' if count else '✅ Sin episodios nuevos.')
 
     @app.on_message(filters.command('jkexample'))
@@ -465,7 +480,15 @@ def register(app, work_dir: Path):
             count = min(max(int(message.text.split(maxsplit=1)[1]), 1), 10)
         except (IndexError, ValueError):
             count = 1
-        episodes = await fetch_latest_episodes()
+        try:
+            episodes = await fetch_latest_episodes()
+        except JKAnimeAccessError as error:
+            await message.reply_text(f'❌ {error}')
+            return
+        except Exception as error:
+            logger.exception('[jkanime-notify] Error ejecutando /jkexample')
+            await message.reply_text(f'❌ No se pudo consultar JKAnime: {error}')
+            return
         for episode in episodes[:count]:
             _queue.append({'chat_id': message.chat.id, 'ep': episode})
         _create_task(_process_queue())
