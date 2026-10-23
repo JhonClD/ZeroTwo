@@ -4,12 +4,28 @@ import time
 import unittest
 from pathlib import Path
 
-from handlers.unrar_handler import _error_reason, _extract_command, _status
+from handlers.unrar_handler import _error_reason, _extract_command, _status, register
 from utils.rar_archives import safe_member_path
 from utils.transfer_status import TransferProgress
 
 
 class UnrarHandlerTests(unittest.TestCase):
+    def test_password_listener_runs_before_global_text_handlers(self):
+        class FakeApp:
+            def __init__(self):
+                self.handlers = []
+
+            def on_message(self, message_filter, group=0):
+                def add_handler(handler):
+                    self.handlers.append((group, handler))
+                    return handler
+                return add_handler
+
+        app = FakeApp()
+        register(app, Path("downloads"))
+        group = next(group for group, handler in app.handlers if handler.__name__ == "receive_password")
+        self.assertLess(group, -1)
+
     def test_rejects_absolute_and_traversal_member_paths(self):
         for name in ("../outside.txt", "folder/../../outside.txt", "/tmp/out.txt", "C:\\Windows\\file.txt", "\\\\server\\share\\file.txt"):
             with self.subTest(name=name):

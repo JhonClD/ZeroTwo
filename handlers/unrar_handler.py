@@ -117,7 +117,7 @@ def register(app, download_dir: Path) -> None:
     password_waiters: dict[tuple[int, int], asyncio.Future] = {}
     user_jobs: dict[tuple[int, int], str] = {}
 
-    @app.on_message(filters.text, group=-1)
+    @app.on_message(filters.text, group=-2)
     async def receive_password(client, message: Message):
         if not message.from_user or message.from_user.is_bot or not message.text or message.text.startswith("/"):
             return
