@@ -334,8 +334,38 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 - `/get <url>` descarga recursos HTTP/HTTPS de hasta 200 MB.
 - `/ssweb <url>` genera una captura de página.
 
-## Comandos disponibles
+## AniDL opcional
 
+ZeroTwo puede invocar una instalación local del CLI oficial [AniDL](https://github.com/anidl/multi-downloader-nx) para consultar el catálogo de Crunchyroll y descargar un episodio. El bot no instala AniDL ni solicita o guarda credenciales de la cuenta. Configura y autentica AniDL manualmente desde su terminal oficial, fuera de Telegram y fuera del repositorio. AniDL documenta que la descarga puede estar prohibida por las leyes locales o por los términos del servicio; úsalo únicamente con contenido que tengas autorización para descargar y revisa las condiciones aplicables.
+
+Los comandos solo funcionan en chats privados y para los IDs configurados en `ZERO_TWO_ANIDL_ALLOWED_IDS`. Configura una lista explícita separada por comas; si la variable falta o está vacía, el acceso queda cerrado:
+
+```bash
+export ZERO_TWO_ANIDL_ALLOWED_IDS="123456789"
+```
+
+Flujo de uso:
+
+```text
+/anidlsearch nombre de la serie
+/anidlseries ID_DE_SERIE
+/anidl ID_DE_TEMPORADA 3
+/anidlcancel
+```
+
+AniDL debe estar instalado por separado desde sus [releases oficiales](https://github.com/anidl/multi-downloader-nx/releases), en una versión compatible con el sistema. FFmpeg y MKVToolNix/mkvmerge son dependencias externas de AniDL; revisa también los requisitos del release para la plataforma donde ejecutas ZeroTwo. La autenticación de AniDL se configura localmente con el procedimiento oficial, por ejemplo `AniDL --service crunchy --auth`; no pases usuario, contraseña ni tokens mediante comandos del bot.
+
+Opciones de configuración:
+
+- `ZERO_TWO_ANIDL_BIN`: ejecutable AniDL; por defecto busca `aniDL` y después `AniDL` en `PATH`.
+- `ZERO_TWO_ANIDL_HOME`: carpeta de trabajo/configuración de AniDL; por defecto se usa la carpeta del ejecutable. En releases precompilados, mantenla junto al binario porque AniDL resuelve allí su configuración.
+- `ZERO_TWO_ANIDL_OUTPUT_DIR`: carpeta de contenido configurada en `config/dir-path.yml`; por defecto es `videos` dentro de la carpeta de trabajo. Si cambias esa ruta en AniDL, configura aquí la misma ruta para que ZeroTwo encuentre el resultado.
+- `ZERO_TWO_ANIDL_TIMEOUT`: tiempo máximo de descarga en segundos (60–7200; por defecto 3600).
+- `ZERO_TWO_ANIDL_MAX_MB`: tamaño máximo que ZeroTwo enviará a Telegram (50–2048 MB; por defecto 1800).
+
+El adaptador ejecuta AniDL sin shell, limita cada solicitud a un episodio, serializa descargas y elimina la carpeta temporal del trabajo al terminar. No incorpora binarios, credenciales ni claves de descifrado. Consulta la [documentación CLI de AniDL](https://github.com/anidl/multi-downloader-nx/blob/master/docs/DOCUMENTATION.md) para conocer las opciones oficiales y sus advertencias.
+
+## Comandos disponibles
 | Comando o acción | Descripción |
 | --- | --- |
 | `/start` | Inicia el bot. |
@@ -357,6 +387,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/cancel <ID>` | Cancela una extracción RAR activa usando el ID mostrado en su estado. |
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
+| `/anidlsearch`, `/anidlseries`, `/anidl`, `/anidlcancel` | Buscar y descargar un episodio con AniDL; solo usuarios allowlist en chat privado. |
 | `/anime <nombre>` | Busca información de un anime. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 

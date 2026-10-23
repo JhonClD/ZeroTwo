@@ -22,6 +22,10 @@ def register(app):
 <b>5️⃣ Descargas del ZIP migradas</b>
 ├ /animedl &lt;url&gt; — Episodio de anime
 ├ /animedl &lt;nombre&gt; &lt;episodio&gt; — Buscar episodio
+├ /anidlsearch &lt;nombre&gt; — Buscar serie con AniDL
+├ /anidlseries &lt;id&gt; — Consultar temporadas
+├ /anidl &lt;id_temporada&gt; &lt;episodio&gt; — Descargar un episodio autorizado
+├ /anidlcancel — Detener tu descarga AniDL activa
 ├ /hdl &lt;nombre&gt; &lt;episodio&gt; — HentaiLA
 ├ /get &lt;url&gt; — Descargar recurso
 └ /ssweb &lt;url&gt; — Captura de página
