@@ -4,7 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
-from handlers.unrar_handler import _error_reason, _extract_command, _status, register
+from handlers.unrar_handler import _error_reason, _extract_command, _is_video_file, _status, register
 from utils.rar_archives import safe_member_path
 from utils.transfer_status import TransferProgress
 
@@ -71,6 +71,11 @@ class UnrarHandlerTests(unittest.TestCase):
     def test_unar_command_passes_password_and_output_directory(self):
         command = _extract_command("unar", Path("a.rar"), Path("out"), "archive-pass")
         self.assertEqual(command, ["unar", "-f", "-o", "out", "-p", "archive-pass", "a.rar"])
+
+    def test_video_file_detection_is_case_insensitive(self):
+        self.assertTrue(_is_video_file("episode.MKV"))
+        self.assertTrue(_is_video_file("episode.mp4"))
+        self.assertFalse(_is_video_file("subtitles.srt"))
 
     def test_error_reason_distinguishes_password_space_and_corruption(self):
         self.assertEqual(_error_reason(2, "Wrong password"), "contraseña incorrecta")

@@ -18,6 +18,14 @@ from utils.rar_archives import inspect_archive
 from utils.transfer_status import TransferProgress
 
 logger = logging.getLogger(__name__)
+VIDEO_EXTENSIONS = frozenset({
+    ".3gp", ".avi", ".flv", ".m2ts", ".m4v", ".mkv", ".mov", ".mp4",
+    ".mpeg", ".mpg", ".mts", ".ogv", ".ts", ".webm", ".wmv",
+})
+
+
+def _is_video_file(path: str | Path) -> bool:
+    return Path(path).suffix.casefold() in VIDEO_EXTENSIONS
 
 
 def _mib(value: int | float) -> str:
@@ -404,12 +412,24 @@ def register(app, download_dir: Path) -> None:
             )
             for path in sorted(output_files):
                 try:
-                    await message.reply_document(document=str(path))
+                    if _is_video_file(path):
+                        await message.reply_video(video=str(path), supports_streaming=True)
+                    else:
+                        await message.reply_document(document=str(path))
                 except Exception:
-                    await message.reply_text(
-                        f"El archivo <code>{html.escape(path.name)}</code> se extrajo, pero Telegram no pudo enviarlo.",
-                        parse_mode=enums.ParseMode.HTML,
-                    )
+                    try:
+                        if _is_video_file(path):
+                            await message.reply_document(
+                                document=str(path),
+                                caption="Telegram no aceptó el archivo como video; se envía como documento.",
+                            )
+                        else:
+                            raise RuntimeError("No se pudo enviar el archivo como documento.")
+                    except Exception:
+                        await message.reply_text(
+                            f"El archivo <code>{html.escape(path.name)}</code> se extrajo, pero Telegram no pudo enviarlo.",
+                            parse_mode=enums.ParseMode.HTML,
+                        )
 
         except asyncio.CancelledError:
             try:
