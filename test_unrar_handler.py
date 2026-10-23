@@ -68,6 +68,10 @@ class UnrarHandlerTests(unittest.TestCase):
         self.assertIn("-pp a$$", command)
         self.assertIn("a.rar", command)
 
+    def test_unar_command_passes_password_and_output_directory(self):
+        command = _extract_command("unar", Path("a.rar"), Path("out"), "archive-pass")
+        self.assertEqual(command, ["unar", "-f", "-o", "out", "-p", "archive-pass", "a.rar"])
+
     def test_error_reason_distinguishes_password_space_and_corruption(self):
         self.assertEqual(_error_reason(2, "Wrong password"), "contraseña incorrecta")
         self.assertEqual(_error_reason(2, "No space left on device"), "sin espacio disponible")

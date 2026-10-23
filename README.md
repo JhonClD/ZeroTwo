@@ -34,7 +34,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Audio | Extraer audio de videos de YouTube. |
-| Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Se requiere `unrar`, `7zz` o `7z` en el sistema. |
+| Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Se requiere `unrar`, `unar`, `7zz` o `7z` en el sistema. |
 | Descargas sociales | YouTube con búsqueda y descarga mediante Loader.to (audio MP3 con carátula cuando está disponible y video hasta 720p); muestra título, canal e imagen antes de descargar. También enlaces públicos de Facebook, X/Twitter y TikTok. |
 | Notificaciones | Avisos de episodios recientes de Crunchyroll con miniaturas y enlaces oficiales cuando están disponibles; no descarga videos. |
 | Anime | Buscar información, imágenes, sinopsis y datos de AniList. |
@@ -58,7 +58,7 @@ Antes de instalar el proyecto, necesitas lo siguiente:
 | Python | `python` desde Termux | Python 3.9 o superior |
 | Git | `git` desde Termux | Git |
 | FFmpeg/FFprobe | `ffmpeg` | FFmpeg |
-| Extracción RAR | `unrar`, `7zz` o `7z` | `unrar`, `7zz` o `7z` |
+| Extracción RAR | `unrar`, `unar`, `7zz` o `7z` | `unrar`, `unar`, `7zz` o `7z` |
 | Descargas MEGA | `megatools` | Megatools; en Windows se recomienda WSL |
 | Torrents/descargas rápidas | `aria2` | aria2 opcional; en Linux, `/torrent` prepara un ejecutable portable si falta |
 | YouTube | Loader.to; FFmpeg/FFprobe | Loader.to; FFmpeg/FFprobe |
@@ -393,7 +393,7 @@ En Termux, reinstálalos con `pkg install -y ffmpeg megatools`. En Ubuntu/Debian
 
 ### `/unrar` indica que no hay extractor RAR
 
-Instala `unrar`, `7zz` o `7z` y verifica que el comando quede disponible en el `PATH`. En Termux usa `pkg install p7zip`; en Debian/Ubuntu, instala `p7zip-full` (o `unrar` si está disponible en los repositorios habilitados).
+Instala `unrar`, `unar`, `7zz` o `7z` y verifica que el comando quede disponible en el `PATH`. En Termux usa `pkg install p7zip`; en Debian Trixie instala `unar` con `sudo apt install unar`. El paquete `unrar` está en el componente `non-free`; si `apt` no lo encuentra, usa `unar` desde `main` o habilita ese componente en las fuentes de Debian.
 
 ### `pip` rechaza la instalación
 

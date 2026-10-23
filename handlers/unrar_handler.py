@@ -76,7 +76,7 @@ def _status(
 
 
 def _available_extractor() -> tuple[str, str] | None:
-    for name in ("unrar", "7zz", "7z"):
+    for name in ("unrar", "unar", "7zz", "7z"):
         path = shutil.which(name)
         if path:
             return name, path
@@ -87,6 +87,12 @@ def _extract_command(tool: str, archive: Path, destination: Path, password: str 
     if tool == "unrar":
         password_arg = f"-p{password}" if password is not None else "-p-"
         return ["unrar", "x", "-o+", "-idq", password_arg, str(archive), f"{destination}{os.sep}"]
+    if tool == "unar":
+        args = ["unar", "-f", "-o", str(destination)]
+        if password is not None:
+            args.extend(["-p", password])
+        args.append(str(archive))
+        return args
     args = [tool, "x", "-y", "-bsp0", f"-o{destination}"]
     if password is not None:
         args.append(f"-p{password}")
@@ -303,7 +309,7 @@ def register(app, download_dir: Path) -> None:
                 raise ValueError("El archivo está vacío.")
             extractor = _available_extractor()
             if extractor is None:
-                raise FileNotFoundError("No está instalado unrar, 7zz ni 7z en el servidor.")
+                raise FileNotFoundError("No está instalado unrar, unar, 7zz ni 7z en el servidor.")
             tool_name, tool_path = extractor
             password = None
             try:

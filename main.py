@@ -221,8 +221,8 @@ if __name__ == "__main__":
         version = "disponible" if available else "no disponible"
         print_status(name, version, ok=available)
 
-    rar_extractor = next((name for name in ("unrar", "7zz", "7z") if shutil.which(name)), None)
-    print_status("Extractor RAR", rar_extractor or "instala unrar o 7z", ok=rar_extractor is not None)
+    rar_extractor = next((name for name in ("unrar", "unar", "7zz", "7z") if shutil.which(name)), None)
+    print_status("Extractor RAR", rar_extractor or "instala unrar, unar o 7z", ok=rar_extractor is not None)
 
     print_section("ESTADO")
     logger.info("  ✓ Bot iniciado correctamente")

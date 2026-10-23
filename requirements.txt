@@ -10,7 +10,7 @@ tgcrypto
 # alternativas portables; aria2c se descarga bajo demanda para /torrent en Linux.
 # En Termux se recomienda instalar aria2 con pkg; en VPS puede instalarse con apt.
 # 
-# Lectura de metadatos y archivos protegidos RAR; la extracción requiere unrar o 7z.
+# Lectura de metadatos RAR; la extracción requiere unrar, unar o 7z.
 rarfile
 
 # En Termux (Android):
