@@ -44,6 +44,9 @@ def register(app):
 ├ /processstatus — Ver tu trabajo pendiente o activo
 └ /cancelprocess — Cancelar y limpiar archivos temporales
 
+<b>🛠 Administración</b>
+└ /uptadezero — Actualizar desde GitHub (solo propietarios autorizados)
+
 <b>🖼 Portada de video</b>
 ├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
 ├ Al enviar un video, se reenviará con esa miniatura

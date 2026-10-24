@@ -27,6 +27,7 @@ from . import (
     video_processing_handler,
     video_cover_handler,
     unrar_handler,
+    update_handler,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     'video_processing_handler',
     'video_cover_handler',
     'unrar_handler',
+    'update_handler',
 ]

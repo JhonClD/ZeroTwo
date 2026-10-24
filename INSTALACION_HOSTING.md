@@ -118,6 +118,8 @@ git pull
 
 Vuelve a iniciar el proceso desde el panel.
 
+También puedes usar `/uptadezero` en Telegram para actualizar desde `origin/main` con fast-forward únicamente. Configura `ZERO_TWO_UPDATE_OWNER_IDS` en el entorno del proceso con los IDs numéricos de Telegram autorizados, separados por comas (por ejemplo, `123456789,987654321`). Si no se configura, el comando queda deshabilitado; `TIOANIME_OWNER_IDS` se usa como alternativa. El checkout debe estar en `main` y sin cambios locales. El comando informa el resultado, pero no reinicia el proceso: reinícialo desde el panel para cargar el código nuevo.
+
 ## Solución de problemas
 
 - **No se encontró `~/.telegram_bot_token`:** crea el archivo en el directorio `HOME` efectivo del proceso del panel. Comprueba que el usuario del panel pueda leerlo.
