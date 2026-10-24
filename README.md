@@ -341,10 +341,10 @@ ZeroTwo reutiliza el ejecutable y las opciones de descarga de AniDL que aparecen
 
 ```text
 /ani https://www.crunchyroll.com/es/watch/ID_DEL_EPISODIO
-/anidl https://www.crunchyroll.com/watch/ID_DEL_EPISODIO --dubLang spa-419 --dlsubs es-419 --hslang es-419 -q 5 --mp4
+/anidl https://www.crunchyroll.com/watch/ID_DEL_EPISODIO --dubLang spa-419 --dlsubs es-419 -q 5 --mp4
 ```
 
-También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; `--hslang CODIGO` es opcional y solicita subtítulos incrustados. La calidad admitida es `-q 1..5`; el formato puede ser `--mp4` o `--mkv`. El comando valida el host y el ID del episodio, limita los argumentos y ejecuta AniDL sin shell. Los IDs estándar se pasan como selección `-e`; los IDs externos/legacy más largos se pasan con `--extid`, que es la opción indicada por AniDL para ese tipo de identificador. Las descargas se serializan, se pueden cancelar desde el botón y ZeroTwo no limpia automáticamente la carpeta de salida. Se conserva el flag `--force y` usado en los scripts de Drive, por lo que AniDL podría reemplazar una salida si el nombre coincide; respalda la carpeta antes de repetir episodios. El límite predeterminado de envío es 1900 MB.
+También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; estos subtítulos quedan como pistas separadas, no se incrustan en el video. La calidad admitida es `-q 1..5`; el formato puede ser `--mp4` o `--mkv`. El comando valida el host y el ID del episodio, limita los argumentos y ejecuta AniDL sin shell. Los IDs estándar se pasan como selección `-e`; los IDs externos/legacy más largos se pasan con `--extid`, que es la opción indicada por AniDL para ese tipo de identificador. Las descargas se serializan, se pueden cancelar desde el botón y ZeroTwo no limpia automáticamente la carpeta de salida. Se conserva el flag `--force y` usado en los scripts de Drive, por lo que AniDL podría reemplazar una salida si el nombre coincide; respalda la carpeta antes de repetir episodios. El límite predeterminado de envío es 1900 MB.
 
 Opcionalmente configura `ZERO_TWO_ANIDL_DIR` (carpeta de instalación, predeterminada `~/anidl`), `ZERO_TWO_ANIDL_BIN` (ruta alternativa al ejecutable), `ZERO_TWO_ANIDL_TIMEOUT` (segundos, predeterminado 10800) y `ZERO_TWO_ANIDL_MAX_MB` (predeterminado 1900). La instalación/configuración local de AniDL no forma parte de `requirements.txt`.
 
@@ -400,10 +400,6 @@ AniDL es una herramienta de terceros no afiliada a Crunchyroll. Revisa sus aviso
 | Enlace público de Drime | Pégalo directamente; descarga el archivo compartido o permite elegir uno dentro de una carpeta. No requiere token API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
-| `/process` | Responde a un video para elegir compresión o quemar subtítulos. |
-| `/compress` | Abre perfiles de compresión; `/compress 700` intenta aproximarse a 700 MB mediante dos pasadas. |
-| `/subtitles` o `/sub` | Quema una pista de texto interna o un `.srt`, `.ass`, `.ssa` o `.vtt` enviado al bot. |
-| `/processstatus`, `/cancelprocess` | Consulta o cancela tu trabajo de procesamiento. |
 | Enviar una foto | La guarda como tu única miniatura personal; una foto nueva reemplaza la anterior. |
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
@@ -417,8 +413,6 @@ AniDL es una herramienta de terceros no afiliada a Crunchyroll. Revisa sus aviso
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 Drime acepta enlaces compartidos de archivos y carpetas en `app.drime.cloud` con descarga habilitada. Los enlaces a un archivo se descargan directamente; si el enlace es una carpeta, ZeroTwo muestra botones para elegir los archivos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
-
-El procesamiento multimedia usa FFmpeg/FFprobe del entorno. La compresión normal usa una pasada CRF; un tamaño objetivo se aproxima con dos pasadas y consume más CPU. Quemar subtítulos requiere que FFmpeg incluya el filtro `subtitles` (libass). Por defecto se procesa un video a la vez y se admiten hasta dos trabajos entre activos y en cola. Se puede ajustar en el hosting con `ZERO_TWO_VIDEO_WORKERS` (1–2), `ZERO_TWO_VIDEO_QUEUE` (1–6), `ZERO_TWO_VIDEO_MAX_MB` (por defecto 1800 MB), `ZERO_TWO_FFMPEG_THREADS` (1–8) y `ZERO_TWO_FFMPEG_TIMEOUT` (segundos, por defecto 7200). Los archivos de trabajo se eliminan tras completar, cancelar o fallar.
 
 La función de portada guarda por usuario solo el `file_id` de Telegram en `~/telegram_bot_files/video_covers/covers.json`; la preferencia de activación queda en `settings.json`. Está activa por defecto para preservar el comportamiento esperado. Usa `/thumoff` para desactivarla y `/thumon` para reactivarla. Para videos enviados como video normal, usa la Bot API oficial `sendVideo` con los `file_id` tanto del video como de la portada: Telegram reutiliza los archivos en sus servidores, por lo que el bot no descarga ni vuelve a subir el MP4. Si se envía como documento/archivo, Telegram no permite cambiar su tipo al reutilizar el `file_id`; ese caso usa el fallback de descarga y reenvío con `thumb`, requiere FFmpeg y espacio temporal (límite por defecto 1800 MB, ajustable con `ZERO_TWO_COVER_MAX_MB`). La portada cambia la miniatura que muestra Telegram, no los fotogramas del video.
 

@@ -44,11 +44,10 @@ class AniDLTests(unittest.TestCase):
     def test_parses_drive_defaults_and_documented_options(self):
         self.assertEqual(parse_options(""), AniDLOptions())
         self.assertEqual(
-            parse_options("--dubLang spa-419 --dlsubs es-419 --hslang es-419 -q 5 --mkv"),
+            parse_options("--dubLang spa-419 --dlsubs es-419 -q 5 --mkv"),
             AniDLOptions(
                 dub_language="spa-419",
                 download_subtitles="es-419",
-                hard_subtitle_language="es-419",
                 quality=5,
                 container="mkv",
             ),
@@ -62,7 +61,7 @@ class AniDLTests(unittest.TestCase):
             "--dubLang jpn -q 0",
             "-q 6",
             "--dlsubs es-419;touch",
-            "--hslang fake-language",
+            "--hslang es-419",
             "--mp4 --mkv",
         ):
             with self.subTest(value=value), self.assertRaises(AniDLError):
@@ -84,13 +83,6 @@ class AniDLTests(unittest.TestCase):
         argv = build_command("/opt/anidl/aniDL", "GE00379525JAJP", AniDLOptions())
         self.assertEqual(argv[argv.index("--extid") + 1], "GE00379525JAJP")
         self.assertNotIn("-e", argv)
-
-    def test_command_adds_optional_hardsub_language(self):
-        options = parse_options("--dlsubs spa-419 --hslang es-419")
-        argv = build_command("aniDL", "G6JQW4Z9X", options)
-        self.assertIn("--dlsubs", argv)
-        self.assertIn("--hslang", argv)
-        self.assertEqual(argv[argv.index("--hslang") + 1], "es-419")
 
     def test_detects_only_new_or_changed_video_files_without_deleting(self):
         with tempfile.TemporaryDirectory() as directory:

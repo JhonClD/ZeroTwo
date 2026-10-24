@@ -37,13 +37,6 @@ def register(app):
 ├ /fb &lt;url&gt;
 └ Ejemplo: /fb https://facebook.com/watch/?v=12345
 
-<b>🎞 Procesamiento de video</b>
-├ Responde a un video con /process para elegir una operación
-├ /compress — Perfiles de compresión; /compress 700 intenta un tamaño aproximado en MB
-├ /subtitles o /sub — Quemar una pista del video o enviar .srt/.ass/.vtt
-├ /processstatus — Ver tu trabajo pendiente o activo
-└ /cancelprocess — Cancelar y limpiar archivos temporales
-
 <b>🛠 Administración</b>
 └ /updatezero — Actualizar desde GitHub (solo propietarios autorizados)
 
@@ -140,7 +133,6 @@ def register(app):
 
 <b>⚠️ Límite Telegram:</b> 2GB por archivo
 
-La compresión usa FFmpeg. Quemar subtítulos requiere una build con el filtro subtitles/libass. En hosting, el tamaño de entrada y los procesos simultáneos tienen límites configurables.
 La miniatura se adjunta al video en Telegram; no altera ni inserta la imagen dentro de los fotogramas del archivo.
 
 <b>💡 Tip:</b> Todos los videos descargados muestran un preview con screenshots automáticos 📸"""

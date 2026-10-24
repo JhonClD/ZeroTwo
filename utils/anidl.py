@@ -16,7 +16,6 @@ class AniDLError(ValueError):
 class AniDLOptions:
     dub_language: str = "jpn"
     download_subtitles: str = "all"
-    hard_subtitle_language: str | None = None
     quality: int = 4
     container: str = "mp4"
 
@@ -81,7 +80,7 @@ def parse_options(text: str) -> AniDLOptions:
             continue
 
         option, equals, inline_value = token.partition("=")
-        if option not in {"--dubLang", "--dlsubs", "--hslang", "-q"}:
+        if option not in {"--dubLang", "--dlsubs", "-q"}:
             raise AniDLError(f"Opción no admitida: {option[:32]}.")
         if option in values:
             raise AniDLError(f"La opción {option} no se puede repetir.")
@@ -99,13 +98,10 @@ def parse_options(text: str) -> AniDLOptions:
 
     dub_language = values.get("--dubLang", "jpn")
     download_subtitles = values.get("--dlsubs", "all")
-    hard_subtitle_language = values.get("--hslang")
     if dub_language not in _LANGUAGES:
         raise AniDLError("El código de idioma de audio no está en la lista admitida por AniDL.")
     if download_subtitles not in _LANGUAGES | {"all", "none"}:
         raise AniDLError("El código de subtítulos suaves no está admitido por AniDL.")
-    if hard_subtitle_language is not None and hard_subtitle_language not in _LANGUAGES:
-        raise AniDLError("El código de subtítulos incrustados no está admitido por AniDL.")
     try:
         quality = int(values.get("-q", "4"))
     except ValueError as error:
@@ -116,7 +112,6 @@ def parse_options(text: str) -> AniDLOptions:
     return AniDLOptions(
         dub_language=dub_language,
         download_subtitles=download_subtitles,
-        hard_subtitle_language=hard_subtitle_language,
         quality=quality,
         container=container or "mp4",
     )
@@ -135,8 +130,6 @@ def build_command(executable: str, episode_id: str, options: AniDLOptions) -> li
         "--dubLang", options.dub_language,
         "--dlsubs", options.download_subtitles,
     ]
-    if options.hard_subtitle_language:
-        command.extend(["--hslang", options.hard_subtitle_language])
     command.extend([
         "-q", str(options.quality),
         f"--{options.container}",
