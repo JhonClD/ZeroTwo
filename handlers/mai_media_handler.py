@@ -35,10 +35,10 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
         return default
 
 
-def _bar(percent: float, width: int = 16) -> str:
+def _bar(percent: float, width: int = 20) -> str:
     percent = max(0, min(100, percent))
     filled = round(width * percent / 100)
-    return "█" * filled + "░" * (width - filled)
+    return "[" + "█" * filled + "░" * (width - filled) + "]"
 
 
 def _time_text(seconds: float) -> str:
@@ -156,6 +156,8 @@ def register(app, download_dir: Path | str) -> None:
         original_name = getattr(media, "file_name", None) or f"archivo_{getattr(media, 'file_unique_id', uuid.uuid4().hex)}"
         destination = unique_destination(incoming, original_name)
         status = await message.reply_text(f"📥 Preparando descarga: {html.escape(destination.name)}")
+        user = message.from_user
+        user_str = f"{user.first_name} ({user.id})" if user else "Desconocido"
         started = time.monotonic()
         last_update = [0.0]
 
@@ -170,10 +172,13 @@ def register(app, download_dir: Path | str) -> None:
             remaining = (total - current) / max(current / elapsed, 1) if total else 0
             await _show_progress(
                 status,
-                f"⬡ Descarga · ZeroTwo\n🗂 {html.escape(destination.name)}\n"
-                f"[{_bar(percent)}] {percent:.1f}%\n"
-                f"💾 {current / 1048576:.1f} / {total / 1048576:.1f} MB\n"
-                f"⚡ {speed:.2f} MB/s · ⏳ {_time_text(remaining)}",
+                "┎〄 Descargando archivo\n"
+                f"┠ 🗂 {html.escape(destination.name)}\n"
+                f"┠ {_bar(percent)} {percent:.1f}%\n"
+                f"┠ 💾 {current / 1048576:.2f} MB / {total / 1048576:.2f} MB\n"
+                f"┠ ⚡ Velocidad: {speed:.2f} MB/s\n"
+                f"┠ ⏳ Tiempo restante: {_time_text(remaining)}\n"
+                f"┖〄 👤 Ejecutado por: {html.escape(user_str)}",
             )
 
         try:
@@ -222,22 +227,53 @@ def register(app, download_dir: Path | str) -> None:
         job_id = uuid.uuid4().hex[:10]
         job_dir = jobs / job_id
         job_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
-        status = await message.reply_text(f"⚙️ Preparando {'/ed2' if burn_subtitles else '/ec2'}: {html.escape(source.name)}")
+        command_name = "/ed2" if burn_subtitles else "/ec2"
+        mode_title = "Codificando y quemando subtítulos" if burn_subtitles else "Codificando sin subtítulo interno"
+        total_steps = 5 if burn_subtitles else 4
+        encode_started = time.monotonic()
+        status = await message.reply_text(f"⚙️ {mode_title}: {html.escape(source.name)}")
         output_name = f"{safe_filename(source.stem)}_{'sub' if burn_subtitles else 'encode'}_{job_id[:6]}.mp4"
         output = encoded / output_name
+
+        async def step_template(step: int, label: str, *, completed: bool = False) -> None:
+            elapsed = max(time.monotonic() - encode_started, 0)
+            completed_steps = step if completed else step - 1
+            percent = completed_steps * 100 / total_steps
+            average = elapsed / max(completed_steps, 1)
+            eta = max(0, total_steps - completed_steps) * average
+            if completed:
+                text = (
+                    f"🔧 {mode_title}: {html.escape(source.name)}\n"
+                    f"📍 Paso {step}/{total_steps}: {label}\n"
+                    f"{_bar(percent)} {percent:.1f}%\n"
+                    f"⏱️ Tiempo: {_time_text(elapsed)} / ETA: {_time_text(eta)}"
+                )
+            else:
+                track_info = f"\n🎧 Audio: {options.audio_index}"
+                if burn_subtitles:
+                    track_info += f" · 📝 Subtítulo: {options.subtitle_index}"
+                text = (
+                    f"🔄 Paso {step}/{total_steps}: {label}\n"
+                    f"🗂 {html.escape(source.name)}\n"
+                    f"🛠 {command_name}{track_info}"
+                )
+            await _show_progress(status, text)
+
         try:
+            await step_template(1, "Analizando pistas")
             metadata = await _probe(source, timeout)
             streams = metadata.get("streams", [])
             audio_count = sum(stream.get("codec_type") == "audio" for stream in streams)
             subtitle_count = sum(stream.get("codec_type") == "subtitle" for stream in streams)
             if audio_count == 0 or options.audio_index >= audio_count:
                 raise RuntimeError(f"La pista de audio {options.audio_index} no existe; el video tiene {audio_count} pista(s).")
+            await step_template(1, "Analizando pistas", completed=True)
 
             filters: list[str] = []
             if burn_subtitles:
                 if options.subtitle_index >= subtitle_count:
                     raise RuntimeError(f"La pista de subtítulos {options.subtitle_index} no existe; el video tiene {subtitle_count} pista(s).")
-                await _show_progress(status, f"📝 Extrayendo subtítulo {options.subtitle_index} de {html.escape(source.name)}…")
+                await step_template(2, f"Extrayendo subtítulo {options.subtitle_index}")
                 embedded = job_dir / "embedded.ass"
                 await _run(
                     ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-v", "error", "-i", str(source),
@@ -245,6 +281,7 @@ def register(app, download_dir: Path | str) -> None:
                     cwd=job_dir, timeout=timeout,
                 )
                 filters.append("subtitles=filename='embedded.ass'")
+                await step_template(2, f"Extrayendo subtítulo {options.subtitle_index}", completed=True)
 
             watermark_subs = root / "marca_bot.ass"
             if watermark_subs.is_file() and not watermark_subs.is_symlink():
@@ -252,18 +289,24 @@ def register(app, download_dir: Path | str) -> None:
                 filters.append("subtitles=filename='marca_bot.ass'")
 
             passlog = job_dir / "encode_pass"
-            await _show_progress(status, f"🔄 Primera pasada: {html.escape(source.name)}")
+            first_pass = 3 if burn_subtitles else 2
+            await step_template(first_pass, "Primera pasada (video)")
             await _run(ffmpeg_pass_one(source, passlog, options, filters), cwd=job_dir, timeout=timeout)
-            await _show_progress(status, f"🔄 Segunda pasada: {html.escape(source.name)}")
+            await step_template(first_pass, "Primera pasada (video)", completed=True)
+            await step_template(first_pass + 1, "Segunda pasada (final)")
             await _run(ffmpeg_pass_two(source, output, passlog, options, filters), cwd=job_dir, timeout=timeout)
+            await step_template(first_pass + 1, "Segunda pasada (final)", completed=True)
             if not output.is_file() or output.stat().st_size <= 0:
                 raise RuntimeError("FFmpeg no generó un archivo de salida válido.")
             if output.stat().st_size > 1950 * 1024 * 1024:
                 raise RuntimeError("El resultado supera 1950 MB, límite de envío de Telegram.")
 
+            await step_template(total_steps, "Generando miniatura")
             thumb = await make_thumbnail(output, job_dir, root, timeout)
-            await send_video(message, output, thumb, status, timeout)
-            await _show_progress(status, f"✅ Enviado: <code>{html.escape(output.name)}</code>")
+            await step_template(total_steps, "Generando miniatura", completed=True)
+            upload_template = "📤 Subiendo resultado de /ed2" if burn_subtitles else "📤 Subiendo resultado de /ec2"
+            await send_video(message, output, thumb, status, timeout, template_title=upload_template)
+            await _show_progress(status, f"✅ {command_name} completado\n🗂 <code>{html.escape(output.name)}</code>")
             output.unlink(missing_ok=True)
             if thumb:
                 thumb.unlink(missing_ok=True)
@@ -297,7 +340,15 @@ def register(app, download_dir: Path | str) -> None:
             logger.info("No se pudo generar miniatura para %s", output.name, exc_info=True)
             return None
 
-    async def send_video(message: Message, path: Path, thumb: Path | None, status: Message, run_timeout: int) -> None:
+    async def send_video(
+        message: Message,
+        path: Path,
+        thumb: Path | None,
+        status: Message,
+        run_timeout: int,
+        *,
+        template_title: str,
+    ) -> None:
         metadata = await _probe(path, run_timeout)
         duration, width, height = _media_dimensions(metadata)
         started = time.monotonic()
@@ -309,10 +360,20 @@ def register(app, download_dir: Path | str) -> None:
                 return
             last_update[0] = now
             percent = current * 100 / total if total else 0
-            speed = current / max(now - started, 0.1) / 1048576
-            await _show_progress(status, f"📤 Subiendo {html.escape(path.name)}\n[{_bar(percent)}] {percent:.1f}%\n⚡ {speed:.2f} MB/s")
+            elapsed = max(now - started, 0.1)
+            speed_bytes = current / elapsed if current else 1
+            speed = speed_bytes / 1048576
+            eta = (total - current) / speed_bytes if total else 0
+            await _show_progress(
+                status,
+                f"{template_title}\n"
+                f"🗂 {html.escape(path.name)}\n"
+                f"{_bar(percent)} {percent:.1f}%\n"
+                f"⚡ Velocidad: {speed:.2f} MB/s\n"
+                f"⏱️ ETA: {_time_text(eta)}",
+            )
 
-        await _show_progress(status, f"📤 Subiendo a este chat: {html.escape(path.name)}")
+        await _show_progress(status, f"{template_title}\n🗂 {html.escape(path.name)}\n📍 Destino: este chat")
         await message.reply_video(
             video=str(path),
             thumb=str(thumb) if thumb and thumb.is_file() else None,
@@ -348,10 +409,13 @@ def register(app, download_dir: Path | str) -> None:
             if path.stat().st_size > 1950 * 1024 * 1024:
                 await message.reply_text(f"Se omite {html.escape(path.name)}: supera el límite de Telegram.")
                 continue
-            status = await message.reply_text(f"📤 Subiendo a este chat: {html.escape(path.name)}")
+            status = await message.reply_text(f"📦 /up2 · Pendiente\n🗂 {html.escape(path.name)}")
             try:
-                await send_video(message, path, None, status, timeout)
-                await _show_progress(status, f"✅ Enviado y retirado de la cola: <code>{html.escape(path.name)}</code>")
+                await send_video(
+                    message, path, None, status, timeout,
+                    template_title="📤 /up2 · Subiendo video pendiente",
+                )
+                await _show_progress(status, f"✅ /up2 completado\n🗂 <code>{html.escape(path.name)}</code>")
                 path.unlink(missing_ok=True)
             except Exception as error:
                 logger.exception("No se pudo enviar %s", path.name)
