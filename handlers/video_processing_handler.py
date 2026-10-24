@@ -24,6 +24,7 @@ from pathlib import Path
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
+from utils.video_processor import VideoProcessor
 from utils.video_processing import (
     VideoProcessingError,
     build_compression_command,
@@ -404,10 +405,21 @@ def register(app, user_states: dict, work_dir: Path) -> None:
 
             size_mb = output_path.stat().st_size / 1024 / 1024
             caption = f"✅ {label} | {size_mb:.1f} MB"
+            thumb_path = job_dir / "thumb.jpg"
+            output_duration, thumbnail = await asyncio.to_thread(
+                VideoProcessor.get_video_meta, output_path, thumb_path
+            )
             if doc:
                 await message.reply_document(document=str(output_path), file_name=filename, caption=caption, parse_mode=enums.ParseMode.HTML)
             else:
-                await message.reply_video(video=str(output_path), caption=caption, supports_streaming=True, parse_mode=enums.ParseMode.HTML)
+                await message.reply_video(
+                    video=str(output_path),
+                    thumb=thumbnail,
+                    duration=output_duration,
+                    caption=caption,
+                    supports_streaming=True,
+                    parse_mode=enums.ParseMode.HTML,
+                )
             await status.edit_text("✅ <b>Proceso terminado.</b>", parse_mode=enums.ParseMode.HTML)
         except (ValueError, VideoProcessingError) as error:
             if status:
