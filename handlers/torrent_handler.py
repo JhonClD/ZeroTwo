@@ -191,13 +191,34 @@ def register(app, download_dir: Path):
     async def magnet(client, message: Message):
         await _run_torrent(message, message.text.strip(), download_dir, "magnet")
 
-    @app.on_message(filters.command("torrent") & filters.reply)
+    @app.on_message(filters.command("torrent"))
     async def torrent_file(client, message: Message):
         reply = message.reply_to_message
+        arguments = list(message.command[1:] if message.command else [])
+
+        if reply is None and arguments:
+            source = arguments[0].strip()
+            if source.startswith("magnet:") or source.lower().split("?", 1)[0].endswith(".torrent"):
+                await _run_torrent(message, source, download_dir, "magnet" if source.startswith("magnet:") else "torrent URL")
+                return
+            await message.reply_text(
+                "❌ <b>Origen torrent no válido.</b> Usa un magnet, una URL .torrent o responde a un archivo .torrent.",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
+
+        if reply is None:
+            await message.reply_text(
+                "<b>Uso:</b> /torrent &lt;magnet o URL .torrent&gt;\n"
+                "También puedes responder a un archivo <code>.torrent</code> con /torrent.",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
+
         document = reply.document if reply else None
         name = getattr(document, "file_name", "") if document else ""
         if not name.lower().endswith(".torrent"):
-            await message.reply_text("❌ Responde a un archivo .torrent con /torrent.")
+            await message.reply_text("❌ <b>Responde a un archivo .torrent con /torrent.</b>", parse_mode=enums.ParseMode.HTML)
             return
         job_dir = download_dir / f"torrent_source_{message.from_user.id}_{uuid.uuid4().hex[:8]}"
         job_dir.mkdir(parents=True, exist_ok=True)
