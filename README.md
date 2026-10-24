@@ -400,11 +400,6 @@ AniDL es una herramienta de terceros no afiliada a Crunchyroll. Revisa sus aviso
 | Enlace público de Drime | Pégalo directamente; descarga el archivo compartido o permite elegir uno dentro de una carpeta. No requiere token API. |
 | `/gdrive_upload [folder_id]` | Sube el siguiente archivo a Google Drive mediante OAuth. |
 | `/drive_sync` | Guarda el siguiente archivo en la carpeta compartida de Android. |
-| `/dw2` | Responde a un documento, video o audio para guardarlo en la carpeta dedicada de anime. |
-| `/ed2 [-s n] [-a n] [-vb bitrate] [-p preset]` | Codifica MKV con dos pasadas y quema la pista de subtítulos interna indicada; envía el MP4 al chat actual. |
-| `/ec2 [-a n] [-vb bitrate] [-p preset]` | Codifica MKV sin quemar su pista interna de subtítulos; envía el MP4 al chat actual. |
-| `/up2` | Reintenta la subida de MP4 pendientes al chat donde se invoca. |
-| `/delete2`, `/dele2` | Limpian auxiliares o videos de la carpeta dedicada, respectivamente. |
 | Enviar una foto | La guarda como tu única miniatura personal; una foto nueva reemplaza la anterior. |
 | `/show_cover`, `/del_cover` | Mostrar o borrar tu miniatura personal. Los videos siguientes se reenvían con ella. |
 | `/thumon`, `/thumoff` | Activar o desactivar la aplicación automática de tu miniatura. Está activa por defecto; la elección persiste por usuario. |
@@ -416,8 +411,6 @@ AniDL es una herramienta de terceros no afiliada a Crunchyroll. Revisa sus aviso
 | `/anime <nombre>` | Busca información de un anime. |
 | `/ani` o `/anidl <url> [opciones]` | Descarga un episodio de Crunchyroll mediante aniDL local; solo propietario. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
-
-Las herramientas mai (`/dw2`, `/ed2`, `/ec2`, `/up2`, `/delete2`, `/dele2`) son exclusivas del propietario. Guardan archivos bajo `~/telegram_downloads/mai_tools/`, separados de las demás descargas. Los índices `-s` (subtítulos) y `-a` (audio) empiezan en cero; `-vb` usa un bitrate como `4800k`, y `-p` acepta `ultrafast`, `superfast`, `veryfast`, `fast` o `medium`. Los resultados de encodeo se envían al chat donde se ejecutó el comando, no a un canal fijado en código; tras una subida exitosa se retiran de la cola. Si un envío falla, `/up2` permite reintentarlo. Los comandos de borrado solo actúan dentro de `mai_tools/anime`; `/delete2` conserva `marca_bot.ass`. Opcionalmente coloca `marca_bot.ass` en `mai_tools/` para aplicar esa marca de subtítulos a `/ed2` y `/ec2`, y `marca.png` para añadir logo a la miniatura. Ajusta `ZERO_TWO_MAI_MAX_MB` (predeterminado 1800) y `ZERO_TWO_MAI_TIMEOUT` (predeterminado 10800 segundos) desde el entorno del hosting. Se requiere FFmpeg/FFprobe; el filtro de subtítulos necesita una build con libass.
 
 Drime acepta enlaces compartidos de archivos y carpetas en `app.drime.cloud` con descarga habilitada. Los enlaces a un archivo se descargan directamente; si el enlace es una carpeta, ZeroTwo muestra botones para elegir los archivos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
 

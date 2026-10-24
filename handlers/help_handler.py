@@ -37,14 +37,6 @@ def register(app):
 ├ /fb &lt;url&gt;
 └ Ejemplo: /fb https://facebook.com/watch/?v=12345
 
-<b>🎞 Herramientas mai · anime (solo propietario)</b>
-├ Responde a un archivo con /dw2 — Guardarlo en la carpeta dedicada
-├ /ed2 [-s índice] [-a índice] [-vb 4800k] [-p superfast] — Codificar y quemar subtítulo interno
-├ /ec2 [-a índice] [-vb 4800k] [-p superfast] — Codificar sin subtítulo del video
-├ /up2 — Subir videos pendientes al chat actual
-├ /delete2 — Borrar archivos .log/.ass auxiliares
-└ /dele2 — Borrar MKV/MP4 de la carpeta de entrada
-
 <b>🖼 Portada de video</b>
 ├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
 ├ Al enviar un video, se reenviará con esa miniatura
