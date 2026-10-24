@@ -165,6 +165,7 @@ from handlers import (
     video_cover_handler,
     unrar_handler,
     update_handler,
+    mai_media_handler,
 )
 
 # Registrar handlers
@@ -199,6 +200,7 @@ crunchyroll_notify_handler.register(app, WORK_DIR)
 video_cover_handler.register(app, WORK_DIR, BOT_TOKEN)
 unrar_handler.register(app, DOWNLOAD_DIR)
 update_handler.register(app)
+mai_media_handler.register(app, DOWNLOAD_DIR)
 
 
 if __name__ == "__main__":
