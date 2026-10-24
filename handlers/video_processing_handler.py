@@ -371,6 +371,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                         ffmpeg, cwd=job_dir, duration=duration,
                         progress_callback=lambda current, total: _progress(status, f"MI {resolution}p · pasada {index}/2", current, total),
                         timeout_seconds=timeout,
+                        progress_label=f"MI {resolution}p · pasada {index}/2",
                     )
                 filename = f"video_{resolution}p_{target_mb:g}mb.mp4"
                 label = f"MI {resolution}p"
@@ -384,6 +385,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                         pass_command, cwd=job_dir, duration=duration,
                         progress_callback=lambda current, total: _progress(status, f"{label} · pasada {index}/2", current, total),
                         timeout_seconds=timeout,
+                        progress_label=f"{label} · pasada {index}/2",
                     )
             elif command != "mi":
                 await status.edit_text(f"⚙️ <b>Procesando {label}…</b>", parse_mode=enums.ParseMode.HTML)
@@ -391,6 +393,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     ffmpeg, cwd=job_dir, duration=duration,
                     progress_callback=lambda current, total: _progress(status, label, current, total),
                     timeout_seconds=timeout,
+                    progress_label=label,
                 )
             if not output_path.exists() or output_path.stat().st_size == 0:
                 raise VideoProcessingError("FFmpeg no generó un archivo de salida.")

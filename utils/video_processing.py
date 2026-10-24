@@ -258,6 +258,7 @@ async def run_ffmpeg(
     duration: float,
     progress_callback: _PROGRESS_CALLBACK | None = None,
     timeout_seconds: int = 7200,
+    progress_label: str | None = None,
 ) -> None:
     """Ejecuta FFmpeg de forma asíncrona, leyendo ambos pipes y cancelando limpiamente."""
     try:
@@ -272,6 +273,7 @@ async def run_ffmpeg(
 
     stderr_tail: deque[str] = deque(maxlen=35)
     last_update = 0.0
+    progress_values: dict[str, str] = {}
 
     async def read_progress() -> None:
         nonlocal last_update
@@ -279,9 +281,10 @@ async def run_ffmpeg(
             return
         while line := await process.stdout.readline():
             text = line.decode(errors="replace").strip()
-            if not text.startswith("out_time_"):
+            key, separator, value = text.partition("=")
+            if not separator:
                 continue
-            key, _, value = text.partition("=")
+            progress_values[key] = value
             current_seconds = None
             try:
                 if key == "out_time_us":
@@ -293,14 +296,30 @@ async def run_ffmpeg(
                     current_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
             except (ValueError, TypeError):
                 continue
-            if current_seconds is None or not progress_callback:
+            if current_seconds is None:
                 continue
             now = asyncio.get_running_loop().time()
             if now - last_update < 3:
                 continue
             last_update = now
+            if progress_label:
+                try:
+                    frame = int(progress_values.get("frame", "0"))
+                except ValueError:
+                    frame = 0
+                percent = min(100, max(0, current_seconds * 100 / duration)) if duration > 0 else 0
+                fps = progress_values.get("fps", "0")
+                speed = progress_values.get("speed", "0x")
+                timestamp = progress_values.get("out_time", "00:00:00.00")
+                print(
+                    f"\r[[{progress_label}]] Progreso {percent:05.1f}% | "
+                    f"Frame: {frame} | FPS: {fps} | Time: {timestamp} | Speed: {speed}",
+                    end="",
+                    flush=True,
+                )
             try:
-                await progress_callback(min(duration, current_seconds), duration)
+                if progress_callback:
+                    await progress_callback(min(duration, current_seconds), duration)
             except Exception:
                 logger.debug("No se pudo actualizar el progreso del trabajo.", exc_info=True)
 
@@ -319,6 +338,8 @@ async def run_ffmpeg(
     try:
         return_code = await asyncio.wait_for(process.wait(), timeout=timeout_seconds)
         await asyncio.gather(stdout_task, stderr_task)
+        if progress_label:
+            print()
     except asyncio.TimeoutError as error:
         process.terminate()
         try:
