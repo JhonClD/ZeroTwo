@@ -126,10 +126,12 @@ def build_command(executable: str, episode_id: str, options: AniDLOptions) -> li
     """Construye argv sin shell ni interpolación de texto del usuario."""
     if not _EPISODE_ID_RE.fullmatch(episode_id):
         raise AniDLError("El identificador del episodio no es válido.")
+    # AniDL usa -e para object IDs de Crunchyroll y --extid para IDs externos/legacy.
+    id_flag = "--extid" if len(episode_id) > 9 else "-e"
     command = [
         executable,
         "--service", "crunchy",
-        "-e", episode_id,
+        id_flag, episode_id,
         "--dubLang", options.dub_language,
         "--dlsubs", options.download_subtitles,
     ]

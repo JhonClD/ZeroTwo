@@ -80,6 +80,11 @@ class AniDLTests(unittest.TestCase):
         )
         self.assertNotIn("shell", argv)
 
+    def test_legacy_crunchyroll_external_id_uses_extid_flag(self):
+        argv = build_command("/opt/anidl/aniDL", "GE00379525JAJP", AniDLOptions())
+        self.assertEqual(argv[argv.index("--extid") + 1], "GE00379525JAJP")
+        self.assertNotIn("-e", argv)
+
     def test_command_adds_optional_hardsub_language(self):
         options = parse_options("--dlsubs spa-419 --hslang es-419")
         argv = build_command("aniDL", "G6JQW4Z9X", options)
