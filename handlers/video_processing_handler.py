@@ -164,14 +164,19 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     break
                 if process.stdin is None:
                     break
-                process.stdin.write(chunk)
-                await process.stdin.drain()
+                try:
+                    process.stdin.write(chunk)
+                    await process.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    # FFprobe puede cerrar el pipe tras reunir los metadatos.
+                    break
             if process.stdin is not None:
                 try:
                     process.stdin.write_eof()
-                except (AttributeError, NotImplementedError):
+                except (AttributeError, BrokenPipeError, ConnectionResetError, NotImplementedError):
                     pass
-                process.stdin.close()
+                if not process.stdin.is_closing():
+                    process.stdin.close()
             await asyncio.wait_for(process.wait(), timeout=120)
             await reader
             await error_reader
