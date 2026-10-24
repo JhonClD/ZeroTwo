@@ -22,6 +22,7 @@ def register(app):
 <b>5️⃣ Descargas del ZIP migradas</b>
 ├ /animedl &lt;url&gt; — Episodio de anime
 ├ /animedl &lt;nombre&gt; &lt;episodio&gt; — Buscar episodio
+├ /ani o /anidl &lt;url&gt; — Episodio de Crunchyroll con aniDL local
 ├ /hdl &lt;nombre&gt; &lt;episodio&gt; — HentaiLA
 ├ /get &lt;url&gt; — Descargar recurso
 └ /ssweb &lt;url&gt; — Captura de página

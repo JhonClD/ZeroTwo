@@ -146,6 +146,7 @@ from handlers import (
     anime_handler,
     youtube_handler,
     anime_download_handler,
+    anidl_download_handler,
     hentai_handler,
     web_tools_handler,
     facebook_handler,
@@ -173,6 +174,7 @@ download_handler.register(app)
 anime_handler.register(app, user_states, WORK_DIR)
 youtube_handler.register(app, DOWNLOAD_DIR)
 anime_download_handler.register(app, DOWNLOAD_DIR)
+anidl_download_handler.register(app, DOWNLOAD_DIR)
 hentai_handler.register(app, DOWNLOAD_DIR)
 web_tools_handler.register(app, DOWNLOAD_DIR)
 facebook_handler.register(app, DOWNLOAD_DIR)

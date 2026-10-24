@@ -330,9 +330,23 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 ## Comandos migrados desde anime-dl
 
 - `/animedl <url>` o `/animedl <nombre> <episodio>` descarga episodios de anime.
+- `/ani <url>` o `/anidl <url>` descarga un episodio de Crunchyroll con aniDL local.
 - `/hdl <nombre> <episodio>` descarga desde HentaiLA.
 - `/get <url>` descarga recursos HTTP/HTTPS de hasta 200 MB.
 - `/ssweb <url>` genera una captura de página.
+
+### Integración opcional con aniDL
+
+ZeroTwo reutiliza el ejecutable y las opciones de descarga de AniDL que aparecen en los scripts de Drive, pero mantiene su propio flujo Pyrogram para enviar el archivo al chat. Instala aniDL y configura su sesión local siguiendo la documentación de esa herramienta; no se copian tokens ni credenciales de los scripts de Drive. El ejecutable se busca por defecto en `~/anidl/aniDL` (o en el `PATH`) y la salida debe quedar en `~/anidl/videos`.
+
+```text
+/ani https://www.crunchyroll.com/es/watch/ID_DEL_EPISODIO
+/anidl https://www.crunchyroll.com/watch/ID_DEL_EPISODIO --dubLang spa-419 --dlsubs es-419 --hslang es-419 -q 5 --mp4
+```
+
+También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; `--hslang CODIGO` es opcional y solicita subtítulos incrustados. La calidad admitida es `-q 1..5`; el formato puede ser `--mp4` o `--mkv`. El comando valida el host y el ID del episodio, limita los argumentos y ejecuta AniDL sin shell. Las descargas se serializan, se pueden cancelar desde el botón y ZeroTwo no limpia automáticamente la carpeta de salida. Se conserva el flag `--force y` usado en los scripts de Drive, por lo que AniDL podría reemplazar una salida si el nombre coincide; respalda la carpeta antes de repetir episodios. El límite predeterminado de envío es 1900 MB.
+
+Opcionalmente configura `ZERO_TWO_ANIDL_DIR` (carpeta de instalación, predeterminada `~/anidl`), `ZERO_TWO_ANIDL_BIN` (ruta alternativa al ejecutable), `ZERO_TWO_ANIDL_TIMEOUT` (segundos, predeterminado 10800) y `ZERO_TWO_ANIDL_MAX_MB` (predeterminado 1900). La instalación/configuración local de AniDL no forma parte de `requirements.txt`.
 
 ## Comandos disponibles
 
@@ -358,6 +372,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
+| `/ani` o `/anidl <url> [opciones]` | Descarga un episodio de Crunchyroll mediante aniDL instalado localmente. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 Drime acepta enlaces compartidos de archivos y carpetas en `app.drime.cloud` con descarga habilitada. Los enlaces a un archivo se descargan directamente; si el enlace es una carpeta, ZeroTwo muestra botones para elegir los archivos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
