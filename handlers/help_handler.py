@@ -45,9 +45,6 @@ def register(app):
 ├ /delete2 — Borrar archivos .log/.ass auxiliares
 └ /dele2 — Borrar MKV/MP4 de la carpeta de entrada
 
-<b>🛠 Administración</b>
-└ /updatezero — Actualizar desde GitHub (solo propietarios autorizados)
-
 <b>🖼 Portada de video</b>
 ├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
 ├ Al enviar un video, se reenviará con esa miniatura
