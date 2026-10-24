@@ -13,6 +13,7 @@ Todos operan sobre el video al que se responde.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -101,8 +102,72 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         except Exception:
             pass
 
+    async def _probe_streaming(client, quoted: Message) -> dict:
+        """Obtiene metadatos como Rikka: alimenta ffprobe por stream y corta pronto."""
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-show_streams", "-show_format",
+            "-print_format", "json", "-i", "pipe:0",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout = bytearray()
+        metadata_ready = asyncio.Event()
+
+        async def collect_output() -> None:
+            if process.stdout is None:
+                return
+            while chunk := await process.stdout.read(8192):
+                stdout.extend(chunk)
+                if b'"format"' in stdout:
+                    metadata_ready.set()
+
+        reader = asyncio.create_task(collect_output())
+        try:
+            async for chunk in client.stream_media(quoted):
+                if metadata_ready.is_set():
+                    break
+                if process.stdin is None:
+                    break
+                process.stdin.write(chunk)
+                await process.stdin.drain()
+            if process.stdin is not None:
+                process.stdin.close()
+            await asyncio.wait_for(process.wait(), timeout=45)
+            await reader
+        except Exception:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            reader.cancel()
+            await asyncio.gather(reader, return_exceptions=True)
+            raise
+
+        try:
+            data = json.loads(stdout)
+            streams = data.get("streams", [])
+            video_streams = [stream for stream in streams if stream.get("codec_type") == "video"]
+            if not video_streams:
+                raise VideoProcessingError("El archivo no contiene una pista de video.")
+            duration = float(data.get("format", {}).get("duration") or video_streams[0].get("duration") or 0)
+            subtitle_streams = []
+            subtitle_ordinal = 0
+            text_codecs = {"ass", "ssa", "subrip", "srt", "webvtt", "mov_text", "text", "microdvd"}
+            for stream in streams:
+                if stream.get("codec_type") == "subtitle":
+                    if (stream.get("codec_name") or "").lower() in text_codecs:
+                        subtitle_streams.append({"ordinal": subtitle_ordinal, **stream})
+                    subtitle_ordinal += 1
+            return {
+                "duration": duration,
+                "video": video_streams[0],
+                "audios": [stream for stream in streams if stream.get("codec_type") == "audio"],
+                "subtitle_streams": subtitle_streams,
+            }
+        except (json.JSONDecodeError, TypeError, ValueError) as error:
+            raise VideoProcessingError("FFprobe no devolvió metadatos válidos.") from error
+
     async def _run(client, message: Message) -> None:
-        del client
         command = (message.command[0] if message.command else "").lower()
         args = list(message.command[1:] if message.command else [])
         quoted = message.reply_to_message
@@ -146,18 +211,9 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         if command != "dw":
             active_chats.add(chat_id)
 
-        job_dir = Path(tempfile.mkdtemp(prefix="zerotwo-video-", dir=root))
-        input_path = job_dir / f"input{safe_video_extension(getattr(media, 'file_name', ''), getattr(media, 'mime_type', None))}"
-        output_path = job_dir / "output.mp4"
-        status = None
-        try:
-            status = await message.reply_text("📥 Descargando video…")
-            await quoted.download(file_name=str(input_path))
-            if not input_path.exists() or input_path.stat().st_size == 0:
-                raise VideoProcessingError("Telegram no entregó un video válido.")
-            info = await probe_video(input_path)
-
-            if command == "dw":
+        if command == "dw":
+            try:
+                info = await _probe_streaming(client, quoted)
                 video = info["video"]
                 text = (
                     "> *Información del video*\n\n"
@@ -176,7 +232,21 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     text += "- `Ninguno`\n"
                 text += "\n_*.dw2 [res] (doc)*_\n_*.dw3 [res] [audio] [sub] (doc)*_\n_*.dw4 (doc)*\n_*.mi [res] [pesoMB] (doc)*_"
                 await message.reply_text(text)
-                return
+            except Exception as error:
+                logger.exception("Error analizando dw por streaming")
+                await message.reply_text(f"❌ No se pudo analizar el video: {error}")
+            return
+
+        job_dir = Path(tempfile.mkdtemp(prefix="zerotwo-video-", dir=root))
+        input_path = job_dir / f"input{safe_video_extension(getattr(media, 'file_name', ''), getattr(media, 'mime_type', None))}"
+        output_path = job_dir / "output.mp4"
+        status = None
+        try:
+            status = await message.reply_text("📥 Descargando video…")
+            await quoted.download(file_name=str(input_path))
+            if not input_path.exists() or input_path.stat().st_size == 0:
+                raise VideoProcessingError("Telegram no entregó un video válido.")
+            info = await probe_video(input_path)
 
             resolution = 360 if command == "dw4" else _resolution(args[0])
             if resolution is None:
