@@ -80,6 +80,13 @@ def register(app):
 ├ Los archivos protegidos solicitan la contraseña en el chat
 └ /cancel ID — Cancelar una extracción activa
 
+<b>🎞 Compresión y hardsub</b>
+├ /dw — Ver información del video y sus pistas
+├ /dw2 &lt;res&gt; [doc] — Reescalar sin subtítulos
+├ /dw3 &lt;res&gt; &lt;audio&gt; &lt;sub&gt; [doc] — Quemar subtítulos
+├ /dw4 [doc] — Convertir a 360p
+└ /mi &lt;res&gt; &lt;pesoMB&gt; [doc] — Comprimir a un tamaño objetivo
+
 ━━━━━━━━━━━━━━━━━━━━
 🤖 <b>HERRAMIENTAS IA</b>
 ━━━━━━━━━━━━━━━━━━━━
@@ -131,6 +138,7 @@ def register(app):
 <b>⚠️ Límite Telegram:</b> 2GB por archivo
 
 La miniatura se adjunta al video en Telegram; no altera ni inserta la imagen dentro de los fotogramas del archivo.
+La compresión usa FFmpeg. Quemar subtítulos requiere una build con el filtro subtitles/libass.
 
 <b>💡 Tip:</b> Todos los videos descargados muestran un preview con screenshots automáticos 📸"""
 

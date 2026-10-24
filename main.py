@@ -164,6 +164,7 @@ from handlers import (
     crunchyroll_notify_handler,
     video_cover_handler,
     unrar_handler,
+    video_processing_handler,
 )
 
 # Registrar handlers
@@ -197,6 +198,7 @@ torrent_handler.register(app, DOWNLOAD_DIR)
 crunchyroll_notify_handler.register(app, WORK_DIR)
 video_cover_handler.register(app, WORK_DIR, BOT_TOKEN)
 unrar_handler.register(app, DOWNLOAD_DIR)
+video_processing_handler.register(app, user_states, DOWNLOAD_DIR)
 
 
 if __name__ == "__main__":
