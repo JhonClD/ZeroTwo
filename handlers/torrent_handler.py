@@ -23,7 +23,7 @@ _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
 async def _send_file(message, path: Path, status: Message, source_label: str, torrent_context=None):
     size = path.stat().st_size / (1024 * 1024)
-    caption = f"📁 <b>{escape(path.name)}</b>\n📦 {size:.1f} MB"
+    caption = f"Title: {path.name}\n┖ Size: {size:.1f} MB"
     last = [-10]
     meter = TransferProgress()
     if torrent_context:
@@ -73,12 +73,10 @@ async def _send_file(message, path: Path, status: Message, source_label: str, to
         thumb = path.with_suffix(".jpg")
         duration, thumb_path = await asyncio.to_thread(VideoProcessor.get_video_meta, path, thumb)
         await message.reply_video(video=str(path), thumb=thumb_path, caption=caption,
-                                  duration=duration or None, supports_streaming=True, progress=progress,
-                                  parse_mode=enums.ParseMode.HTML)
+                                  duration=duration or None, supports_streaming=True, progress=progress)
         thumb.unlink(missing_ok=True)
     else:
-        await message.reply_document(document=str(path), caption=caption, progress=progress,
-                                      parse_mode=enums.ParseMode.HTML)
+        await message.reply_document(document=str(path), caption=caption, progress=progress)
 
 
 async def _run_torrent(message: Message, source, download_dir: Path, source_label="torrent"):
@@ -87,8 +85,7 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
     started_at = time.monotonic()
     torrent_name = Path(str(source)).stem if not str(source).startswith("magnet:") else "Torrent"
     status = await message.reply_text(
-        _torrent_status(torrent_name, 0, 0, "En cola", 1, 0, None, started_at, task_id),
-        parse_mode=enums.ParseMode.HTML,
+        _torrent_status(torrent_name, 0, 0, "En cola", 1, 0, None, started_at, task_id)
     )
     try:
         meter = TransferProgress()
@@ -159,34 +156,33 @@ async def _run_torrent(message: Message, source, download_dir: Path, source_labe
 
 def _torrent_status(name, current, total, stage, queue_position, speed, peers,
                     started_at, task_id, meter=None, show_peers=True):
-    """Renderiza una plantilla de progreso inspirada en Leech-torrent de Rikka."""
+    """Renderiza el formato compacto de progreso solicitado para torrents."""
     meter = meter or TransferProgress()
     snapshot = meter.snapshot(current, total)
     percent = snapshot["percent"] or 0
-    filled = min(14, int(14 * percent / 100))
-    bar = "█" * filled + "░" * (14 - filled)
+    filled = min(13, int(13 * percent / 100))
+    bar = "■" * filled + "□" * (13 - filled)
     speed_bytes = speed if speed is not None else snapshot["speed"]
-    speed_text = f"{(speed_bytes or 0) / (1024 ** 2):.2f} MiB/s"
+    speed_text = f"↓ {(speed_bytes or 0) / (1024 ** 2):.2f} MiB/s"
     eta = ((total - current) / speed_bytes if speed_bytes and total else None)
     elapsed = max(0, int(time.monotonic() - started_at))
     size_text = f"{format_bytes(current)} / {format_bytes(total)}"
-    safe_name = escape(Path(str(name or "Cargando metadata...")).name)
-    safe_stage = escape(stage)
-    seeders = peers[0] if isinstance(peers, tuple) and peers[0] is not None else "—"
-    peer_count = peers[1] if isinstance(peers, tuple) and peers[1] is not None else "—"
     lines = [
-        "🌀 <b>Descargando Torrent</b>\n\n"
-        f"📁 <b>{safe_name}</b>\n\n"
-        f"<code>[{bar}] {percent:05.2f}%</code>\n\n"
-        f"💾 {size_text}\n"
-        f"⚡ {speed_text}   ⏳ {format_duration(eta)}\n"
-        f"📌 <b>Estado:</b> {safe_stage} · Cola: {queue_position}\n"
+        f"<b>{escape(Path(str(name or 'Torrent')).name)}</b>\n"
+        f"┃ [{bar}] {percent:05.2f}%\n"
+        f"┠ Size: {size_text}\n"
+        f"┠ Status: {escape(stage)}...\n"
+        f"┠ Queue: posición {queue_position}\n"
+        f"┠ Speed: {speed_text} | ETA: {format_duration(eta)}\n"
     ]
     if show_peers:
-        lines.append(f"🌱 Seeds: {seeders}   👥 Peers: {peer_count}\n")
+        seeds = peers[0] if isinstance(peers, tuple) else "—"
+        peer_count = peers[1] if isinstance(peers, tuple) else "—"
+        lines.append(f"┠ Seeds: {seeds} | Peers: {peer_count}\n")
     lines.extend([
-        f"⏱️ Tiempo: {elapsed // 60}m {elapsed % 60:02d}s\n\n"
-        f"<i>Cancelar:</i> <code>/cancel {task_id}</code>"
+        f"┠ Elapsed: {elapsed // 60}m {elapsed % 60:02d}s\n"
+        f"┠ Mode: #Download | #Torrent\n"
+        f"┗ Cancelar: /cancel {task_id}"
     ])
     return "".join(lines)
 
