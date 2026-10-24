@@ -334,17 +334,18 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 label = f"DW2 {resolution}p"
                 filename = f"Video_{resolution}p.mp4"
             elif command == "dw4":
-                input_mb = input_path.stat().st_size / 1024 / 1024
-                target_mb = input_mb * 0.45
-                if duration <= 0:
-                    raise VideoProcessingError("No se pudo determinar la duración del video.")
-                total_bits = target_mb * 1024 * 1024 * 8 * 0.94
-                bitrate = max(100_000, int(total_bits / duration - 96_000))
-                two_pass_commands = build_target_size_commands(
-                    input_path.name, output_path.name, bitrate=bitrate, audio_bitrate=96_000,
-                    threads=threads, passlog="dw4_twopass", scale="-2:360",
+                ceiling_bitrate = max(
+                    100_000,
+                    int(58 * 1024 * 1024 * 8 * 0.94 / duration - 64_000),
                 )
-                label = "DW4 360p · 2 pasadas"
+                ffmpeg = build_compression_command(
+                    input_path.name, output_path.name, crf=26,
+                    scale="-2:360", threads=threads, preset="faster",
+                    audio_bitrate=64_000,
+                    maxrate=int(ceiling_bitrate * 1.4),
+                    bufsize=ceiling_bitrate * 2,
+                )
+                label = "DW4 360p"
                 filename = "Video_360p_HD.mp4"
             elif command == "dw3":
                 audio = _index(args[1])
@@ -381,18 +382,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 filename = f"video_{resolution}p_{target_mb:g}mb.mp4"
                 label = f"MI {resolution}p"
 
-            if command == "dw4":
-                await status.edit_text(f"⚙️ <b>{label}</b>\nPasada 1/2…", parse_mode=enums.ParseMode.HTML)
-                for index, pass_command in enumerate(two_pass_commands, 1):
-                    if index == 2:
-                        await status.edit_text(f"⚙️ <b>{label}</b>\nPasada 2/2…", parse_mode=enums.ParseMode.HTML)
-                    await run_ffmpeg(
-                        pass_command, cwd=job_dir, duration=duration,
-                        progress_callback=lambda current, total: _progress(status, f"{label} · pasada {index}/2", current, total),
-                        timeout_seconds=timeout,
-                        progress_label=f"{label} · pasada {index}/2",
-                    )
-            elif command != "mi":
+            if command != "mi":
                 await status.edit_text(f"⚙️ <b>Procesando {label}…</b>", parse_mode=enums.ParseMode.HTML)
                 await run_ffmpeg(
                     ffmpeg, cwd=job_dir, duration=duration,

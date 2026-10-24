@@ -141,15 +141,28 @@ async def has_subtitles_filter() -> bool:
     return code == 0 and bool(re.search(r"^\s*[.A-Z]{3}\s+subtitles\s", listing, re.MULTILINE))
 
 
-def _base_command(input_name: str, output_name: str, threads: int) -> list[str]:
-    return [
+def _base_command(
+    input_name: str,
+    output_name: str,
+    threads: int,
+    *,
+    preset: str = "veryfast",
+    audio_bitrate: int = 128_000,
+    maxrate: int | None = None,
+    bufsize: int | None = None,
+) -> list[str]:
+    command = [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
         "-progress", "pipe:1", "-i", input_name,
         "-map_metadata", "0", "-map_chapters", "0", "-map", "0:v:0", "-map", "0:a?",
         "-threads", str(threads),
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-sn", output_name,
+        "-c:v", "libx264", "-preset", preset, "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", str(audio_bitrate), "-movflags", "+faststart", "-sn", output_name,
     ]
+    if maxrate is not None and bufsize is not None:
+        insert_at = command.index("-pix_fmt")
+        command[insert_at:insert_at] = ["-maxrate", str(maxrate), "-bufsize", str(bufsize)]
+    return command
 
 
 def build_compression_command(
@@ -159,16 +172,24 @@ def build_compression_command(
     crf: int = 23,
     scale: str | None = None,
     threads: int = 2,
+    preset: str = "veryfast",
+    audio_bitrate: int = 128_000,
+    maxrate: int | None = None,
+    bufsize: int | None = None,
 ) -> list[str]:
     if not 18 <= crf <= 32:
         raise ValueError("El CRF debe estar entre 18 y 32.")
-    command = _base_command(input_name, output_name, threads)
+    command = _base_command(
+        input_name, output_name, threads, preset=preset,
+        audio_bitrate=audio_bitrate, maxrate=maxrate, bufsize=bufsize,
+    )
     if scale:
         if not re.fullmatch(r"(?:-2|\d+):\d+", scale):
             raise ValueError("Resolución no permitida.")
         insert_at = command.index("-threads")
         command[insert_at:insert_at] = ["-vf", f"scale={scale}:force_original_aspect_ratio=decrease:force_divisible_by=2"]
-    command[command.index("-preset") + 2:command.index("-pix_fmt")] = ["-crf", str(crf)]
+    insert_at = command.index("-pix_fmt")
+    command[insert_at:insert_at] = ["-crf", str(crf)]
     return command
 
 
