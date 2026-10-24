@@ -8,7 +8,7 @@ import os
 import time
 from pathlib import Path
 
-from pyrogram import filters
+from pyrogram import enums, filters
 from pyrogram.types import Message
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,19 @@ async def _edit(message: Message, text: str) -> None:
         logger.debug("No se pudo actualizar la tarjeta de /updatezero", exc_info=True)
 
 
+async def _typing_loop(client, chat_id: int, stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        try:
+            await client.send_chat_action(chat_id, enums.ChatAction.TYPING)
+        except Exception:
+            logger.debug("No se pudo enviar la acción de escritura", exc_info=True)
+            return
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=4)
+        except asyncio.TimeoutError:
+            continue
+
+
 def register(app) -> None:
     @app.on_message(filters.command("updatezero"))
     async def update_zero(client, message: Message):
@@ -107,6 +120,8 @@ def register(app) -> None:
             percent=5, branch=branch, status="Verificando repositorio...",
             commits=commits_text, files=files_text, started=started,
         ))
+        typing_stop = asyncio.Event()
+        typing_task = asyncio.create_task(_typing_loop(client, message.chat.id, typing_stop))
 
         try:
             code, branch, stderr = await _git("rev-parse", "--abbrev-ref", "HEAD")
@@ -183,3 +198,7 @@ def register(app) -> None:
         except Exception:
             logger.exception("Falló /updatezero")
             await _edit(card, f"⬡ Update · ZeroTwo\n✖ Error al actualizar\n\n⎇ Branch: {branch}\n⚠ Motivo: error inesperado; revisa el registro del bot\n⏱ Elapsed: {_elapsed(time.monotonic() - started)}")
+        finally:
+            typing_stop.set()
+            typing_task.cancel()
+            await asyncio.gather(typing_task, return_exceptions=True)
