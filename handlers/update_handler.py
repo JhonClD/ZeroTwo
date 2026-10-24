@@ -91,7 +91,7 @@ async def _edit(message: Message, text: str) -> None:
 
 
 def register(app) -> None:
-    @app.on_message(filters.command("uptadezero"))
+    @app.on_message(filters.command(["updatezero", "uptadezero"]))
     async def update_zero(client, message: Message):
         owners = _owner_ids()
         sender = message.from_user

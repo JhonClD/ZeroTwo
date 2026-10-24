@@ -45,7 +45,7 @@ def register(app):
 └ /cancelprocess — Cancelar y limpiar archivos temporales
 
 <b>🛠 Administración</b>
-└ /uptadezero — Actualizar desde GitHub (solo propietarios autorizados)
+└ /updatezero — Actualizar desde GitHub (alias: /uptadezero; solo propietarios autorizados)
 
 <b>🖼 Portada de video</b>
 ├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
