@@ -105,13 +105,15 @@ def register(app, user_states: dict, work_dir: Path) -> None:
     async def _probe_streaming(client, quoted: Message) -> dict:
         """Obtiene metadatos como Rikka: alimenta ffprobe por stream y corta pronto."""
         process = await asyncio.create_subprocess_exec(
-            "ffprobe", "-v", "error", "-show_streams", "-show_format",
+            "ffprobe", "-v", "error", "-probesize", "100K", "-analyzeduration", "100K",
+            "-show_streams", "-show_format",
             "-print_format", "json", "-i", "pipe:0",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         stdout = bytearray()
+        stderr = bytearray()
         metadata_ready = asyncio.Event()
 
         async def collect_output() -> None:
@@ -122,9 +124,17 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 if b'"format"' in stdout:
                     metadata_ready.set()
 
+        async def collect_errors() -> None:
+            if process.stderr is None:
+                return
+            while chunk := await process.stderr.read(8192):
+                stderr.extend(chunk)
+
         reader = asyncio.create_task(collect_output())
+        error_reader = asyncio.create_task(collect_errors())
+        stream = client.stream_media(quoted)
         try:
-            async for chunk in client.stream_media(quoted):
+            async for chunk in stream:
                 if metadata_ready.is_set():
                     break
                 if process.stdin is None:
@@ -132,16 +142,22 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 process.stdin.write(chunk)
                 await process.stdin.drain()
             if process.stdin is not None:
-                process.stdin.close()
+                process.stdin.write_eof()
             await asyncio.wait_for(process.wait(), timeout=45)
             await reader
+            await error_reader
         except Exception:
             if process.returncode is None:
                 process.kill()
                 await process.wait()
             reader.cancel()
-            await asyncio.gather(reader, return_exceptions=True)
+            error_reader.cancel()
+            await asyncio.gather(reader, error_reader, return_exceptions=True)
             raise
+        finally:
+            close_stream = getattr(stream, "aclose", None)
+            if close_stream is not None:
+                await close_stream()
 
         try:
             data = json.loads(stdout)
@@ -165,7 +181,9 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 "subtitle_streams": subtitle_streams,
             }
         except (json.JSONDecodeError, TypeError, ValueError) as error:
-            raise VideoProcessingError("FFprobe no devolvió metadatos válidos.") from error
+            detail = stderr.decode(errors="replace").strip()[-300:]
+            suffix = f" {detail}" if detail else ""
+            raise VideoProcessingError(f"FFprobe no devolvió metadatos válidos.{suffix}") from error
 
     async def _run(client, message: Message) -> None:
         command = (message.command[0] if message.command else "").lower()
