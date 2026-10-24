@@ -17,6 +17,7 @@ from utils.download_queue import download_queue
 from utils.transfer_status import TransferProgress, format_bytes, format_file_info, format_duration, render_transfer_status
 
 logger = logging.getLogger(__name__)
+OWNER_USER_ID = 7856571519
 _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
 
@@ -189,10 +190,22 @@ def _torrent_status(name, current, total, stage, queue_position, speed, peers,
 def register(app, download_dir: Path):
     @app.on_message(filters.text & filters.regex(r"^magnet:\?"))
     async def magnet(client, message: Message):
+        if message.from_user is None or message.from_user.id != OWNER_USER_ID:
+            await message.reply_text(
+                "❌ <b>Las descargas torrent están restringidas al owner.</b>",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
         await _run_torrent(message, message.text.strip(), download_dir, "magnet")
 
     @app.on_message(filters.command("torrent"))
     async def torrent_file(client, message: Message):
+        if message.from_user is None or message.from_user.id != OWNER_USER_ID:
+            await message.reply_text(
+                "❌ <b>Las descargas torrent están restringidas al owner.</b>",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
         reply = message.reply_to_message
         arguments = list(message.command[1:] if message.command else [])
 
