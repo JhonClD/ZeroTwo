@@ -335,7 +335,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 filename = f"Video_{resolution}p.mp4"
             elif command == "dw4":
                 input_mb = input_path.stat().st_size / 1024 / 1024
-                target_mb = input_mb * 0.85
+                target_mb = input_mb * 0.50
                 if duration <= 0:
                     raise VideoProcessingError("No se pudo determinar la duración del video.")
                 total_bits = target_mb * 1024 * 1024 * 8 * 0.94
