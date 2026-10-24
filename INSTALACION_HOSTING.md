@@ -118,7 +118,7 @@ git pull
 
 Vuelve a iniciar el proceso desde el panel.
 
-También puedes usar `/updatezero` (alias compatible: `/uptadezero`) en Telegram para actualizar desde `origin/main` con fast-forward únicamente. El ID propietario `7856571519` está autorizado de forma predeterminada. Para autorizar IDs adicionales, configura `ZERO_TWO_UPDATE_OWNER_IDS` con sus IDs numéricos separados por comas (por ejemplo, `123456789,987654321`); `TIOANIME_OWNER_IDS` se usa como alternativa. El checkout debe estar en `main` y sin cambios locales. El comando informa el resultado, pero no reinicia el proceso: reinícialo desde el panel para cargar el código nuevo.
+También puedes usar `/updatezero` en Telegram para actualizar desde `origin/main` con fast-forward únicamente. El ID propietario `7856571519` está autorizado de forma predeterminada. Para autorizar IDs adicionales, configura `ZERO_TWO_UPDATE_OWNER_IDS` con sus IDs numéricos separados por comas (por ejemplo, `123456789,987654321`); `TIOANIME_OWNER_IDS` se usa como alternativa. El checkout debe estar en `main` y sin cambios locales. El comando informa el resultado, pero no reinicia el proceso: reinícialo desde el panel para cargar el código nuevo.
 
 ## Solución de problemas
 

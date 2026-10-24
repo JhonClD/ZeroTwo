@@ -87,11 +87,11 @@ async def _edit(message: Message, text: str) -> None:
     try:
         await message.edit_text(text)
     except Exception:
-        logger.debug("No se pudo actualizar la tarjeta de /uptadezero", exc_info=True)
+        logger.debug("No se pudo actualizar la tarjeta de /updatezero", exc_info=True)
 
 
 def register(app) -> None:
-    @app.on_message(filters.command(["updatezero", "uptadezero"]))
+    @app.on_message(filters.command("updatezero"))
     async def update_zero(client, message: Message):
         owners = _owner_ids()
         sender = message.from_user
@@ -181,5 +181,5 @@ def register(app) -> None:
             reason = str(error) if str(error) != "checkout" else "no se pudo verificar el checkout local"
             await _edit(card, f"⬡ Update · ZeroTwo\n✖ Error al actualizar\n\n⎇ Branch: {branch}\n⚠ Motivo: {reason}\n⏱ Elapsed: {_elapsed(time.monotonic() - started)}")
         except Exception:
-            logger.exception("Falló /uptadezero")
+            logger.exception("Falló /updatezero")
             await _edit(card, f"⬡ Update · ZeroTwo\n✖ Error al actualizar\n\n⎇ Branch: {branch}\n⚠ Motivo: error inesperado; revisa el registro del bot\n⏱ Elapsed: {_elapsed(time.monotonic() - started)}")
