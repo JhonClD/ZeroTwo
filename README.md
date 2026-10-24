@@ -341,10 +341,10 @@ ZeroTwo reutiliza el ejecutable y las opciones de descarga de AniDL que aparecen
 
 ```text
 /ani https://www.crunchyroll.com/es/watch/ID_DEL_EPISODIO
-/anidl https://www.crunchyroll.com/watch/ID_DEL_EPISODIO --dubLang spa-419 --dlsubs es-419 -q 5 --mp4
+/anidl https://www.crunchyroll.com/watch/ID_DEL_EPISODIO --dubLang spa-419 --dlsubs es-419 --hslang es-419 -q 5 --mp4
 ```
 
-También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; estos subtítulos quedan como pistas separadas, no se incrustan en el video. La calidad admitida es `-q 1..5`; el formato puede ser `--mp4` o `--mkv`. El comando valida el host y el ID del episodio, limita los argumentos y ejecuta AniDL sin shell. Los IDs estándar se pasan como selección `-e`; los IDs externos/legacy más largos se pasan con `--extid`, que es la opción indicada por AniDL para ese tipo de identificador. Las descargas se serializan, se pueden cancelar desde el botón y ZeroTwo no limpia automáticamente la carpeta de salida. Se conserva el flag `--force y` usado en los scripts de Drive, por lo que AniDL podría reemplazar una salida si el nombre coincide; respalda la carpeta antes de repetir episodios. El límite predeterminado de envío es 1900 MB.
+También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; `--hslang CODIGO` es opcional y solicita subtítulos incrustados. La calidad admitida es `-q 1..5`; el formato puede ser `--mp4` o `--mkv`. El comando valida el host y el ID del episodio, limita los argumentos y ejecuta AniDL sin shell. Los IDs estándar se pasan como selección `-e`; los IDs externos/legacy más largos se pasan con `--extid`, que es la opción indicada por AniDL para ese tipo de identificador. Las descargas se serializan, se pueden cancelar desde el botón y ZeroTwo no limpia automáticamente la carpeta de salida. Se conserva el flag `--force y` usado en los scripts de Drive, por lo que AniDL podría reemplazar una salida si el nombre coincide; respalda la carpeta antes de repetir episodios. El límite predeterminado de envío es 1900 MB.
 
 Opcionalmente configura `ZERO_TWO_ANIDL_DIR` (carpeta de instalación, predeterminada `~/anidl`), `ZERO_TWO_ANIDL_BIN` (ruta alternativa al ejecutable), `ZERO_TWO_ANIDL_TIMEOUT` (segundos, predeterminado 10800) y `ZERO_TWO_ANIDL_MAX_MB` (predeterminado 1900). La instalación/configuración local de AniDL no forma parte de `requirements.txt`.
 

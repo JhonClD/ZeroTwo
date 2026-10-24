@@ -95,8 +95,9 @@ def register(app, download_dir: Path | str | None = None) -> None:
             await message.reply_text(
                 "🎌 <b>AniDL · Crunchyroll</b>\n\n"
                 "Uso: <code>/ani URL [--dubLang jpn] [--dlsubs all|none|CODIGO] "
-                "[-q 1..5] [--mp4|--mkv]</code>\n"
+                "[--hslang CODIGO] [-q 1..5] [--mp4|--mkv]</code>\n"
                 "Predeterminados: audio japonés, softsubs todos, calidad 4 y MP4. "
+                "--hslang es opcional para incrustar subtítulos.\n"
                 "Requiere AniDL instalado y configurado localmente en el hosting.",
                 parse_mode=enums.ParseMode.HTML,
             )
@@ -147,7 +148,9 @@ def register(app, download_dir: Path | str | None = None) -> None:
                 "📥 <b>Descargando episodio con AniDL…</b>\n"
                 f"ID: <code>{html.escape(episode_id)}</code> · audio {html.escape(options.dub_language)} · "
                 f"softsubs {html.escape(options.download_subtitles)} · calidad {options.quality} · "
-                f"{options.container.upper()}\n"
+                f"{options.container.upper()}"
+                + (f" · hardsubs {html.escape(options.hard_subtitle_language)}" if options.hard_subtitle_language else "")
+                + "\n"
                 "La salida se conserva en el directorio de AniDL.",
                 reply_markup=_cancel_markup(job_id),
                 parse_mode=enums.ParseMode.HTML,
