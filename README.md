@@ -348,6 +348,47 @@ También se admite `--dlsubs all` (predeterminado) o `--dlsubs none`; `--hslang 
 
 Opcionalmente configura `ZERO_TWO_ANIDL_DIR` (carpeta de instalación, predeterminada `~/anidl`), `ZERO_TWO_ANIDL_BIN` (ruta alternativa al ejecutable), `ZERO_TWO_ANIDL_TIMEOUT` (segundos, predeterminado 10800) y `ZERO_TWO_ANIDL_MAX_MB` (predeterminado 1900). La instalación/configuración local de AniDL no forma parte de `requirements.txt`.
 
+#### Instalación en un hosting o PC Linux (Debian/Ubuntu, x86_64)
+
+AniDL se instala aparte de ZeroTwo. Descarga el paquete **CLI** que corresponda al sistema operativo y arquitectura desde los [releases oficiales de AniDL](https://github.com/anidl/multi-downloader-nx/releases). El siguiente ejemplo fija v5.8.6 para que el archivo y su suma SHA-256 coincidan; revisa los releases y actualiza `VERSION` cuando quieras instalar otra versión.
+
+```bash
+sudo apt update
+sudo apt install -y curl ffmpeg mkvtoolnix
+# Para extraer .7z instala 7zip (Debian 13) o p7zip-full (según tu Ubuntu).
+sudo apt install -y 7zip || sudo apt install -y p7zip-full
+
+VERSION=v5.8.6
+ASSET=multi-downloader-nx-linux-x64-cli.7z
+BASE="https://github.com/anidl/multi-downloader-nx/releases/download/${VERSION}"
+curl -fL "$BASE/$ASSET" -o "/tmp/$ASSET"
+curl -fL "$BASE/$ASSET.sha256" -o "/tmp/$ASSET.sha256"
+cd /tmp && sha256sum -c "$ASSET.sha256"
+
+mkdir -p "$HOME/anidl" /tmp/anidl-unpack
+if command -v 7zz >/dev/null 2>&1; then SEVENZIP=7zz; else SEVENZIP=7z; fi
+"$SEVENZIP" x "/tmp/$ASSET" -o/tmp/anidl-unpack -y
+cp -a /tmp/anidl-unpack/multi-downloader-nx-linux-x64-cli/. "$HOME/anidl/"
+chmod +x "$HOME/anidl/aniDL"
+"$HOME/anidl/aniDL" --help
+```
+
+El usuario que corre ZeroTwo debe poder ejecutar AniDL y escribir dentro de esa carpeta. Si el bot corre como servicio, contenedor o usuario distinto de tu sesión SSH, instala los archivos en el entorno/cuenta del bot (no solamente en `/root`) y usa rutas absolutas. En Docker, la dependencia debe instalarse dentro de la imagen o contenedor que ejecuta ZeroTwo. Para probar en una terminal, exporta las variables en esa misma sesión antes de iniciar el bot:
+
+```bash
+export ZERO_TWO_ANIDL_DIR="$HOME/anidl"
+export ZERO_TWO_ANIDL_BIN="$HOME/anidl/aniDL"
+python main.py
+```
+
+Si el hosting usa `systemd`, coloca esas dos variables en la sección `[Service]` del archivo de unidad y reinicia el servicio. Configura la sesión de AniDL localmente según su documentación oficial; no guardes credenciales en el repositorio ni las envíes al bot. Para ARM64 u otra distribución, elige el paquete CLI con la arquitectura/plataforma correspondiente en Releases y ajusta el nombre del directorio extraído.
+
+#### Windows y macOS
+
+En una PC Windows o macOS, descarga desde los mismos [releases oficiales](https://github.com/anidl/multi-downloader-nx/releases) el paquete **CLI** que coincida con el sistema y la arquitectura; extrae el directorio completo de AniDL y sus carpetas de configuración. En Windows configura `ZERO_TWO_ANIDL_DIR` como la ruta extraída y `ZERO_TWO_ANIDL_BIN` como la ruta completa al ejecutable (`aniDL.exe` si así aparece en el paquete). En macOS configura ambas variables a las rutas extraídas y asegúrate de que el ejecutable tenga permiso de ejecución. Inicia ZeroTwo con esas variables presentes en su entorno y prueba primero el ejecutable directamente con `--help`.
+
+AniDL es una herramienta de terceros no afiliada a Crunchyroll. Revisa sus avisos y respeta las condiciones del servicio y la legislación aplicable en tu ubicación.
+
 ## Comandos disponibles
 
 | Comando o acción | Descripción |
