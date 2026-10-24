@@ -39,6 +39,7 @@ from utils.video_processing import (
 logger = logging.getLogger(__name__)
 MIN_RESOLUTION = 144
 MAX_RESOLUTION = 2160
+ADMIN_USER_ID = 7856571519
 LANGUAGE_FLAGS = {
     "spa": "🇲🇽", "es": "🇲🇽", "lat": "🌎", "es-419": "🌎",
     "eng": "🇺🇸", "en": "🇺🇸", "jpn": "🇯🇵", "ja": "🇯🇵",
@@ -257,6 +258,13 @@ def register(app, user_states: dict, work_dir: Path) -> None:
     async def _run(client, message: Message) -> None:
         command = (message.command[0] if message.command else "").lower()
         args = list(message.command[1:] if message.command else [])
+        user = message.from_user
+        if command != "dw" and (user is None or user.id != ADMIN_USER_ID):
+            await message.reply_text(
+                "❌ <b>Este comando de compresión está restringido al administrador.</b>",
+                parse_mode=enums.ParseMode.HTML,
+            )
+            return
         quoted = message.reply_to_message
         if quoted is None:
             await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
