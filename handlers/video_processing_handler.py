@@ -36,6 +36,29 @@ from utils.video_processing import (
 logger = logging.getLogger(__name__)
 MIN_RESOLUTION = 144
 MAX_RESOLUTION = 2160
+LANGUAGE_FLAGS = {
+    "spa": "🇲🇽", "es": "🇲🇽", "lat": "🌎", "es-419": "🌎",
+    "eng": "🇺🇸", "en": "🇺🇸", "jpn": "🇯🇵", "ja": "🇯🇵",
+    "por": "🇧🇷", "pt": "🇧🇷", "ara": "🇸🇦", "ar": "🇸🇦",
+    "fre": "🇫🇷", "fra": "🇫🇷", "fr": "🇫🇷", "ger": "🇩🇪",
+    "deu": "🇩🇪", "de": "🇩🇪", "ita": "🇮🇹", "it": "🇮🇹",
+    "rus": "🇷🇺", "ru": "🇷🇺", "chi": "🇨🇳", "zho": "🇨🇳",
+    "cmn": "🇨🇳", "zh": "🇨🇳", "kor": "🇰🇷", "ko": "🇰🇷",
+    "dut": "🇳🇱", "nld": "🇳🇱", "nl": "🇳🇱", "pol": "🇵🇱",
+    "pl": "🇵🇱", "tur": "🇹🇷", "tr": "🇹🇷", "cze": "🇨🇿",
+    "ces": "🇨🇿", "cs": "🇨🇿", "hun": "🇭🇺", "hu": "🇭🇺",
+    "rum": "🇷🇴", "ron": "🇷🇴", "ro": "🇷🇴", "swe": "🇸🇪",
+    "sv": "🇸🇪", "nor": "🇳🇴", "nob": "🇳🇴", "nb": "🇳🇴",
+    "no": "🇳🇴", "dan": "🇩🇰", "da": "🇩🇰", "fin": "🇫🇮",
+    "fi": "🇫🇮", "gre": "🇬🇷", "ell": "🇬🇷", "el": "🇬🇷",
+    "tha": "🇹🇭", "th": "🇹🇭", "vie": "🇻🇳", "vi": "🇻🇳",
+    "ind": "🇮🇩", "id": "🇮🇩", "may": "🇲🇾", "msa": "🇲🇾",
+    "ms": "🇲🇾", "hin": "🇮🇳", "hi": "🇮🇳", "ukr": "🇺🇦",
+    "uk": "🇺🇦", "heb": "🇮🇱", "he": "🇮🇱", "bul": "🇧🇬",
+    "bg": "🇧🇬", "srp": "🇷🇸", "sr": "🇷🇸", "hrv": "🇭🇷",
+    "hr": "🇭🇷", "slk": "🇸🇰", "sk": "🇸🇰", "slv": "🇸🇮",
+    "sl": "🇸🇮", "und": "🏳️",
+}
 
 
 def _resolution(raw: str | None) -> int | None:
@@ -70,7 +93,9 @@ def _stream_label(stream: dict, ordinal: int) -> str:
     language = _language(stream)
     codec = stream.get("codec_name") or "unknown"
     suffix = f" · {title}" if title else ""
-    return f"Pista {ordinal + 1}: {codec} ({language}){suffix}"
+    flag = LANGUAGE_FLAGS.get(language)
+    language_text = f"{flag} ({language})" if flag else f"({language})"
+    return f"Pista {ordinal + 1}: {codec} {language_text}{suffix}"
 
 
 def _usage(command: str) -> str:
