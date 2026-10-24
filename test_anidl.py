@@ -2,7 +2,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
+from handlers.anidl_download_handler import _is_anidl_owner
 from utils.anidl import (
     AniDLError,
     AniDLOptions,
@@ -15,6 +17,14 @@ from utils.anidl import (
 
 
 class AniDLTests(unittest.TestCase):
+    def test_only_configured_telegram_owner_can_use_anidl(self):
+        owner = SimpleNamespace(from_user=SimpleNamespace(id=7856571519))
+        other_user = SimpleNamespace(from_user=SimpleNamespace(id=123456789))
+        anonymous = SimpleNamespace(from_user=None)
+        self.assertTrue(_is_anidl_owner(owner))
+        self.assertFalse(_is_anidl_owner(other_user))
+        self.assertFalse(_is_anidl_owner(anonymous))
+
     def test_extracts_episode_id_from_localized_crunchyroll_url(self):
         self.assertEqual(
             extract_episode_id("https://www.crunchyroll.com/es/watch/G6JQW4Z9X/episode-name"),

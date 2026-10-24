@@ -24,12 +24,12 @@ from utils.anidl import (
 from utils.transfer_status import TransferProgress, render_transfer_status
 
 logger = logging.getLogger(__name__)
+ANIDL_OWNER_ID = 7856571519
 
 
-def _owner_id(message: Message) -> int:
-    if message.from_user:
-        return message.from_user.id
-    return message.chat.id
+def _is_anidl_owner(message: Message) -> bool:
+    """Solo la cuenta configurada por el propietario puede iniciar AniDL."""
+    return bool(message.from_user and message.from_user.id == ANIDL_OWNER_ID)
 
 
 def _ani_dl_setup() -> tuple[Path, Path, str, int, int] | tuple[None, None, None, int, int]:
@@ -86,6 +86,10 @@ def register(app, download_dir: Path | str | None = None) -> None:
 
     @app.on_message(filters.command(["ani", "anidl"]))
     async def anidl_command(client, message: Message):
+        if not _is_anidl_owner(message):
+            await message.reply_text("⛔ Solo el propietario puede usar AniDL.")
+            return
+
         args = (message.text or "").split(maxsplit=1)
         if len(args) < 2:
             await message.reply_text(
@@ -118,7 +122,7 @@ def register(app, download_dir: Path | str | None = None) -> None:
             )
             return
 
-        owner_id = _owner_id(message)
+        owner_id = message.from_user.id
         if owner_id in owner_jobs:
             await message.reply_text("Ya tienes una descarga AniDL activa.")
             return

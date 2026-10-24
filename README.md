@@ -337,7 +337,7 @@ En Telegram, envía `/drive_sync` y después el archivo. ZeroTwo lo guardará en
 
 ### Integración opcional con aniDL
 
-ZeroTwo reutiliza el ejecutable y las opciones de descarga de AniDL que aparecen en los scripts de Drive, pero mantiene su propio flujo Pyrogram para enviar el archivo al chat. Instala aniDL y configura su sesión local siguiendo la documentación de esa herramienta; no se copian tokens ni credenciales de los scripts de Drive. El ejecutable se busca por defecto en `~/anidl/aniDL` (o en el `PATH`) y la salida debe quedar en `~/anidl/videos`.
+ZeroTwo reutiliza el ejecutable y las opciones de descarga de AniDL que aparecen en los scripts de Drive, pero mantiene su propio flujo Pyrogram para enviar el archivo al chat. El uso de `/ani` y `/anidl` está restringido al propietario de Telegram con ID `7856571519`. Instala aniDL y configura su sesión local siguiendo la documentación de esa herramienta; no se copian tokens ni credenciales de los scripts de Drive. El ejecutable se busca por defecto en `~/anidl/aniDL` (o en el `PATH`) y la salida debe quedar en `~/anidl/videos`.
 
 ```text
 /ani https://www.crunchyroll.com/es/watch/ID_DEL_EPISODIO
@@ -372,7 +372,7 @@ Opcionalmente configura `ZERO_TWO_ANIDL_DIR` (carpeta de instalación, predeterm
 | `/crset`, `/crrem` | Suscribir o quitar el chat de los avisos de Crunchyroll; solo propietario. |
 | `/crstatus`, `/crlist`, `/crnotify` | Ver el estado, listar episodios recientes o revisar avisos manualmente. |
 | `/anime <nombre>` | Busca información de un anime. |
-| `/ani` o `/anidl <url> [opciones]` | Descarga un episodio de Crunchyroll mediante aniDL instalado localmente. |
+| `/ani` o `/anidl <url> [opciones]` | Descarga un episodio de Crunchyroll mediante aniDL local; solo propietario. |
 | Pegar un enlace | Inicia la descarga automática cuando el formato es compatible. |
 
 Drime acepta enlaces compartidos de archivos y carpetas en `app.drime.cloud` con descarga habilitada. Los enlaces a un archivo se descargan directamente; si el enlace es una carpeta, ZeroTwo muestra botones para elegir los archivos de uno en uno. El límite predeterminado es 1800 MB por archivo y se puede ajustar con `ZERO_TWO_DRIME_MAX_MB` (50–4096 MB). El hosting necesita espacio temporal suficiente porque el archivo se descarga primero y luego se envía a Telegram. La integración usa las rutas públicas que consume la web de Drime; Drime podría modificarlas sin aviso.
