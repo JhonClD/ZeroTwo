@@ -133,13 +133,13 @@ def _dw_html(info: dict) -> str:
 
 def _usage(command: str) -> str:
     usages = {
-        "dw": "*.dw*",
-        "dw2": "*.dw2 [resolución] (doc)*",
-        "dw3": "*.dw3 [resolución] [audio] [sub] (doc)*",
-        "dw4": "*.dw4 (doc)*",
-        "mi": "*.mi [resolución] [pesoMB] (doc)*",
+        "dw": "<i><b>/dw</b></i>",
+        "dw2": "<i><b>/dw2 [resolución] [doc]</b></i>",
+        "dw3": "<i><b>/dw3 [resolución] [audio] [sub] [doc]</b></i>",
+        "dw4": "<i><b>/dw4 [doc]</b></i>",
+        "mi": "<i><b>/mi [resolución] [pesoMB] [doc]</b></i>",
     }
-    return f"Uso: {usages[command]}\nResponde al video o documento de video que quieras procesar."
+    return f"<b>Uso:</b> {usages[command]}\n<i>Responde al video o documento de video que quieras procesar.</i>"
 
 
 def register(app, user_states: dict, work_dir: Path) -> None:
@@ -156,7 +156,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             return
         percent = min(100, max(0, current * 100 / total))
         try:
-            await status.edit_text(f"⚙️ {label}\nProgreso: {percent:.0f}%")
+            await status.edit_text(f"⚙️ <b>{html.escape(label)}</b>\nProgreso: {percent:.0f}%", parse_mode=enums.ParseMode.HTML)
         except Exception:
             pass
 
@@ -257,41 +257,41 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         args = list(message.command[1:] if message.command else [])
         quoted = message.reply_to_message
         if quoted is None:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
 
         media = quoted.video or quoted.document
         if media is None:
-            await message.reply_text("Responde directamente a un video o documento de video.")
+            await message.reply_text("<b>Responde directamente a un video o documento de video.</b>", parse_mode=enums.ParseMode.HTML)
             return
         if quoted.document and not str(getattr(media, "mime_type", "")).startswith("video/"):
             suffix = Path(getattr(media, "file_name", "")).suffix.lower()
             if suffix not in {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}:
-                await message.reply_text("El documento citado no parece ser un video.")
+                await message.reply_text("<b>El documento citado no parece ser un video.</b>", parse_mode=enums.ParseMode.HTML)
                 return
 
         doc = bool(args and args[-1].lower() == "doc")
         if doc:
             args.pop()
         if command == "dw" and args:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
         if command in {"dw2", "dw3", "mi"} and not args:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
         if command == "dw3" and len(args) != 3:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
         if command == "mi" and len(args) != 2:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
         if command in {"dw2", "dw4"} and args:
-            await message.reply_text(_usage(command))
+            await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
 
         chat_id = message.chat.id
         if command != "dw" and chat_id in active_chats:
-            await message.reply_text("⏳ Ya hay un video procesándose en este chat.")
+            await message.reply_text("⏳ <b>Ya hay un video procesándose en este chat.</b>", parse_mode=enums.ParseMode.HTML)
             return
         if command != "dw":
             active_chats.add(chat_id)
@@ -303,7 +303,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             except Exception as error:
                 logger.exception("Error analizando dw por streaming")
                 detail = str(error).strip() or type(error).__name__
-                await message.reply_text(f"❌ No se pudo analizar el video: {detail}")
+                await message.reply_text(f"❌ <b>No se pudo analizar el video:</b> {html.escape(detail)}", parse_mode=enums.ParseMode.HTML)
             return
 
         job_dir = Path(tempfile.mkdtemp(prefix="zerotwo-video-", dir=root))
@@ -311,7 +311,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         output_path = job_dir / "output.mp4"
         status = None
         try:
-            status = await message.reply_text("📥 Descargando video…")
+            status = await message.reply_text("📥 <b>Descargando video…</b>", parse_mode=enums.ParseMode.HTML)
             await quoted.download(file_name=str(input_path))
             if not input_path.exists() or input_path.stat().st_size == 0:
                 raise VideoProcessingError("Telegram no entregó un video válido.")
@@ -319,7 +319,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
 
             resolution = 360 if command == "dw4" else _resolution(args[0])
             if resolution is None:
-                await message.reply_text(f"❌ Resolución válida: {MIN_RESOLUTION}-{MAX_RESOLUTION}.\n{_usage(command)}")
+                await message.reply_text(f"❌ <b>Resolución válida:</b> {MIN_RESOLUTION}-{MAX_RESOLUTION}.\n{_usage(command)}", parse_mode=enums.ParseMode.HTML)
                 return
 
             duration = float(info["duration"])
@@ -361,11 +361,11 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                     input_path.name, output_path.name, bitrate=bitrate,
                     threads=threads, passlog="twopass", scale=f"-2:{resolution}",
                 )
-                status_text = f"⚙️ MI {resolution}p → {target_mb:g} MB\nPasada 1/2…"
-                await status.edit_text(status_text)
+                status_text = f"⚙️ <b>MI {resolution}p → {target_mb:g} MB</b>\nPasada 1/2…"
+                await status.edit_text(status_text, parse_mode=enums.ParseMode.HTML)
                 for index, ffmpeg in enumerate((first, second), 1):
                     if index == 2:
-                        await status.edit_text(f"⚙️ MI {resolution}p → {target_mb:g} MB\nPasada 2/2…")
+                        await status.edit_text(f"⚙️ <b>MI {resolution}p → {target_mb:g} MB</b>\nPasada 2/2…", parse_mode=enums.ParseMode.HTML)
                     await run_ffmpeg(
                         ffmpeg, cwd=job_dir, duration=duration,
                         progress_callback=lambda current, total: _progress(status, f"MI {resolution}p · pasada {index}/2", current, total),
@@ -375,17 +375,17 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 label = f"MI {resolution}p"
 
             if command == "dw4":
-                await status.edit_text(f"⚙️ {label}\nPasada 1/2…")
+                await status.edit_text(f"⚙️ <b>{label}</b>\nPasada 1/2…", parse_mode=enums.ParseMode.HTML)
                 for index, pass_command in enumerate(two_pass_commands, 1):
                     if index == 2:
-                        await status.edit_text(f"⚙️ {label}\nPasada 2/2…")
+                        await status.edit_text(f"⚙️ <b>{label}</b>\nPasada 2/2…", parse_mode=enums.ParseMode.HTML)
                     await run_ffmpeg(
                         pass_command, cwd=job_dir, duration=duration,
                         progress_callback=lambda current, total: _progress(status, f"{label} · pasada {index}/2", current, total),
                         timeout_seconds=timeout,
                     )
             elif command != "mi":
-                await status.edit_text(f"⚙️ Procesando {label}…")
+                await status.edit_text(f"⚙️ <b>Procesando {label}…</b>", parse_mode=enums.ParseMode.HTML)
                 await run_ffmpeg(
                     ffmpeg, cwd=job_dir, duration=duration,
                     progress_callback=lambda current, total: _progress(status, label, current, total),
@@ -397,21 +397,21 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             size_mb = output_path.stat().st_size / 1024 / 1024
             caption = f"✅ {label} | {size_mb:.1f} MB"
             if doc:
-                await message.reply_document(document=str(output_path), file_name=filename, caption=caption)
+                await message.reply_document(document=str(output_path), file_name=filename, caption=caption, parse_mode=enums.ParseMode.HTML)
             else:
-                await message.reply_video(video=str(output_path), caption=caption, supports_streaming=True)
-            await status.edit_text("✅ Proceso terminado.")
+                await message.reply_video(video=str(output_path), caption=caption, supports_streaming=True, parse_mode=enums.ParseMode.HTML)
+            await status.edit_text("✅ <b>Proceso terminado.</b>", parse_mode=enums.ParseMode.HTML)
         except (ValueError, VideoProcessingError) as error:
             if status:
-                await status.edit_text(f"❌ {error}")
+                await status.edit_text(f"❌ <b>{html.escape(str(error))}</b>", parse_mode=enums.ParseMode.HTML)
             else:
-                await message.reply_text(f"❌ {error}")
+                await message.reply_text(f"❌ <b>{html.escape(str(error))}</b>", parse_mode=enums.ParseMode.HTML)
         except Exception:
             logger.exception("Error procesando %s", command)
             if status:
-                await status.edit_text("❌ Error al procesar el video. Revisa el formato y vuelve a intentarlo.")
+                await status.edit_text("❌ <b>Error al procesar el video.</b> Revisa el formato y vuelve a intentarlo.", parse_mode=enums.ParseMode.HTML)
             else:
-                await message.reply_text("❌ Error al procesar el video.")
+                await message.reply_text("❌ <b>Error al procesar el video.</b>", parse_mode=enums.ParseMode.HTML)
         finally:
             active_chats.discard(chat_id)
             for path in job_dir.glob("*"):
