@@ -172,7 +172,7 @@ def build_compression_command(
     return command
 
 
-def _base_target_command(input_name: str, output_name: str, *, bitrate: int, pass_number: int, passlog: str, threads: int, scale: str | None = None) -> list[str]:
+def _base_target_command(input_name: str, output_name: str, *, bitrate: int, audio_bitrate: int, pass_number: int, passlog: str, threads: int, scale: str | None = None) -> list[str]:
     command = [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
         "-progress", "pipe:1", "-i", input_name,
@@ -189,18 +189,18 @@ def _base_target_command(input_name: str, output_name: str, *, bitrate: int, pas
         command.extend(["-an", "-sn", "-f", "null", os.devnull])
     else:
         command.extend([
-            "-map", "0:a?", "-c:a", "aac", "-b:a", "128k",
+            "-map", "0:a?", "-c:a", "aac", "-b:a", str(audio_bitrate),
             "-movflags", "+faststart", "-sn", output_name,
         ])
     return command
 
 
-def build_target_size_commands(input_name: str, output_name: str, *, bitrate: int, passlog: str = "twopass", threads: int = 2, scale: str | None = None) -> tuple[list[str], list[str]]:
+def build_target_size_commands(input_name: str, output_name: str, *, bitrate: int, audio_bitrate: int = 128_000, passlog: str = "twopass", threads: int = 2, scale: str | None = None) -> tuple[list[str], list[str]]:
     if bitrate < 100_000:
         raise ValueError("Bitrate de video demasiado bajo.")
     return (
-        _base_target_command(input_name, output_name, bitrate=bitrate, pass_number=1, passlog=passlog, threads=threads, scale=scale),
-        _base_target_command(input_name, output_name, bitrate=bitrate, pass_number=2, passlog=passlog, threads=threads, scale=scale),
+        _base_target_command(input_name, output_name, bitrate=bitrate, audio_bitrate=audio_bitrate, pass_number=1, passlog=passlog, threads=threads, scale=scale),
+        _base_target_command(input_name, output_name, bitrate=bitrate, audio_bitrate=audio_bitrate, pass_number=2, passlog=passlog, threads=threads, scale=scale),
     )
 
 
