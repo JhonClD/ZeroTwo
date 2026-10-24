@@ -17,6 +17,7 @@ import html
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -63,10 +64,10 @@ LANGUAGE_FLAGS = {
 
 
 def _resolution(raw: str | None) -> int | None:
-    try:
-        value = int(raw or "")
-    except ValueError:
+    match = re.match(r"^\s*(\d+)", raw or "")
+    if not match:
         return None
+    value = int(match.group(1))
     return value if MIN_RESOLUTION <= value <= MAX_RESOLUTION else None
 
 
@@ -285,7 +286,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         if command == "mi" and len(args) != 2:
             await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
-        if command in {"dw2", "dw4"} and args:
+        if command == "dw4" and args:
             await message.reply_text(_usage(command), parse_mode=enums.ParseMode.HTML)
             return
 
