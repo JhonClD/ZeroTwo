@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 from downloaders.portable_aria2 import ensure_aria2c
@@ -20,28 +19,6 @@ _PROGRESS_RE = re.compile(
 _SPEED_RE = re.compile(r"DL:(?P<speed>[\d.]+\s*[KMGT]?i?B)", re.IGNORECASE)
 _SEEDS_RE = re.compile(r"(?:SEED|SD):(?P<seeds>\d+)", re.IGNORECASE)
 _PEERS_RE = re.compile(r"(?:PEER|CN):(?P<peers>\d+)", re.IGNORECASE)
-_TRACKER_CACHE: str | None = None
-
-
-def _get_trackers() -> str:
-    """Obtiene una lista de trackers públicos como el descargador de Rikka."""
-    global _TRACKER_CACHE
-    if _TRACKER_CACHE is not None:
-        return _TRACKER_CACHE
-    try:
-        request = urllib.request.Request(
-            "https://cf.trackerslist.com/best_aria2.txt",
-            headers={"User-Agent": "ZeroTwo-Torrent/1.0"},
-        )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            trackers = response.read().decode(errors="replace")
-        _TRACKER_CACHE = ",".join(
-            line.strip() for line in trackers.splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        )
-    except Exception:
-        _TRACKER_CACHE = ""
-    return _TRACKER_CACHE
 
 
 def parse_aria2_details(line: str) -> tuple[int, int, int | None, int | None, int | None] | None:
@@ -97,20 +74,12 @@ class TorrentDownloader:
                 f"archivos en .runtime/: {error}"
             )
         output_dir.mkdir(parents=True, exist_ok=True)
-        trackers = _get_trackers()
         command = [
             aria2_binary, "--dir", str(output_dir), "--continue=true",
             "--seed-time=0", "--follow-torrent=true", "--bt-enable-lpd=true",
-            "--enable-peer-exchange=true", "--enable-dht=true",
-            "--max-connection-per-server=16", "--split=16", "--min-split-size=1M",
-            "--bt-max-peers=100", "--max-tries=5", "--retry-wait=3",
-            "--connect-timeout=10", "--timeout=30", "--summary-interval=1",
-            "--console-log-level=notice", "--show-console-readout=true",
-            "--file-allocation=none",
+            "--enable-dht=true", "--summary-interval=1", "--console-log-level=notice",
+            "--show-console-readout=true", "--file-allocation=none", str(source),
         ]
-        if trackers:
-            command.append(f"--bt-tracker={trackers}")
-        command.append(str(source))
         try:
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
