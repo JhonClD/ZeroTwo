@@ -323,6 +323,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 return
 
             duration = float(info["duration"])
+            two_pass_commands = None
             if command == "dw2":
                 ffmpeg = build_compression_command(
                     input_path.name, output_path.name, crf=24,
@@ -331,11 +332,13 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 label = f"DW2 {resolution}p"
                 filename = f"Video_{resolution}p.mp4"
             elif command == "dw4":
-                ffmpeg = build_compression_command(
-                    input_path.name, output_path.name, crf=26,
-                    scale="-2:360", threads=threads,
+                target_mb = 58.0
+                bitrate = calculate_video_bitrate(target_mb, duration, audio_bitrate=64_000)
+                two_pass_commands = build_target_size_commands(
+                    input_path.name, output_path.name, bitrate=bitrate,
+                    threads=threads, passlog="dw4_twopass", scale="-2:360",
                 )
-                label = "DW4 360p"
+                label = "DW4 360p · 2 pasadas"
                 filename = "Video_360p_HD.mp4"
             elif command == "dw3":
                 audio = _index(args[1])
@@ -371,7 +374,17 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 filename = f"video_{resolution}p_{target_mb:g}mb.mp4"
                 label = f"MI {resolution}p"
 
-            if command != "mi":
+            if command == "dw4":
+                await status.edit_text(f"⚙️ {label}\nPasada 1/2…")
+                for index, pass_command in enumerate(two_pass_commands, 1):
+                    if index == 2:
+                        await status.edit_text(f"⚙️ {label}\nPasada 2/2…")
+                    await run_ffmpeg(
+                        pass_command, cwd=job_dir, duration=duration,
+                        progress_callback=lambda current, total: _progress(status, f"{label} · pasada {index}/2", current, total),
+                        timeout_seconds=timeout,
+                    )
+            elif command != "mi":
                 await status.edit_text(f"⚙️ Procesando {label}…")
                 await run_ffmpeg(
                     ffmpeg, cwd=job_dir, duration=duration,
