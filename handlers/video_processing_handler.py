@@ -13,13 +13,14 @@ Todos operan sobre el video al que se responde.
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import os
 import tempfile
 from pathlib import Path
 
-from pyrogram import filters
+from pyrogram import enums, filters
 from pyrogram.types import Message
 
 from utils.video_processing import (
@@ -96,6 +97,38 @@ def _stream_label(stream: dict, ordinal: int) -> str:
     flag = LANGUAGE_FLAGS.get(language)
     language_text = f"{flag} ({language})" if flag else f"({language})"
     return f"Pista {ordinal + 1}: {codec} {language_text}{suffix}"
+
+
+def _stream_html(stream: dict, ordinal: int) -> str:
+    tags = stream.get("tags") or {}
+    title = html.escape((tags.get("title") or "").strip())
+    language = html.escape(_language(stream))
+    codec = html.escape(stream.get("codec_name") or "unknown")
+    flag = LANGUAGE_FLAGS.get(_language(stream), "")
+    title_suffix = f" · {title}" if title else ""
+    return f"• Pista {ordinal + 1}: {codec} {flag} ({language}){title_suffix}"
+
+
+def _dw_html(info: dict) -> str:
+    video = info["video"]
+    resolution = f"{video.get('width', '?')}x{video.get('height', '?')}"
+    audios = info.get("audios", [])
+    subtitles = info.get("subtitle_streams", [])
+    audio_lines = "\n".join(_stream_html(stream, i) for i, stream in enumerate(audios)) or "• `Ninguno`"
+    subtitle_lines = "\n".join(_stream_html(stream, i) for i, stream in enumerate(subtitles)) or "• `Ninguno`"
+    return (
+        "<blockquote><b>Información del video</b>\n\n"
+        f"Resolución: {html.escape(resolution)}\n"
+        f"Duración: {_duration(info['duration'])}</blockquote>\n\n"
+        "<blockquote><b>Audios disponibles</b>\n\n"
+        f"{audio_lines}</blockquote>\n\n"
+        "<blockquote><b>Subtítulos disponibles</b>\n\n"
+        f"{subtitle_lines}</blockquote>\n\n"
+        "<i><b>.dw2 [res] (doc)</b></i>\n"
+        "<i><b>.dw3 [res] [audio] [sub] (doc)</b></i>\n"
+        "<i><b>.dw4 (doc)</b></i>\n"
+        "<i><b>.mi [res] [pesoMB] (doc)</b></i>"
+    )
 
 
 def _usage(command: str) -> str:
@@ -266,24 +299,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         if command == "dw":
             try:
                 info = await _probe_streaming(client, quoted)
-                video = info["video"]
-                text = (
-                    "> *Información del video*\n\n"
-                    f"> Resolución: `{video.get('width', '?')}x{video.get('height', '?')}`\n"
-                    f"> Duración: `{_duration(info['duration'])}`\n\n"
-                    "> *Audios disponibles*\n"
-                )
-                for ordinal, stream in enumerate(info.get("audios", [])):
-                    text += f"- {_stream_label(stream, ordinal)}\n"
-                if not info.get("audios"):
-                    text += "- `Ninguno`\n"
-                text += "\n> *Subtítulos disponibles*\n"
-                for ordinal, stream in enumerate(info.get("subtitle_streams", [])):
-                    text += f"- {_stream_label(stream, ordinal)}\n"
-                if not info.get("subtitle_streams"):
-                    text += "- `Ninguno`\n"
-                text += "\n_*.dw2 [res] (doc)*_\n_*.dw3 [res] [audio] [sub] (doc)*_\n_*.dw4 (doc)*\n_*.mi [res] [pesoMB] (doc)*_"
-                await message.reply_text(text)
+                await message.reply_text(_dw_html(info), parse_mode=enums.ParseMode.HTML)
             except Exception as error:
                 logger.exception("Error analizando dw por streaming")
                 detail = str(error).strip() or type(error).__name__
