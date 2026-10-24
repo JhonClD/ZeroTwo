@@ -68,6 +68,24 @@ class CommandBuilderTests(unittest.TestCase):
         self.assertNotIn("marca_bot.ass", joined)
         self.assertIn("input_template.mp4", temporary)
 
+    def test_hardsub_maps_only_selected_audio_or_none(self):
+        commands, _ = build_hardsub_template_commands(
+            "input.mkv", "output.mp4", embedded_ordinal=0, audio_ordinal=1,
+        )
+        self.assertIn("0:a:1", commands[1])
+        self.assertNotIn("0:a?", commands[1])
+
+        silent_commands, _ = build_hardsub_template_commands(
+            "input.mkv", "silent.mp4", embedded_ordinal=0, audio_ordinal=-1,
+        )
+        self.assertNotIn("0:a?", silent_commands[1])
+        self.assertNotIn("0:a:0", silent_commands[1])
+
+        with self.assertRaises(ValueError):
+            build_hardsub_template_commands(
+                "input.mkv", "bad.mp4", embedded_ordinal=0, audio_ordinal=-2,
+            )
+
 
 class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -104,6 +122,8 @@ class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_template_compress_and_hardsub(self):
         info = await probe_video(self.work / "input.mp4")
         self.assertGreater(info["duration"], 1.5)
+        self.assertEqual(info["audio"][0]["ordinal"], 0)
+        self.assertIn("AAC", info["audio"][0]["label"])
 
         compressed = self.work / "compressed.mp4"
         commands, _ = build_compression_commands("input.mp4", compressed.name, bitrate="1200k")
@@ -112,10 +132,13 @@ class FfmpegIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         external_output = self.work / "external.mp4"
         commands, _ = build_hardsub_template_commands(
-            "input.mp4", external_output.name, subtitle_name="subtitle.srt", bitrate="1200k",
+            "input.mp4", external_output.name, subtitle_name="subtitle.srt", audio_ordinal=0,
+            bitrate="1200k",
         )
         await self._run_commands(commands, info["duration"])
         self.assertGreater(external_output.stat().st_size, 0)
+        output_info = await probe_video(external_output)
+        self.assertEqual(len(output_info["audio"]), 1)
 
         internal = self.work / "input_subbed.mkv"
         mux = subprocess.run(

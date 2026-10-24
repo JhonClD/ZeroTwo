@@ -167,6 +167,28 @@ def register(app, user_states: dict, work_dir: Path) -> None:
         )
         state["stage"] = "subtitle_options"
 
+    async def _show_audio_options(job_id: str) -> None:
+        state = flows[job_id]
+        tracks = state["media"].get("audio", [])
+        rows = [
+            [InlineKeyboardButton(
+                f"Pista {track['ordinal'] + 1}: {track['label']}"[:62],
+                callback_data=f"vp:audio:{job_id}:{track['ordinal']}",
+            )]
+            for track in tracks[:12]
+        ]
+        rows.append([InlineKeyboardButton("Continuar sin audio", callback_data=f"vp:audio:{job_id}:none")])
+        rows.append([InlineKeyboardButton("Cancelar", callback_data=f"vp:cancel:{job_id}")])
+        message = "🎧 <b>Elige la pista de audio que conservar</b>"
+        if not tracks:
+            message = "🎧 <b>El video no contiene pistas de audio.</b> Puedes continuar sin audio."
+        await state["status"].edit_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(rows),
+            parse_mode=enums.ParseMode.HTML,
+        )
+        state["stage"] = "audio_options"
+
     async def _prepare(message: Message, flow_kind: str, target_size: float | None = None) -> None:
         owner_id = _owner_id(message)
         async with admission_lock:
@@ -388,6 +410,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                         output.name,
                         subtitle_name=state.get("external_subtitle"),
                         embedded_ordinal=state.get("subtitle_ordinal"),
+                        audio_ordinal=state["audio_ordinal"],
                         bitrate=os.getenv("ZERO_TWO_HARDSUB_BITRATE", "4800k"),
                         preset=os.getenv("ZERO_TWO_HARDSUB_PRESET", "medium"),
                         threads=threads,
@@ -525,8 +548,21 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 if ordinal not in allowed:
                     return await query.answer("La pista seleccionada no existe.", show_alert=True)
                 state["subtitle_ordinal"] = ordinal
+                await query.answer()
+                await _show_audio_options(job_id)
+                return
+
+            if action == "audio" and len(parts) == 4:
+                if parts[3] == "none":
+                    state["audio_ordinal"] = -1
+                else:
+                    ordinal = int(parts[3])
+                    allowed = {track["ordinal"] for track in state["media"].get("audio", [])}
+                    if ordinal not in allowed:
+                        return await query.answer("La pista de audio seleccionada no existe.", show_alert=True)
+                    state["audio_ordinal"] = ordinal
                 enqueued = await _enqueue(job_id, "subtitles")
-                await query.answer("Quemado enviado a la cola" if enqueued else "La cola está llena.", show_alert=not enqueued)
+                await query.answer("Encodeo enviado a la cola" if enqueued else "La cola está llena.", show_alert=not enqueued)
                 return
 
             if action == "external":
@@ -580,6 +616,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
             "action_options": "esperando que elijas una acción",
             "compression_options": "esperando el perfil de compresión",
             "subtitle_options": "esperando la pista de subtítulos",
+            "audio_options": "esperando la pista de audio",
             "waiting_external": "esperando el archivo de subtítulos",
             "queued": "en cola o en proceso",
         }
@@ -630,7 +667,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 raise VideoProcessingError("El subtítulo supera el límite de 10 MB.")
             state["external_subtitle"] = subtitle_path.name
             state["external_task"] = None
-            await _enqueue(job_id, "subtitles")
+            await _show_audio_options(job_id)
         except asyncio.CancelledError:
             try:
                 await state["status"].edit_text("⛔ Proceso cancelado; se limpiaron los temporales.")

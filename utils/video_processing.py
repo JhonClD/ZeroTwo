@@ -106,6 +106,21 @@ async def probe_video(path: Path) -> dict:
         except (TypeError, ValueError):
             pass
 
+    audio = []
+    audio_ordinal = 0
+    for stream in streams:
+        if stream.get("codec_type") != "audio":
+            continue
+        tags = stream.get("tags") or {}
+        language = (tags.get("language") or "und").upper()[:8]
+        title = (tags.get("title") or "").strip()[:40]
+        codec = (stream.get("codec_name") or "audio").upper()
+        channels = stream.get("channels")
+        channel_label = f"{channels}ch" if channels else ""
+        label = " · ".join(part for part in (language, title or codec, channel_label) if part)
+        audio.append({"ordinal": audio_ordinal, "label": label or f"Pista {audio_ordinal + 1}"})
+        audio_ordinal += 1
+
     subtitles = []
     ordinal = 0
     for stream in streams:
@@ -119,7 +134,7 @@ async def probe_video(path: Path) -> dict:
             label = " · ".join(part for part in (language, title or codec.upper()) if part)
             subtitles.append({"ordinal": ordinal, "label": label or f"Pista {ordinal + 1}"})
         ordinal += 1
-    return {"duration": duration, "video": video_streams[0], "subtitles": subtitles}
+    return {"duration": duration, "video": video_streams[0], "audio": audio, "subtitles": subtitles}
 
 
 async def has_subtitles_filter() -> bool:
@@ -150,11 +165,17 @@ def _scale_filter(scale: str | None) -> str | None:
     return f"scale={scale}:force_original_aspect_ratio=decrease:force_divisible_by=2"
 
 
-def _remux_command(input_name: str, media_name: str) -> list[str]:
-    return [
+def _remux_command(input_name: str, media_name: str, audio_ordinal: int | None = None) -> list[str]:
+    command = [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "warning", "-progress", "pipe:1",
-        "-i", input_name, "-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "copy", media_name,
+        "-i", input_name, "-map", "0:v:0",
     ]
+    if audio_ordinal is None:
+        command += ["-map", "0:a?"]
+    elif audio_ordinal >= 0:
+        command += ["-map", f"0:a:{audio_ordinal}"]
+    command += ["-c:v", "copy", "-c:a", "copy", media_name]
+    return command
 
 
 def _pass_command(
@@ -196,6 +217,7 @@ def _template_commands(
     preset: str = "medium",
     scale: str | None = None,
     subtitle_filter: str | None = None,
+    audio_ordinal: int | None = None,
     extra_commands: list[list[str]] | None = None,
     extra_files: list[str] | None = None,
     threads: int = 2,
@@ -210,7 +232,7 @@ def _template_commands(
     passlog = f"{stem}_template.mp4_2pass.log"
     commands = list(extra_commands or [])
     commands += [
-        _remux_command(input_name, media_name),
+        _remux_command(input_name, media_name, audio_ordinal),
         _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=1, passlog=passlog, video_filter=scale_filter),
         _pass_command(media_name, output_name, bitrate=bitrate, preset=preset, threads=threads, pass_number=2, passlog=passlog, video_filter=final_filter),
     ]
@@ -256,6 +278,7 @@ def build_hardsub_template_commands(
     *,
     subtitle_name: str | None = None,
     embedded_ordinal: int | None = None,
+    audio_ordinal: int | None = None,
     bitrate: str = "4800k",
     preset: str = "medium",
     threads: int = 2,
@@ -263,6 +286,8 @@ def build_hardsub_template_commands(
     """Construye la plantilla completa con extracción y quemado de subtítulos."""
     if (subtitle_name is None) == (embedded_ordinal is None):
         raise ValueError("Debe indicarse una pista interna o un archivo externo de subtítulos.")
+    if audio_ordinal is not None and audio_ordinal < -1:
+        raise ValueError("Pista de audio no válida.")
     if subtitle_name is not None:
         if Path(subtitle_name).name != subtitle_name or Path(subtitle_name).suffix.lower() not in {".srt", ".ass", ".ssa", ".vtt"}:
             raise ValueError("Archivo de subtítulos no válido.")
@@ -281,7 +306,7 @@ def build_hardsub_template_commands(
     subtitle_filter = f"subtitles=filename='{_escape_filter_filename(extracted_subtitle)}'"
     return _template_commands(
         input_name, output_name, bitrate=bitrate, preset=preset, subtitle_filter=subtitle_filter,
-        extra_commands=extra_commands, extra_files=extra_files, threads=threads,
+        audio_ordinal=audio_ordinal, extra_commands=extra_commands, extra_files=extra_files, threads=threads,
     )
 
 
