@@ -167,8 +167,12 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 process.stdin.write(chunk)
                 await process.stdin.drain()
             if process.stdin is not None:
-                process.stdin.write_eof()
-            await asyncio.wait_for(process.wait(), timeout=45)
+                try:
+                    process.stdin.write_eof()
+                except (AttributeError, NotImplementedError):
+                    pass
+                process.stdin.close()
+            await asyncio.wait_for(process.wait(), timeout=120)
             await reader
             await error_reader
         except Exception:
@@ -277,7 +281,8 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 await message.reply_text(text)
             except Exception as error:
                 logger.exception("Error analizando dw por streaming")
-                await message.reply_text(f"❌ No se pudo analizar el video: {error}")
+                detail = str(error).strip() or type(error).__name__
+                await message.reply_text(f"❌ No se pudo analizar el video: {detail}")
             return
 
         job_dir = Path(tempfile.mkdtemp(prefix="zerotwo-video-", dir=root))
