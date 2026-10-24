@@ -124,10 +124,10 @@ def _dw_html(info: dict) -> str:
         f"{audio_lines}</blockquote>\n\n"
         "<blockquote><b>Subtítulos disponibles</b>\n\n"
         f"{subtitle_lines}</blockquote>\n\n"
-        "<i><b>.dw2 [res] (doc)</b></i>\n"
-        "<i><b>.dw3 [res] [audio] [sub] (doc)</b></i>\n"
-        "<i><b>.dw4 (doc)</b></i>\n"
-        "<i><b>.mi [res] [pesoMB] (doc)</b></i>"
+        "<i><b>/dw2 [res] (doc)</b></i>\n"
+        "<i><b>/dw3 [res] [audio] [sub] (doc)</b></i>\n"
+        "<i><b>/dw4 (doc)</b></i>\n"
+        "<i><b>/mi [res] [pesoMB] (doc)</b></i>"
     )
 
 
