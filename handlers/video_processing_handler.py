@@ -333,8 +333,12 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 label = f"DW2 {resolution}p"
                 filename = f"Video_{resolution}p.mp4"
             elif command == "dw4":
-                target_mb = 58.0
-                bitrate = calculate_video_bitrate(target_mb, duration, audio_bitrate=64_000)
+                input_mb = input_path.stat().st_size / 1024 / 1024
+                target_mb = min(58.0, max(1.0, input_mb * 0.90))
+                if duration <= 0:
+                    raise VideoProcessingError("No se pudo determinar la duración del video.")
+                total_bits = target_mb * 1024 * 1024 * 8 * 0.94
+                bitrate = max(100_000, int(total_bits / duration - 64_000))
                 two_pass_commands = build_target_size_commands(
                     input_path.name, output_path.name, bitrate=bitrate,
                     threads=threads, passlog="dw4_twopass", scale="-2:360",
