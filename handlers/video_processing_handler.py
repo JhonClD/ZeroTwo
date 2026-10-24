@@ -339,7 +339,7 @@ def register(app, user_states: dict, work_dir: Path) -> None:
                 if duration <= 0:
                     raise VideoProcessingError("No se pudo determinar la duración del video.")
                 total_bits = target_mb * 1024 * 1024 * 8 * 0.94
-                bitrate = max(100_000, int(total_bits / duration - 64_000))
+                bitrate = max(100_000, int(total_bits / duration - 128_000))
                 two_pass_commands = build_target_size_commands(
                     input_path.name, output_path.name, bitrate=bitrate,
                     threads=threads, passlog="dw4_twopass", scale="-2:360",
