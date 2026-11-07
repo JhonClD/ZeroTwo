@@ -2,14 +2,9 @@
 tioanime_notify_handler.py — Notificador automático de nuevos episodios
 TioAnime (SUB) + LatAnime (LAT/ESP) para Zero Two (Pyrogram / Telegram).
 
-Puerto de plugins/tioanime-notify.js (WhatsApp/Baileys) → hace lo mismo que
-el plugin original: scrapea portadas, detecta episodios nuevos, los encola,
-descarga desde el primer servidor soportado (MEGA → MediaFire, igual que el
-JS) y los envía al chat como documento/video.
-
-Descarga: reutiliza downloaders.MEGADownloader y downloaders.MediaFireDownloader
-(los mismos dos servicios que soportaba el JS — mega + mediafire; los demás
-servidores/embeds se detectan pero se saltan, igual que en el original).
+Puerto de plugins/tioanime-notify.js (WhatsApp/Baileys) para ZeroTwo:
+detecta episodios, los encola y los envía al chat como documento/video.
+Fuentes: TioAnime usa YourUpload → MEGA; LatAnime usa MediaFire → MEGA → GoFile.
 
 Comandos (mismos nombres que el JS):
   /tiostart [min]   /tiostop     /tiostatus   /tiocheck
@@ -37,7 +32,7 @@ from bs4 import BeautifulSoup
 from pyrogram import filters, enums
 from pyrogram.types import Message
 
-from downloaders import MEGADownloader, MediaFireDownloader, YourUploadDownloader
+from downloaders import GoFileDownloader, MEGADownloader, MediaFireDownloader, YourUploadDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +54,10 @@ HEADERS = {
     'Accept-Language': 'es-419,es;q=0.9,en;q=0.8',
 }
 
-PREFS_EMBED = ['mp4upload', 'filemoon', 'streamwish', 'streamtape', 'doodstream', 'voe', 'vidhide', 'okru', 'mixdrop']
+try:
+    GOFILE_MAX_BYTES = max(50, min(4096, int(os.getenv('ZERO_TWO_GOFILE_MAX_MB', '1800')))) * 1024 * 1024
+except ValueError:
+    GOFILE_MAX_BYTES = 1800 * 1024 * 1024
 
 # Comandos restringidos a "owner" (igual que COMANDOS_OWNER en el JS)
 COMANDOS_OWNER = {'tiostart', 'tiostop', 'tiointerval', 'tioflush', 'tiounblock'}
@@ -218,6 +216,7 @@ def detectar_serv_nombre(url: str) -> str:
     u = url.lower()
     if 'mediafire' in u:  return 'mediafire'
     if 'mega.nz' in u:    return 'mega'
+    if 'gofile.io' in u: return 'gofile'
     if 'yourupload' in u: return 'yourupload'
     if 'voe' in u:        return 'voe'
     if 'filemoon' in u:   return 'filemoon'
@@ -469,9 +468,10 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
         es_mega = 'mega.nz' in href
         es_mediafire = 'mediafire.com' in href
         es_yourupload = YourUploadDownloader.is_yourupload_url(href)
-        es_otro = es_yourupload or any(d in href for d in ['voe.sx', 'streamtape', 'filemoon', 'mp4upload', 'streamwish',
+        es_gofile = GoFileDownloader.is_gofile_url(href)
+        es_otro = es_yourupload or es_gofile or any(d in href for d in ['voe.sx', 'streamtape', 'filemoon', 'mp4upload', 'streamwish',
                                            'dood', 'upstream', 'ok.ru', 'vidhide', 'mixdrop', 'savefiles',
-                                           'gofile.io', 'byse'])
+                                           'byse'])
         es_redirector = ('latanime.org' not in href and 'javascript' not in href and '#' not in href
                           and len(href) > 20 and not re.search(r'\.(jpg|png|gif|css|js)$', href))
 
@@ -479,12 +479,12 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
         if es_mega or es_mediafire:
             srvs.append({'nombre': 'mega' if es_mega else 'mediafire', 'url': href, 'directo': True})
         elif es_otro:
-            nombre = 'yourupload' if es_yourupload else (label or detectar_serv_nombre(href))
+            nombre = 'yourupload' if es_yourupload else 'gofile' if es_gofile else (label or detectar_serv_nombre(href))
             srvs.append({'nombre': nombre, 'url': href, 'directo': False})
         elif es_redirector:
             srvs.append({'nombre': label or 'redir', 'url': href, 'directo': False, 'esRedirector': True})
 
-    dominios = ['mega.nz', 'mediafire.com', 'yourupload.com', 'voe.sx', 'streamtape', 'filemoon', 'mp4upload',
+    dominios = ['mega.nz', 'mediafire.com', 'yourupload.com', 'gofile.io', 'voe.sx', 'streamtape', 'filemoon', 'mp4upload',
                 'streamwish', 'dood', 'ok.ru']
     for r in [s for s in srvs if s.get('esRedirector')]:
         try:
@@ -535,19 +535,11 @@ def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]
     mega = [s for s in srvs if s['nombre'] == 'mega']
     mediafire = [s for s in srvs if s['nombre'] == 'mediafire']
     yourupload = [s for s in srvs if s['nombre'] == 'yourupload']
-    otros = [s for s in srvs if s['directo'] and s['nombre'] not in ('mega', 'mediafire', 'yourupload')]
-
-    def _pref_idx(s):
-        for i, p in enumerate(PREFS_EMBED):
-            if p in s['nombre'] or p in s['url']:
-                return i
-        return 99
-
-    embeds = sorted([s for s in srvs if not s['directo'] and s['nombre'] != 'yourupload'], key=_pref_idx)
+    gofile = [s for s in srvs if s['nombre'] == 'gofile']
 
     if fuente == 'latanime':
-        return mediafire + mega + otros + embeds
-    return yourupload + mega + mediafire + otros + embeds
+        return mediafire + mega + gofile
+    return yourupload + mega
 
 
 # ─── Envío de episodio ────────────────────────────────────────────────────────
@@ -602,8 +594,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 
         for srv in orden:
             nombre_servidor = (srv.get('nombre') or 'servidor').upper()
-            # YourUpload se admite para TioAnime; LatAnime conserva MEGA/MediaFire.
-            procesables = ('mega', 'mediafire') if fuente == 'latanime' else ('yourupload', 'mega', 'mediafire')
+            procesables = ('mediafire', 'mega', 'gofile') if fuente == 'latanime' else ('yourupload', 'mega')
             if srv['nombre'] not in procesables:
                 continue
             try:
@@ -612,8 +603,26 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                     ok, fpath, err = await MEGADownloader.download(srv['url'], tmp_dir)
                 elif srv['nombre'] == 'mediafire':
                     ok, fpath, err = await MediaFireDownloader.download(srv['url'], tmp_dir)
-                else:
+                elif srv['nombre'] == 'yourupload':
                     ok, fpath, err = await YourUploadDownloader.download(srv['url'], tmp_dir, file_name)
+                else:
+                    share = await asyncio.to_thread(GoFileDownloader.list_shared_files, srv['url'])
+                    video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
+                    entry = next((item for item in share['files']
+                                  if Path(item.get('name', '')).suffix.lower() in video_exts), None)
+                    if entry is None:
+                        raise ValueError('GoFile no contiene un archivo de video compatible.')
+                    gofile_name = GoFileDownloader._safe_filename(entry.get('name'), str(entry.get('id') or 'episode'))
+                    fpath, _ = await asyncio.to_thread(
+                        GoFileDownloader.download_file,
+                        entry,
+                        tmp_dir / gofile_name,
+                        GOFILE_MAX_BYTES,
+                        None,
+                        share.get('content_id', ''),
+                    )
+                    file_name = gofile_name
+                    ok, err = True, None
 
                 if ok and fpath:
                     video_path = fpath
