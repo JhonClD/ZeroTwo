@@ -31,7 +31,7 @@ ZeroTwo ofrece las siguientes funciones principales:
 | Telegram | Recibir enlaces y archivos mediante un bot. |
 | Descargas | Descargar archivos de MEGA, MediaFire, enlaces públicos de Google Drive, Drime y GoFile; seleccionar archivos de carpetas públicas de Drive, Drime y GoFile. Las descargas de archivos se procesan en una cola FIFO para evitar ejecuciones simultáneas. |
 | Vista previa | En videos descargados desde MEGA, MediaFire o Drive, enviar 10 capturas aleatorias distribuidas durante todo el video antes del video. |
-| Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. |
+| Anime | Descarga de episodios por URL o búsqueda en VerAnimes, Evangelion-EC, AnimeAV1, Katanime, TioAnime, LatAnime, JKAnime, AnimeDBS y MonosChinos. Tio-notify admite descargas de MEGA, MediaFire y YourUpload. |
 | Utilidades web | Descargar recursos por URL y generar capturas de páginas. |
 | Audio | Extraer audio de videos de YouTube. |
 | Archivos | Extraer archivos `.rar` con progreso, solicitud temporal de contraseña y cancelación. Los videos se envían como videos reproducibles con duración y miniatura cuando FFmpeg está disponible; los demás archivos se envían como documentos. Se requiere `unrar`, `unar`, `7zz` o `7z` en el sistema. |

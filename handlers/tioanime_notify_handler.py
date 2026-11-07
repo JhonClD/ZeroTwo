@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 from pyrogram import filters, enums
 from pyrogram.types import Message
 
-from downloaders import MEGADownloader, MediaFireDownloader
+from downloaders import MEGADownloader, MediaFireDownloader, YourUploadDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,7 @@ def detectar_serv_nombre(url: str) -> str:
     u = url.lower()
     if 'mediafire' in u:  return 'mediafire'
     if 'mega.nz' in u:    return 'mega'
+    if 'yourupload' in u: return 'yourupload'
     if 'voe' in u:        return 'voe'
     if 'filemoon' in u:   return 'filemoon'
     if 'mp4upload' in u:  return 'mp4upload'
@@ -324,7 +325,9 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
                     continue
                 es_mega = 'mega.nz' in url or 'mega.co.nz' in url
                 es_mediafire = 'mediafire.com' in url
-                _push('mega' if es_mega else 'mediafire' if es_mediafire else nombre, url, es_mega or es_mediafire)
+                es_yourupload = YourUploadDownloader.is_yourupload_url(url) or 'yourupload' in nombre
+                _push('yourupload' if es_yourupload else 'mega' if es_mega else 'mediafire' if es_mediafire else nombre,
+                      url, es_mega or es_mediafire)
         except Exception:
             pass
 
@@ -334,12 +337,14 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
             continue
         es_mega = 'mega.nz' in href or 'mega.co.nz' in href
         es_mediafire = 'mediafire.com' in href
-        es_otro = 'gofile.io' in href or '1fichier' in href or 'pixeldrain' in href
+        es_yourupload = YourUploadDownloader.is_yourupload_url(href)
+        es_otro = 'gofile.io' in href or '1fichier' in href or 'pixeldrain' in href or es_yourupload
         sin_soporte = 'hqq.tv' in href or 'netu.tv' in href
         if sin_soporte or not (es_mega or es_mediafire or es_otro):
             continue
         label = a_tag.get_text(strip=True).lower()
-        _push('mega' if es_mega else 'mediafire' if es_mediafire else (label or 'descarga'), href, True)
+        _push('yourupload' if es_yourupload else 'mega' if es_mega else 'mediafire' if es_mediafire else (label or 'descarga'),
+              href, not es_yourupload)
 
     for script in soup.find_all('script'):
         code = script.string or script.get_text() or ''
@@ -358,7 +363,10 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
                         continue
                     es_mega = 'mega.nz' in url or 'mega.co.nz' in url
                     es_mediafire = 'mediafire.com' in url
-                    _push('mega' if es_mega else 'mediafire' if es_mediafire else str(item[0]).lower(), url, es_mega or es_mediafire)
+                    server_label = str(item[0]).lower()
+                    es_yourupload = YourUploadDownloader.is_yourupload_url(url) or 'yourupload' in server_label
+                    _push('yourupload' if es_yourupload else 'mega' if es_mega else 'mediafire' if es_mediafire else server_label,
+                          url, es_mega or es_mediafire)
             except Exception:
                 pass
         m_arr = re.search(r'var\s+videos\s*=\s*(\[[\s\S]*?\]);', code)
@@ -372,7 +380,9 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
                     if 'hqq.tv' in url or 'netu.tv' in url or 'netu.ac' in url:
                         continue
                     es_mega = 'mega.nz' in url
-                    _push('mega' if es_mega else (nom or url), url, es_mega)
+                    es_yourupload = YourUploadDownloader.is_yourupload_url(url) or 'yourupload' in nom
+                    _push('yourupload' if es_yourupload else 'mega' if es_mega else (nom or url),
+                          url, es_mega)
             except Exception:
                 pass
 
@@ -458,7 +468,8 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
 
         es_mega = 'mega.nz' in href
         es_mediafire = 'mediafire.com' in href
-        es_otro = any(d in href for d in ['voe.sx', 'streamtape', 'filemoon', 'mp4upload', 'streamwish',
+        es_yourupload = YourUploadDownloader.is_yourupload_url(href)
+        es_otro = es_yourupload or any(d in href for d in ['voe.sx', 'streamtape', 'filemoon', 'mp4upload', 'streamwish',
                                            'dood', 'upstream', 'ok.ru', 'vidhide', 'mixdrop', 'savefiles',
                                            'gofile.io', 'byse'])
         es_redirector = ('latanime.org' not in href and 'javascript' not in href and '#' not in href
@@ -468,11 +479,12 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
         if es_mega or es_mediafire:
             srvs.append({'nombre': 'mega' if es_mega else 'mediafire', 'url': href, 'directo': True})
         elif es_otro:
-            srvs.append({'nombre': label or detectar_serv_nombre(href), 'url': href, 'directo': False})
+            nombre = 'yourupload' if es_yourupload else (label or detectar_serv_nombre(href))
+            srvs.append({'nombre': nombre, 'url': href, 'directo': False})
         elif es_redirector:
             srvs.append({'nombre': label or 'redir', 'url': href, 'directo': False, 'esRedirector': True})
 
-    dominios = ['mega.nz', 'mediafire.com', 'voe.sx', 'streamtape', 'filemoon', 'mp4upload',
+    dominios = ['mega.nz', 'mediafire.com', 'yourupload.com', 'voe.sx', 'streamtape', 'filemoon', 'mp4upload',
                 'streamwish', 'dood', 'ok.ru']
     for r in [s for s in srvs if s.get('esRedirector')]:
         try:
@@ -493,7 +505,7 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
             idx = next((i for i, s in enumerate(srvs) if s['url'] == r['url']), -1)
             if url_real and idx != -1:
                 srvs[idx]['url'] = url_real
-                srvs[idx]['nombre'] = 'mediafire' if 'mediafire' in url_real else 'mega' if 'mega.nz' in url_real else detectar_serv_nombre(url_real)
+                srvs[idx]['nombre'] = detectar_serv_nombre(url_real)
                 srvs[idx]['directo'] = 'mega.nz' in url_real or 'mediafire.com' in url_real
                 srvs[idx].pop('esRedirector', None)
             elif idx != -1:
@@ -522,7 +534,8 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
 def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]:
     mega = [s for s in srvs if s['nombre'] == 'mega']
     mediafire = [s for s in srvs if s['nombre'] == 'mediafire']
-    otros = [s for s in srvs if s['directo'] and s['nombre'] not in ('mega', 'mediafire')]
+    yourupload = [s for s in srvs if s['nombre'] == 'yourupload']
+    otros = [s for s in srvs if s['directo'] and s['nombre'] not in ('mega', 'mediafire', 'yourupload')]
 
     def _pref_idx(s):
         for i, p in enumerate(PREFS_EMBED):
@@ -530,11 +543,11 @@ def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]
                 return i
         return 99
 
-    embeds = sorted([s for s in srvs if not s['directo']], key=_pref_idx)
+    embeds = sorted([s for s in srvs if not s['directo'] and s['nombre'] != 'yourupload'], key=_pref_idx)
 
     if fuente == 'latanime':
         return mediafire + mega + otros + embeds
-    return mega + mediafire + otros + embeds
+    return yourupload + mega + mediafire + otros + embeds
 
 
 # ─── Envío de episodio ────────────────────────────────────────────────────────
@@ -589,15 +602,18 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 
         for srv in orden:
             nombre_servidor = (srv.get('nombre') or 'servidor').upper()
-            # Igual que el JS: solo mega y mediafire tienen soporte de descarga.
-            if srv['nombre'] not in ('mega', 'mediafire'):
+            # YourUpload se admite para TioAnime; LatAnime conserva MEGA/MediaFire.
+            procesables = ('mega', 'mediafire') if fuente == 'latanime' else ('yourupload', 'mega', 'mediafire')
+            if srv['nombre'] not in procesables:
                 continue
             try:
                 logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ]...")
                 if srv['nombre'] == 'mega':
                     ok, fpath, err = await MEGADownloader.download(srv['url'], tmp_dir)
-                else:
+                elif srv['nombre'] == 'mediafire':
                     ok, fpath, err = await MediaFireDownloader.download(srv['url'], tmp_dir)
+                else:
+                    ok, fpath, err = await YourUploadDownloader.download(srv['url'], tmp_dir, file_name)
 
                 if ok and fpath:
                     video_path = fpath

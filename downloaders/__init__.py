@@ -11,6 +11,7 @@ from .drive_downloader import (
 from .gofile_downloader import GoFileDownloader, GoFileDownloadError
 from .mediafire_downloader import MediaFireDownloader
 from .mega_downloader import MEGADownloader
+from .yourupload_downloader import YourUploadDownloader
 
 __all__ = [
     'DriveDownloader',
@@ -19,6 +20,7 @@ __all__ = [
     'GoFileDownloader',
     'MEGADownloader',
     'MediaFireDownloader',
+    'YourUploadDownloader',
     'format_preview_timestamp',
     'take_video_screenshots',
 ]
