@@ -221,7 +221,7 @@ def _format_quality(height: int | None) -> str:
 def _format_audio(fuente: str, idioma: str) -> tuple[str, str]:
     if fuente == 'latanime':
         if idioma == 'castellano':
-            return '🇪🇸', 'Castellano'
+            return '🇪🇸', 'Español Castellano'
         return '🇲🇽', 'Español Latino'
     return '🇯🇵', 'Japonés · Sub Español'
 
@@ -322,6 +322,7 @@ def _build_episode_card(
     safe_url = html.escape(str(ep_url), quote=True)
     source_name = 'LatAnime' if fuente == 'latanime' else 'TioAnime'
     flag, audio = _format_audio(fuente, idioma)
+    audio_display = f'{audio} {flag}'
     if total > 0:
         percent = min(100.0, max(0.0, current * 100.0 / total))
     else:
@@ -335,7 +336,7 @@ def _build_episode_card(
         '',
         '<b>◦ Detalles</b>',
         f'  › <b>Fuente:</b> {source_name}',
-        f'  › <b>Audio:</b> {flag} {audio}',
+        f'  › <b>Audio:</b> {audio_display}',
         f'  › <b>Calidad:</b> {html.escape(quality)}',
         f'  › <b>Servidor:</b> {html.escape(server_label)}',
         '',
