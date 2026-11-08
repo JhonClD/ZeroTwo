@@ -304,7 +304,7 @@ def _build_episode_card(
     elapsed: float | None = None,
     error: str | None = None,
 ) -> str:
-    title = html.escape(_styled_title(titulo))
+    title = html.escape(_styled_title(_strip_episode_number(titulo, ep_num)))
     safe_url = html.escape(str(ep_url), quote=True)
     source_name = 'LatAnime' if fuente == 'latanime' else 'TioAnime'
     flag, audio = _format_audio(fuente, idioma)
