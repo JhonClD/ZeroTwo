@@ -253,6 +253,20 @@ def _strip_episode_number(title: str, ep_num=None) -> str:
                 title = title[:trailing_number.start()]
     return title.strip()
 
+def _strip_audio_language_suffix(title: str, fuente: str, idioma: str) -> str:
+    if fuente != 'latanime':
+        return title
+    if idioma == 'castellano':
+        suffix = r'(?:español[\s_-]+)?castellano'
+    else:
+        suffix = r'(?:español[\s_-]+)?(?:latinoamérica|latino|latina|latam)'
+    cleaned = re.sub(rf'(?i)(?:\s+|[_-]){suffix}\s*$', '', title)
+    return cleaned.rstrip(' ,:;_-')
+
+def _clean_episode_title(title: str, ep_num, fuente: str, idioma: str) -> str:
+    title = _strip_audio_language_suffix(' '.join(str(title).split()), fuente, idioma)
+    return _strip_episode_number(title, ep_num)
+
 def _episode_hashtag(title: str, max_length: int = 48, ep_num=None) -> str:
     max_length = max(1, int(max_length))
     title = _strip_episode_number(title, ep_num)
@@ -280,7 +294,7 @@ def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
         language = 'Español Latino 🇲🇽'
     else:
         language = 'Sub Español 🇯🇵'
-    clean_title = _strip_episode_number(titulo, ep_num)
+    clean_title = _clean_episode_title(titulo, ep_num, fuente, idioma)
     title = html.escape(_shorten_title(clean_title))
     hashtag = html.escape(_episode_hashtag(clean_title))
     return (
@@ -304,7 +318,7 @@ def _build_episode_card(
     elapsed: float | None = None,
     error: str | None = None,
 ) -> str:
-    title = html.escape(_styled_title(_strip_episode_number(titulo, ep_num)))
+    title = html.escape(_styled_title(_clean_episode_title(titulo, ep_num, fuente, idioma)))
     safe_url = html.escape(str(ep_url), quote=True)
     source_name = 'LatAnime' if fuente == 'latanime' else 'TioAnime'
     flag, audio = _format_audio(fuente, idioma)
