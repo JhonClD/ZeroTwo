@@ -20,7 +20,6 @@ from pyrogram.types import Message
 
 logger = logging.getLogger(__name__)
 _VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
-_BOT_TOKEN: str | None = None
 
 
 def _send_video_by_file_id(bot_token: str, payload: dict) -> dict:
@@ -74,100 +73,8 @@ def _bot_api_entities(entities) -> str | None:
     return json.dumps(serialized, ensure_ascii=False)
 
 
-def get_saved_cover_file_id(work_dir: Path, user_id: int | str) -> str | None:
-    """Lee el file_id de la portada personal guardada por el usuario."""
-    db_path = Path(work_dir) / "video_covers" / "covers.json"
-    try:
-        data = json.loads(db_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    file_id = data.get(str(user_id)) if isinstance(data, dict) else None
-    return file_id if isinstance(file_id, str) and file_id else None
-
-
-def _edit_video_message_with_cover(
-    bot_token: str,
-    chat_id: int,
-    message_id: int,
-    video_file_id: str,
-    cover_file_id: str,
-    caption: str,
-    duration: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> dict:
-    """Edita el mensaje subido por Pyrogram, reusando su file_id y la portada."""
-    media = {
-        "type": "video",
-        "media": video_file_id,
-        "cover": cover_file_id,
-        "caption": caption,
-        "parse_mode": "HTML",
-        "supports_streaming": True,
-    }
-    if duration > 0:
-        media["duration"] = duration
-    if width > 0:
-        media["width"] = width
-    if height > 0:
-        media["height"] = height
-    payload = urllib.parse.urlencode({
-        "chat_id": str(chat_id),
-        "message_id": str(message_id),
-        "media": json.dumps(media, ensure_ascii=False),
-    }).encode("utf-8")
-    request = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/editMessageMedia",
-        data=payload,
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        try:
-            result = json.loads(error.read().decode("utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            raise RuntimeError("Telegram Bot API rechazó la actualización de portada.") from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise RuntimeError("No se pudo conectar con Telegram Bot API para actualizar la portada.") from None
-    if not isinstance(result, dict) or not result.get("ok"):
-        description = result.get("description", "respuesta no válida") if isinstance(result, dict) else "respuesta no válida"
-        raise RuntimeError(f"Telegram no pudo aplicar la portada guardada: {description}")
-    return result
-
-
-async def apply_video_cover_to_message(
-    chat_id: int,
-    message_id: int,
-    video_file_id: str,
-    cover_file_id: str,
-    caption: str,
-    duration: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> dict:
-    """Añade un cover al mensaje ya subido, sin transferir otra vez el video."""
-    if not _BOT_TOKEN:
-        raise RuntimeError("No está configurado el token del Bot API para aplicar la portada.")
-    return await asyncio.to_thread(
-        _edit_video_message_with_cover,
-        _BOT_TOKEN,
-        chat_id,
-        message_id,
-        video_file_id,
-        cover_file_id,
-        caption,
-        duration,
-        width,
-        height,
-    )
-
-
 def register(app, work_dir: Path, bot_token: str) -> None:
     """Registra el flujo de portada; la base local solo guarda Telegram file_id."""
-    global _BOT_TOKEN
-    _BOT_TOKEN = bot_token
     root = Path(work_dir) / "video_covers"
     root.mkdir(parents=True, exist_ok=True)
     db_path = root / "covers.json"

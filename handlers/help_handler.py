@@ -40,7 +40,6 @@ def register(app):
 <b>🖼 Portada de video</b>
 ├ Envía una foto; reemplaza la miniatura anterior (solo se usa una)
 ├ Al enviar un video, se reenviará con esa miniatura
-├ También se usa automáticamente en episodios enviados por Tio-notify
 ├ /thumon — Activar aplicación automática
 ├ /thumoff — Desactivarla temporalmente
 ├ /show_cover — Ver tu portada guardada
