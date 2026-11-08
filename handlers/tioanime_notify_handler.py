@@ -76,12 +76,14 @@ _client            = None                 # referencia al Client de Pyrogram (eq
 _loop              = None                 # event loop del bot (puede no estar corriendo aún al llamar register())
 _active_notifiers  = {}                   # chat_id -> asyncio.Task
 _notifier_interval = {}                   # chat_id -> intervalMin (para /tiostatus)
+_cover_owner_by_chat: dict[int, str] = {}  # chat_id -> usuario con portada guardada
 _episode_queue     = []                   # lista de {"chat_id": int, "ep": dict}
 _queue_running     = False
 _queue_task        = None
 
 SEEN_FILE  = None
 STATE_FILE = None
+COVER_FILE = None
 
 
 def _create_task(coro):
@@ -131,6 +133,31 @@ def load_seen() -> dict:  return _load_json(SEEN_FILE)
 def save_seen(d):         _save_json(SEEN_FILE, d)
 def load_state() -> dict: return _load_json(STATE_FILE)
 def save_state(d):        _save_json(STATE_FILE, d)
+
+
+def _resolve_cover_owner_id(user_id=None) -> str | None:
+    """Resuelve al dueño de la portada: iniciador, owner único o portada única."""
+    if user_id is not None:
+        return str(user_id)
+    if len(OWNER_IDS) == 1:
+        return str(next(iter(OWNER_IDS)))
+    if COVER_FILE:
+        covers = _load_json(COVER_FILE)
+        if isinstance(covers, dict) and OWNER_IDS:
+            owner_covers = sorted(str(owner_id) for owner_id in OWNER_IDS if str(owner_id) in covers)
+            if len(owner_covers) == 1:
+                return owner_covers[0]
+        if isinstance(covers, dict) and len(covers) == 1:
+            return str(next(iter(covers)))
+    return None
+
+
+def _remember_cover_owner_from_message(message: Message) -> None:
+    sender = getattr(message, 'from_user', None)
+    if sender and getattr(sender, 'id', None) is not None:
+        owner_id = _resolve_cover_owner_id(sender.id)
+        if owner_id:
+            _cover_owner_by_chat[message.chat.id] = owner_id
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -542,6 +569,19 @@ def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]
     return yourupload + mega
 
 
+def _get_saved_cover_for_chat(chat_id: int) -> str | None:
+    """Obtiene la portada actual del usuario vinculado a este chat."""
+    owner_id = _cover_owner_by_chat.get(chat_id) or _resolve_cover_owner_id()
+    if not owner_id or not COVER_FILE:
+        return None
+    try:
+        from handlers.video_cover_handler import get_saved_cover_file_id
+        return get_saved_cover_file_id(COVER_FILE.parent.parent, owner_id)
+    except Exception as error:
+        logger.warning('[tioanime-notify] No se pudo leer la portada guardada: %s', error)
+        return None
+
+
 # ─── Envío de episodio ────────────────────────────────────────────────────────
 
 async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
@@ -665,7 +705,28 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 video_kwargs['width'] = width
             if height > 0:
                 video_kwargs['height'] = height
-            await client.send_video(chat_id, str(video_path), **video_kwargs)
+            cover_file_id = _get_saved_cover_for_chat(chat_id)
+            sent_message = await client.send_video(chat_id, str(video_path), **video_kwargs)
+            if cover_file_id:
+                try:
+                    video = getattr(sent_message, 'video', None)
+                    message_id = getattr(sent_message, 'id', None)
+                    video_file_id = getattr(video, 'file_id', None)
+                    if not message_id or not video_file_id:
+                        raise RuntimeError('Telegram no devolvió los IDs del video enviado.')
+                    from handlers.video_cover_handler import apply_video_cover_to_message
+                    await apply_video_cover_to_message(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        video_file_id=video_file_id,
+                        cover_file_id=cover_file_id,
+                        caption=final_caption,
+                        duration=duration,
+                        width=width,
+                        height=height,
+                    )
+                except RuntimeError as error:
+                    logger.warning('[tioanime-notify] No se pudo aplicar la portada guardada; el video ya fue enviado con su thumbnail normal: %s', error)
         else:
             await client.send_document(chat_id, str(video_path), caption=final_caption,
                                         parse_mode=enums.ParseMode.HTML, file_name=file_name)
@@ -799,7 +860,12 @@ async def _notifier_loop(chat_id: int, interval_min: int) -> None:
         pass
 
 
-def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL_DEFAULT) -> bool:
+def iniciar_notificador(
+    chat_id: int,
+    client,
+    interval_min: int = CHECK_INTERVAL_DEFAULT,
+    cover_owner_id: int | str | None = None,
+) -> bool:
     """Inicia o actualiza el notificador y devuelve si ya estaba activo."""
     global _client
     if client:
@@ -807,26 +873,40 @@ def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL
     ya_activo = chat_id in _active_notifiers
     prev_interval = _notifier_interval.get(chat_id)
     prev = _active_notifiers.get(chat_id)
+    state = load_state()
+    anterior = state.get(str(chat_id), {})
+    resolved_owner_id = (
+        str(cover_owner_id) if cover_owner_id is not None
+        else str(anterior['coverOwnerId']) if anterior.get('coverOwnerId') is not None
+        else _resolve_cover_owner_id()
+    )
+    if resolved_owner_id:
+        _cover_owner_by_chat[chat_id] = resolved_owner_id
+    else:
+        _cover_owner_by_chat.pop(chat_id, None)
+
+    config = {
+        'intervalMin': interval_min,
+        'startedAt': anterior.get('startedAt', int(time.time() * 1000)),
+    }
+    if resolved_owner_id:
+        config['coverOwnerId'] = resolved_owner_id
+    state[str(chat_id)] = config
+    save_state(state)
+
     if prev and prev_interval == interval_min and not prev.done():
         return True
     if prev:
         prev.cancel()
     _active_notifiers[chat_id] = _create_task(_notifier_loop(chat_id, interval_min))
     _notifier_interval[chat_id] = interval_min
-
-    state = load_state()
-    anterior = state.get(str(chat_id), {})
-    state[str(chat_id)] = {
-        'intervalMin': interval_min,
-        'startedAt': anterior.get('startedAt', int(time.time() * 1000)),
-    }
-    save_state(state)
     return ya_activo
 
 
 def detener_notificador(chat_id: int) -> None:
     task = _active_notifiers.pop(chat_id, None)
     _notifier_interval.pop(chat_id, None)
+    _cover_owner_by_chat.pop(chat_id, None)
     if task:
         task.cancel()
     state = load_state()
@@ -842,7 +922,12 @@ def restaurar_notificadores(client) -> None:
     for chat_id_str, cfg in state.items():
         chat_id = int(chat_id_str)
         if chat_id not in _active_notifiers:
-            iniciar_notificador(chat_id, client, cfg.get('intervalMin', CHECK_INTERVAL_DEFAULT))
+            iniciar_notificador(
+                chat_id,
+                client,
+                cfg.get('intervalMin', CHECK_INTERVAL_DEFAULT),
+                cfg.get('coverOwnerId'),
+            )
 
 
 # ─── Registro de comandos (Pyrogram) ─────────────────────────────────────────
@@ -850,7 +935,7 @@ def restaurar_notificadores(client) -> None:
 def register(app, work_dir: Path):
     """Registra los comandos tio*/lat* en el bot. work_dir es el mismo Path que
     usan otros handlers de Zero Two (ver main.py)."""
-    global SEEN_FILE, STATE_FILE, _client, _loop
+    global SEEN_FILE, STATE_FILE, COVER_FILE, _client, _loop
     _client = app
     _loop = getattr(app, 'loop', None)
 
@@ -858,6 +943,7 @@ def register(app, work_dir: Path):
     db_dir.mkdir(parents=True, exist_ok=True)
     SEEN_FILE = db_dir / 'tioanime_seen.json'
     STATE_FILE = db_dir / 'tioanime_state.json'
+    COVER_FILE = Path(work_dir) / 'video_covers' / 'covers.json'
 
     # NOTA: no llamamos restaurar_notificadores() acá directamente, porque
     # register() se ejecuta ANTES de que arranque el loop de asyncio
@@ -908,7 +994,9 @@ def register(app, work_dir: Path):
         else:
             interval_min = CHECK_INTERVAL_DEFAULT
         intervalo_anterior = _notifier_interval.get(message.chat.id)
-        ya_activo = iniciar_notificador(message.chat.id, client, interval_min)
+        sender = getattr(message, 'from_user', None)
+        cover_owner_id = getattr(sender, 'id', None) if sender else None
+        ya_activo = iniciar_notificador(message.chat.id, client, interval_min, cover_owner_id)
         if ya_activo and intervalo_anterior != interval_min:
             accion = 'actualizado'
         elif ya_activo:
@@ -1030,6 +1118,7 @@ def register(app, work_dir: Path):
 
     @app.on_message(filters.command('tiocheck'))
     async def tiocheck_cmd(client, message: Message):
+        _remember_cover_owner_from_message(message)
         await message.reply_text("🔍 Chequeando TioAnime...")
         try:
             await check_nuevos_episodios(message.chat.id, client)
@@ -1058,6 +1147,7 @@ def register(app, work_dir: Path):
 
     @app.on_message(filters.command('tioexample'))
     async def tioexample_cmd(client, message: Message):
+        _remember_cover_owner_from_message(message)
         args = message.text.split(maxsplit=1)
         try:
             cantidad = min(max(int(args[1].strip()), 1), 10) if len(args) > 1 else 1
@@ -1086,6 +1176,7 @@ def register(app, work_dir: Path):
 
     @app.on_message(filters.command('latexample'))
     async def latexample_cmd(client, message: Message):
+        _remember_cover_owner_from_message(message)
         args = message.text.split(maxsplit=1)
         try:
             cantidad = min(max(int(args[1].strip()), 1), 10) if len(args) > 1 else 1
