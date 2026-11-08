@@ -255,6 +255,59 @@ def _format_audio(fuente: str, idioma: str) -> tuple[str, str]:
     return '🇯🇵', 'Japonés · Sub Español'
 
 
+def _shorten_title(title: str, max_length: int = 64) -> str:
+    title = ' '.join(str(title).split())
+    if len(title) <= max_length:
+        return title
+    raw_prefix = title[:max_length - 1]
+    prefix = raw_prefix.rsplit(' ', 1)[0]
+    if not prefix or len(prefix) < max_length * 0.6:
+        prefix = raw_prefix
+    return prefix.rstrip(' ,:;.-') + '…'
+
+
+def _episode_hashtag(title: str, max_length: int = 48) -> str:
+    words = []
+    current = []
+    for char in str(title):
+        if char.isalnum():
+            current.append(char)
+        elif current:
+            words.append(''.join(current))
+            current = []
+    if current:
+        words.append(''.join(current))
+
+    selected = []
+    for word in words:
+        candidate = '_'.join(selected + [word])
+        if len(candidate) <= max_length:
+            selected.append(word)
+            continue
+        if not selected:
+            selected.append(word[:max_length])
+        break
+    hashtag = '_'.join(selected) or 'Anime'
+    if not hashtag[0].isalpha():
+        hashtag = f'Anime_{hashtag}'[:max_length]
+    return hashtag
+
+
+def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
+    if fuente == 'latanime' and idioma == 'castellano':
+        language = 'Español Castellano 🇪🇸'
+    elif fuente == 'latanime':
+        language = 'Español Latino 🇲🇽'
+    else:
+        language = 'Sub Español 🇯🇵'
+    title = html.escape(_shorten_title(titulo))
+    hashtag = html.escape(_episode_hashtag(titulo))
+    return (
+        f'<b>{title} Capítulo {zero_pad(ep_num)} {language}</b>'
+        f'\n\n#{hashtag}'
+    )
+
+
 def _build_episode_card(
     titulo: str,
     ep_num,
@@ -853,11 +906,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 titulo, ep_num, fuente, idioma, ep_url, registered_at,
                 quality, 'upload', current=0, total=size_bytes,
             ), force=True)
-            final_caption = (
-                f"✅ <b>{html.escape(titulo)}</b>\n"
-                f"📌 Episodio {zero_pad(ep_num)}\n"
-                f"📦 {_format_mib(size_bytes)} · {'LatAnime' if fuente == 'latanime' else 'TioAnime'}"
-            )
+            final_caption = _build_video_caption(titulo, ep_num, fuente, idioma)
             video_kwargs = {
                 'caption': final_caption,
                 'parse_mode': enums.ParseMode.HTML,
@@ -893,11 +942,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 titulo, ep_num, fuente, idioma, ep_url, registered_at,
                 quality, 'upload', current=0, total=size_bytes,
             ), force=True)
-            final_caption = (
-                f"✅ <b>{html.escape(titulo)}</b>\n"
-                f"📌 Episodio {zero_pad(ep_num)}\n"
-                f"📦 {_format_mib(size_bytes)}"
-            )
+            final_caption = _build_video_caption(titulo, ep_num, fuente, idioma)
             await client.send_document(
                 chat_id, str(video_path), caption=final_caption,
                 parse_mode=enums.ParseMode.HTML, file_name=file_name,
