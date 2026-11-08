@@ -21,6 +21,7 @@ Comandos "owner-only" (tiostart, tiostop, tiointerval, tioflush, tiounblock):
 import os
 import re
 import json
+import html
 import time
 import asyncio
 import logging
@@ -33,6 +34,7 @@ from pyrogram import filters, enums
 from pyrogram.types import Message
 
 from downloaders import GoFileDownloader, MEGADownloader, MediaFireDownloader, YourUploadDownloader
+from utils.transfer_status import TransferProgress
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +212,120 @@ async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
         if result.returncode != 0:
             logger.warning('[tioanime-notify] ffmpeg no generó thumbnail para %s: %s', video_path, (result.stderr or '').strip()[-500:])
     return duration, thumb, width, height
+
+
+def _format_mib(value: int | float | None, decimals: int = 1) -> str:
+    return f"{max(0.0, float(value or 0)) / (1024 ** 2):.{decimals}f} MiB"
+
+
+def _styled_title(value: str) -> str:
+    return ''.join(chr(0x1D5D4 + ord(char) - ord('A')) if 'A' <= char <= 'Z' else char
+                   for char in str(value).upper())
+
+
+def _format_eta(seconds: float | None) -> str:
+    if seconds is None:
+        return 'calculando…'
+    remaining = max(0, int(seconds))
+    hours, remainder = divmod(remaining, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f'{hours}h {minutes:02d}m'
+    return f'{minutes}m {secs:02d}s'
+
+
+def _format_quality(height: int | None) -> str:
+    height = max(0, int(height or 0))
+    if height >= 2160:
+        return f'{height}p 4K UHD'
+    if height >= 1080:
+        return f'{height}p Full HD'
+    if height >= 720:
+        return f'{height}p HD'
+    if height >= 480:
+        return f'{height}p SD'
+    return f'{height}p' if height else 'No detectada'
+
+
+def _format_audio(fuente: str, idioma: str) -> tuple[str, str]:
+    if fuente == 'latanime':
+        if idioma == 'castellano':
+            return '🇪🇸', 'Castellano'
+        return '🇲🇽', 'Español Latino'
+    return '🇯🇵', 'Japonés · Sub Español'
+
+
+def _build_episode_card(
+    titulo: str,
+    ep_num,
+    fuente: str,
+    idioma: str,
+    ep_url: str,
+    registered_at: str,
+    quality: str,
+    phase: str,
+    current: int = 0,
+    total: int = 0,
+    speed: float | None = None,
+    eta: float | None = None,
+    elapsed: float | None = None,
+    error: str | None = None,
+) -> str:
+    title = html.escape(_styled_title(titulo))
+    safe_url = html.escape(str(ep_url), quote=True)
+    source_name = 'LatAnime' if fuente == 'latanime' else 'TioAnime'
+    flag, audio = _format_audio(fuente, idioma)
+    if total > 0:
+        percent = min(100.0, max(0.0, current * 100.0 / total))
+    else:
+        percent = 0.0
+    filled = min(13, int(13 * percent / 100))
+    bar = '■' * filled + '□' * (13 - filled)
+
+    lines = [
+        f'✦ <b>{title}</b>',
+        f'╰› <b>Capítulo {zero_pad(ep_num)}</b> · <i>En emisión</i>',
+        '',
+        '<b>◦ Detalles</b>',
+        f'  › <b>Fuente:</b> {source_name}',
+        f'  › <b>Audio:</b> {flag} {audio}',
+        f'  › <b>Calidad:</b> {html.escape(quality)}',
+        f'  › <b>Registro:</b> {registered_at}',
+        '',
+        '<b>◦ Enlace</b>',
+        f'  › <a href="{safe_url}">{html.escape(str(ep_url))}</a>',
+        '',
+        '─────────────────────',
+    ]
+
+    if phase in {'download', 'upload'}:
+        icon, label = ('⏳', 'Descargando...') if phase == 'download' else ('📤', 'Enviando...')
+        lines.extend([
+            f'{icon} <b>Estado:</b> <i>{label}</i>',
+            f' › [{bar}] {percent:.2f}%',
+        ])
+        size_line = f' › {_format_mib(current)}'
+        if total > 0:
+            size_line += f' / {_format_mib(total)}'
+        if speed is not None and speed > 0:
+            size_line += f' · {_format_mib(speed, 2)}/s'
+        lines.append(size_line)
+        lines.append(f' › ETA: {_format_eta(eta)}')
+    elif phase == 'complete':
+        lines.extend([
+            '✅ <b>Estado:</b> Completado',
+            f' › Tiempo total: {_format_eta(elapsed)}',
+            f' › Tamaño: {_format_mib(current)}',
+        ])
+    elif phase == 'error':
+        lines.extend([
+            '❌ <b>Estado:</b> Error',
+            f' › {html.escape(str(error or "No se pudo completar la transferencia."))[:250]}',
+        ])
+    else:
+        lines.extend(['⏳ <b>Estado:</b> <i>Preparando descarga...</i>'])
+
+    return '\n'.join(lines)
 
 
 def detectar_serv_nombre(url: str) -> str:
@@ -557,40 +673,70 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = work_dir / f"tio_{int(time.time() * 1000)}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
+    card_message = None
+    started_at = time.monotonic()
+    registered_at = time.strftime('%I:%M %p')
+    quality = 'Detectando...'
+    last_card_edit = [0.0]
 
-    bandera  = ('🇪🇸' if idioma == 'castellano' else '🇲🇽') if fuente == 'latanime' else '🇯🇵'
-    etiqueta = f"LatAnime {bandera}" if fuente == 'latanime' else 'TioAnime 🇯🇵'
+    async def update_card(text: str, force: bool = False) -> None:
+        if card_message is None:
+            return
+        now = time.monotonic()
+        if not force and now - last_card_edit[0] < 2.5:
+            return
+        try:
+            if getattr(card_message, 'photo', None):
+                await card_message.edit_caption(text, parse_mode=enums.ParseMode.HTML)
+            else:
+                await card_message.edit_text(text, parse_mode=enums.ParseMode.HTML)
+            last_card_edit[0] = now
+        except Exception as error:
+            logger.debug('[tioanime-notify] No se pudo actualizar la ficha de progreso: %s', error)
 
     try:
-        ahora = time.strftime('%I:%M %p')
-        caption = (
-            f"<b>✨ Nuevo Episodio ✨</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{bandera} <b>{titulo}</b>\n"
-            f"🆕 Capítulo: <b>{ep_num}</b>\n"
-            f"🕐 Publicado: <b>{ahora}</b>\n"
-            f"🌐 Ver online: {ep_url}\n"
-            f"📡 Fuente: <b>{etiqueta}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ <i>INICIANDO DESCARGA...</i>"
+        caption = _build_episode_card(
+            titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'prepare'
         )
-
         if img_url:
             try:
-                await client.send_photo(chat_id, img_url, caption=caption, parse_mode=enums.ParseMode.HTML)
+                card_message = await client.send_photo(
+                    chat_id, img_url, caption=caption, parse_mode=enums.ParseMode.HTML
+                )
             except Exception:
-                await client.send_message(chat_id, caption, parse_mode=enums.ParseMode.HTML)
+                card_message = await client.send_message(
+                    chat_id, caption, parse_mode=enums.ParseMode.HTML
+                )
         else:
-            await client.send_message(chat_id, caption, parse_mode=enums.ParseMode.HTML)
+            card_message = await client.send_message(
+                chat_id, caption, parse_mode=enums.ParseMode.HTML
+            )
+
+        def status_renderer(stage, filename, current, total, meter, speed_override=None):
+            snapshot = meter.snapshot(current, total)
+            speed = speed_override if speed_override and speed_override > 0 else snapshot['speed']
+            remaining = max(0, total - current) if total else 0
+            eta = remaining / speed if total and speed and speed > 0 else None
+            return _build_episode_card(
+                titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'download',
+                current=int(current or 0), total=int(total or 0), speed=speed, eta=eta,
+            )
+
+        async def progress_callback(text):
+            await update_card(text)
 
         logger.info(f"[tioanime-notify] Buscando servidores para \"{titulo}\" ep {ep_num}...")
         srvs = (await scrape_servidores_latanime(ep_url)) if fuente == 'latanime' else (await scrape_servidores(ep_url))
         if not srvs:
             raise RuntimeError('No se encontraron servidores')
 
+        await update_card(_build_episode_card(
+            titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'download'
+        ), force=True)
         await asyncio.sleep(15)
         orden = ordenar_servidores(srvs, fuente)[:5]
         video_path = None
+        loop = asyncio.get_running_loop()
 
         for srv in orden:
             nombre_servidor = (srv.get('nombre') or 'servidor').upper()
@@ -600,11 +746,20 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             try:
                 logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ]...")
                 if srv['nombre'] == 'mega':
-                    ok, fpath, err = await MEGADownloader.download(srv['url'], tmp_dir)
+                    ok, fpath, err = await MEGADownloader.download(
+                        srv['url'], tmp_dir, progress_callback=progress_callback,
+                        status_renderer=status_renderer,
+                    )
                 elif srv['nombre'] == 'mediafire':
-                    ok, fpath, err = await MediaFireDownloader.download(srv['url'], tmp_dir)
+                    ok, fpath, err = await MediaFireDownloader.download(
+                        srv['url'], tmp_dir, progress_callback=progress_callback,
+                        status_renderer=status_renderer,
+                    )
                 elif srv['nombre'] == 'yourupload':
-                    ok, fpath, err = await YourUploadDownloader.download(srv['url'], tmp_dir, file_name)
+                    ok, fpath, err = await YourUploadDownloader.download(
+                        srv['url'], tmp_dir, file_name, progress_callback=progress_callback,
+                        status_renderer=status_renderer,
+                    )
                 else:
                     share = await asyncio.to_thread(GoFileDownloader.list_shared_files, srv['url'])
                     video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
@@ -613,12 +768,35 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                     if entry is None:
                         raise ValueError('GoFile no contiene un archivo de video compatible.')
                     gofile_name = GoFileDownloader._safe_filename(entry.get('name'), str(entry.get('id') or 'episode'))
+                    gofile_meter = TransferProgress()
+                    last_gofile_update = [0.0]
+
+                    def gofile_progress(current, total):
+                        now = time.monotonic()
+                        if now - last_gofile_update[0] < 2.5 and (total <= 0 or current < total):
+                            return
+                        last_gofile_update[0] = now
+                        snapshot = gofile_meter.snapshot(current, total)
+                        speed = snapshot['speed']
+                        eta = ((total - current) / speed
+                               if total and speed and speed > 0 else None)
+                        text = _build_episode_card(
+                            titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                            quality, 'download', current=current, total=total,
+                            speed=speed, eta=eta,
+                        )
+                        future = asyncio.run_coroutine_threadsafe(update_card(text), loop)
+                        try:
+                            future.result(timeout=15)
+                        except Exception as error:
+                            logger.debug('[tioanime-notify] No se pudo publicar progreso GoFile: %s', error)
+
                     fpath, _ = await asyncio.to_thread(
                         GoFileDownloader.download_file,
                         entry,
                         tmp_dir / gofile_name,
                         GOFILE_MAX_BYTES,
-                        None,
+                        gofile_progress,
                         share.get('content_id', ''),
                     )
                     file_name = gofile_name
@@ -642,20 +820,50 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
         if not video_path:
             raise RuntimeError('Todos los servidores fallaron')
 
-        size_mb = video_path.stat().st_size / 1024 / 1024
+        size_bytes = video_path.stat().st_size
+        size_mb = size_bytes / 1024 / 1024
         logger.info(f"[tioanime-notify] Descarga completa: {file_name} ({size_mb:.1f} MB) — subiendo a Telegram...")
-
-        final_caption = f"✅ <b>{titulo}</b>\n📌 Episodio {zero_pad(ep_num)}\n📦 {size_mb:.1f} MB · {etiqueta}"
         video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
         if video_path.suffix.lower() in video_exts:
             # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
             # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
             duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
+            quality = _format_quality(height)
+            upload_meter = TransferProgress()
+            last_upload_update = [0.0]
+
+            async def upload_progress(current, total):
+                now = time.monotonic()
+                snapshot = upload_meter.snapshot(current, total)
+                percent = snapshot['percent']
+                if (percent is not None and percent < 100
+                        and now - last_upload_update[0] < 2.5):
+                    return
+                last_upload_update[0] = now
+                speed = snapshot['speed']
+                eta = ((total - current) / speed
+                       if total and speed and speed > 0 else None)
+                await update_card(_build_episode_card(
+                    titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                    quality, 'upload', current=current, total=total,
+                    speed=speed, eta=eta,
+                ))
+
+            await update_card(_build_episode_card(
+                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                quality, 'upload', current=0, total=size_bytes,
+            ), force=True)
+            final_caption = (
+                f"✅ <b>{html.escape(titulo)}</b>\n"
+                f"📌 Episodio {zero_pad(ep_num)}\n"
+                f"📦 {_format_mib(size_bytes)} · {'LatAnime' if fuente == 'latanime' else 'TioAnime'}"
+            )
             video_kwargs = {
                 'caption': final_caption,
                 'parse_mode': enums.ParseMode.HTML,
                 'supports_streaming': True,
                 'file_name': file_name,
+                'progress': upload_progress,
             }
             if duration > 0:
                 video_kwargs['duration'] = duration
@@ -667,10 +875,51 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 video_kwargs['height'] = height
             await client.send_video(chat_id, str(video_path), **video_kwargs)
         else:
-            await client.send_document(chat_id, str(video_path), caption=final_caption,
-                                        parse_mode=enums.ParseMode.HTML, file_name=file_name)
+            quality = _format_quality(0)
+            upload_meter = TransferProgress()
 
+            async def upload_progress(current, total):
+                snapshot = upload_meter.snapshot(current, total)
+                speed = snapshot['speed']
+                eta = ((total - current) / speed
+                       if total and speed and speed > 0 else None)
+                await update_card(_build_episode_card(
+                    titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                    quality, 'upload', current=current, total=total,
+                    speed=speed, eta=eta,
+                ))
+
+            await update_card(_build_episode_card(
+                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                quality, 'upload', current=0, total=size_bytes,
+            ), force=True)
+            final_caption = (
+                f"✅ <b>{html.escape(titulo)}</b>\n"
+                f"📌 Episodio {zero_pad(ep_num)}\n"
+                f"📦 {_format_mib(size_bytes)}"
+            )
+            await client.send_document(
+                chat_id, str(video_path), caption=final_caption,
+                parse_mode=enums.ParseMode.HTML, file_name=file_name,
+                progress=upload_progress,
+            )
+
+        await update_card(_build_episode_card(
+            titulo, ep_num, fuente, idioma, ep_url, registered_at,
+            quality, 'complete', current=size_bytes,
+            elapsed=time.monotonic() - started_at,
+        ), force=True)
         logger.info(f"[tioanime-notify] Enviado: {file_name}")
+
+    except Exception as error:
+        try:
+            await update_card(_build_episode_card(
+                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                quality, 'error', error=error,
+            ), force=True)
+        except Exception:
+            pass
+        raise
 
     finally:
         try:
