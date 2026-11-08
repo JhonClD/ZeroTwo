@@ -38,16 +38,14 @@ from utils.transfer_status import TransferProgress
 
 logger = logging.getLogger(__name__)
 
-# ─── Constantes ─────────────────────────────────────────────────────────────
-
 TIOANIME_URL = 'https://tioanime.com'
 LATANIME_URL = 'https://latanime.org'
 
-CHECK_INTERVAL_DEFAULT = 10      # minutos
-QUEUE_DELAY            = 90      # segundos entre ítems de la cola
+CHECK_INTERVAL_DEFAULT = 10
+QUEUE_DELAY            = 90
 MAX_REINTENTOS         = 3
-ESPERA_REINTENTO       = 3 * 60  # segundos
-ESPERA_REQUEUE         = 5 * 60  # segundos
+ESPERA_REINTENTO       = 3 * 60
+ESPERA_REQUEUE         = 5 * 60
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 HEADERS = {
@@ -61,30 +59,23 @@ try:
 except ValueError:
     GOFILE_MAX_BYTES = 1800 * 1024 * 1024
 
-# Comandos restringidos a "owner" (igual que COMANDOS_OWNER en el JS)
 COMANDOS_OWNER = {'tiostart', 'tiostop', 'tiointerval', 'tioflush', 'tiounblock'}
 _owner_env = os.environ.get('TIOANIME_OWNER_IDS', '')
 OWNER_IDS = {int(x) for x in _owner_env.split(',') if x.strip().isdigit()}
 
-
 def _is_owner(user_id: int) -> bool:
-    # Si no se configuró TIOANIME_OWNER_IDS, no se restringe (ver docstring).
     return (not OWNER_IDS) or (user_id in OWNER_IDS)
 
-
-# ─── Estado global (equivalente a los global.tio* del JS) ───────────────────
-
-_client            = None                 # referencia al Client de Pyrogram (equivalente a global.tioConn)
-_loop              = None                 # event loop del bot (puede no estar corriendo aún al llamar register())
-_active_notifiers  = {}                   # chat_id -> asyncio.Task
-_notifier_interval = {}                   # chat_id -> intervalMin (para /tiostatus)
-_episode_queue     = []                   # lista de {"chat_id": int, "ep": dict}
+_client            = None
+_loop              = None
+_active_notifiers  = {}
+_notifier_interval = {}
+_episode_queue     = []
 _queue_running     = False
 _queue_task        = None
 
 SEEN_FILE  = None
 STATE_FILE = None
-
 
 def _create_task(coro):
     """Crea una Task de forma segura tanto si el loop ya está corriendo
@@ -98,11 +89,9 @@ def _create_task(coro):
             loop = asyncio.get_event_loop()
     return loop.create_task(coro)
 
-
 def _is_queued_item(item: dict) -> bool:
     """Comprueba por identidad si un episodio sigue pendiente en la cola."""
     return any(queued is item for queued in _episode_queue)
-
 
 def _remove_queued_item(item: dict) -> bool:
     """Retira solo ese objeto, tolerando que /tioflush ya lo haya quitado."""
@@ -112,15 +101,11 @@ def _remove_queued_item(item: dict) -> bool:
             return True
     return False
 
-
-# ─── Persistencia ────────────────────────────────────────────────────────────
-
 def _load_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding='utf-8'))
     except Exception:
         return {}
-
 
 def _save_json(path: Path, data: dict) -> None:
     try:
@@ -128,39 +113,30 @@ def _save_json(path: Path, data: dict) -> None:
     except Exception:
         pass
 
-
 def load_seen() -> dict:  return _load_json(SEEN_FILE)
 def save_seen(d):         _save_json(SEEN_FILE, d)
 def load_state() -> dict: return _load_json(STATE_FILE)
 def save_state(d):        _save_json(STATE_FILE, d)
 
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
 def zero_pad(n) -> str:
     return str(n).zfill(2)
-
 
 def safe_file(s: str) -> str:
     s = re.sub(r'[/\\:*?"<>|]', '_', s)
     return re.sub(r'\s+', ' ', s).strip()
 
-
 def build_file_name(titulo: str, ep_num) -> str:
     return f"{zero_pad(ep_num)} {safe_file(titulo)}.mp4"
-
 
 def _progress_bar(pct: int, width: int = 10) -> str:
     filled = int(width * pct / 100)
     return '▓' * filled + '░' * (width - filled)
-
 
 async def _get(url: str, **kwargs) -> requests.Response:
     """GET no bloqueante (requests corre en un hilo aparte)."""
     kwargs.setdefault('headers', HEADERS)
     kwargs.setdefault('timeout', 15)
     return await asyncio.to_thread(requests.get, url, **kwargs)
-
 
 async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
     """Devuelve duración, thumbnail JPEG y resolución usando ffprobe/ffmpeg.
@@ -213,15 +189,12 @@ async def _video_meta(video_path: Path, tmp_dir: Path) -> tuple:
             logger.warning('[tioanime-notify] ffmpeg no generó thumbnail para %s: %s', video_path, (result.stderr or '').strip()[-500:])
     return duration, thumb, width, height
 
-
 def _format_mib(value: int | float | None, decimals: int = 1) -> str:
     return f"{max(0.0, float(value or 0)) / (1024 ** 2):.{decimals}f} MiB"
-
 
 def _styled_title(value: str) -> str:
     return ''.join(chr(0x1D5D4 + ord(char) - ord('A')) if 'A' <= char <= 'Z' else char
                    for char in str(value).upper())
-
 
 def _format_eta(seconds: float | None) -> str:
     if seconds is None:
@@ -232,7 +205,6 @@ def _format_eta(seconds: float | None) -> str:
     if hours:
         return f'{hours}h {minutes:02d}m'
     return f'{minutes}m {secs:02d}s'
-
 
 def _format_quality(height: int | None) -> str:
     height = max(0, int(height or 0))
@@ -246,14 +218,12 @@ def _format_quality(height: int | None) -> str:
         return f'{height}p SD'
     return f'{height}p' if height else 'No detectada'
 
-
 def _format_audio(fuente: str, idioma: str) -> tuple[str, str]:
     if fuente == 'latanime':
         if idioma == 'castellano':
             return '🇪🇸', 'Castellano'
         return '🇲🇽', 'Español Latino'
     return '🇯🇵', 'Japonés · Sub Español'
-
 
 def _shorten_title(title: str, max_length: int = 64) -> str:
     title = ' '.join(str(title).split())
@@ -264,7 +234,6 @@ def _shorten_title(title: str, max_length: int = 64) -> str:
     if not prefix or len(prefix) < max_length * 0.6:
         prefix = raw_prefix
     return prefix.rstrip(' ,:;.-') + '…'
-
 
 def _strip_episode_number(title: str, ep_num=None) -> str:
     title = ' '.join(str(title).split())
@@ -283,7 +252,6 @@ def _strip_episode_number(title: str, ep_num=None) -> str:
             if trailing_number and any(char.isalpha() for char in title[:trailing_number.start()]):
                 title = title[:trailing_number.start()]
     return title.strip()
-
 
 def _episode_hashtag(title: str, max_length: int = 48, ep_num=None) -> str:
     max_length = max(1, int(max_length))
@@ -305,7 +273,6 @@ def _episode_hashtag(title: str, max_length: int = 48, ep_num=None) -> str:
         hashtag = f'Anime_{hashtag}'
     return hashtag[:max_length].rstrip('_') or 'Anime'[:max_length]
 
-
 def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
     if fuente == 'latanime' and idioma == 'castellano':
         language = 'Español Castellano 🇪🇸'
@@ -320,7 +287,6 @@ def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
         f'<b>{title} Capítulo {zero_pad(ep_num)} {language}</b>'
         f'\n\n#{hashtag}'
     )
-
 
 def _build_episode_card(
     titulo: str,
@@ -394,7 +360,6 @@ def _build_episode_card(
 
     return '\n'.join(lines)
 
-
 def detectar_serv_nombre(url: str) -> str:
     u = url.lower()
     if 'mediafire' in u:  return 'mediafire'
@@ -409,9 +374,6 @@ def detectar_serv_nombre(url: str) -> str:
     if 'dood' in u:       return 'doodstream'
     if 'ok.ru' in u:      return 'okru'
     return 'embed'
-
-
-# ─── Scraping — TioAnime ──────────────────────────────────────────────────────
 
 async def fetch_latest_episodes() -> list[dict]:
     res = await _get(TIOANIME_URL)
@@ -475,7 +437,6 @@ async def fetch_latest_episodes() -> list[dict]:
 
     logger.info(f"[tioanime-notify] {len(lista)} episodios en portada")
     return lista
-
 
 async def scrape_servidores(ep_url: str) -> list[dict]:
     res = await _get(ep_url, headers={**HEADERS, 'Referer': TIOANIME_URL})
@@ -576,9 +537,6 @@ async def scrape_servidores(ep_url: str) -> list[dict]:
 
     return srvs
 
-
-# ─── Scraping — LatAnime ──────────────────────────────────────────────────────
-
 async def fetch_latest_episodes_latanime() -> list[dict]:
     """Extrae las tarjetas de episodios recientes directamente de LatAnime.
 
@@ -608,8 +566,6 @@ async def fetch_latest_episodes_latanime() -> list[dict]:
         if eid in ids:
             continue
 
-        # En las tarjetas actuales la imagen usa data-src; src es solo el
-        # placeholder lazy-loading. Se busca en la tarjeta/artículo cercano.
         tarjeta = a_tag.find_parent(['article', 'li', 'div']) or a_tag
         img_el = tarjeta.select_one('img')
         img_src = ''
@@ -622,7 +578,6 @@ async def fetch_latest_episodes_latanime() -> list[dict]:
         titulo = re.sub(r'^.*?Episodio\s+\d+\s*[-–—]\s*', '', texto, flags=re.I).strip()
         if not titulo:
             titulo = re.sub(r'\s*[-–—]?\s*(?:capitulo|episodio)\s*\d+.*$', '', texto, flags=re.I).strip()
-        # La tarjeta incluye también la fecha (p. ej. «23 Ago 2026»).
         titulo = re.sub(r'\s+\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóú]+\s+\d{4}\s*$', '', titulo).strip()
         titulo = titulo or slug.replace('-', ' ')
         idioma = 'castellano' if re.search(r'castellano|espanol|español', texto + ' ' + parsed.path, re.I) else 'latino'
@@ -634,7 +589,6 @@ async def fetch_latest_episodes_latanime() -> list[dict]:
 
     logger.info('[tioanime-notify] %s episodios en el orden de «Añadidos recientemente» de LatAnime', len(lista))
     return lista
-
 
 async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
     res = await _get(ep_url, headers={**HEADERS, 'Referer': LATANIME_URL})
@@ -713,7 +667,6 @@ async def scrape_servidores_latanime(ep_url: str) -> list[dict]:
 
     return srvs
 
-
 def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]:
     mega = [s for s in srvs if s['nombre'] == 'mega']
     mediafire = [s for s in srvs if s['nombre'] == 'mediafire']
@@ -723,9 +676,6 @@ def ordenar_servidores(srvs: list[dict], fuente: str = 'tioanime') -> list[dict]
     if fuente == 'latanime':
         return mediafire + mega + gofile
     return yourupload + mega
-
-
-# ─── Envío de episodio ────────────────────────────────────────────────────────
 
 async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     titulo   = ep['titulo']
@@ -901,8 +851,6 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
         logger.info(f"[tioanime-notify] Descarga completa: {file_name} ({size_mb:.1f} MB) — subiendo a Telegram...")
         video_exts = {'.mp4', '.mkv', '.avi', '.mov', '.webm'}
         if video_path.suffix.lower() in video_exts:
-            # Generar duración + miniatura real con ffprobe/ffmpeg (si no,
-            # Telegram muestra 0:00 y sin thumbnail, como pasaba antes).
             duration, thumb, width, height = await _video_meta(video_path, tmp_dir)
             quality = _format_quality(height)
             upload_meter = TransferProgress()
@@ -996,9 +944,6 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
         except Exception:
             pass
 
-
-# ─── Cola ─────────────────────────────────────────────────────────────────────
-
 async def procesar_cola() -> None:
     global _queue_running, _queue_task
     if _queue_running or not _episode_queue:
@@ -1026,8 +971,6 @@ async def procesar_cola() -> None:
                     exito = True
                     _remove_queued_item(item)
                 except Exception as err:
-                    # /tioflush puede quitar el elemento mientras la descarga
-                    # está suspendida en una operación asíncrona.
                     if not _is_queued_item(item):
                         break
                     msg = str(err).lower()
@@ -1058,7 +1001,6 @@ async def procesar_cola() -> None:
         if _queue_task is current_task:
             _queue_task = None
             _queue_running = False
-
 
 async def check_nuevos_episodios(chat_id: int, client) -> None:
     lista = []
@@ -1098,9 +1040,6 @@ async def check_nuevos_episodios(chat_id: int, client) -> None:
         _episode_queue.append({'chat_id': chat_id, 'ep': e})
     _create_task(procesar_cola())
 
-
-# ─── Notificador periódico por chat (reemplaza setInterval del JS) ───────────
-
 async def _notifier_loop(chat_id: int, interval_min: int) -> None:
     try:
         while True:
@@ -1114,7 +1053,6 @@ async def _notifier_loop(chat_id: int, interval_min: int) -> None:
                 pass
     except asyncio.CancelledError:
         pass
-
 
 def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL_DEFAULT) -> bool:
     """Inicia o actualiza el notificador y devuelve si ya estaba activo."""
@@ -1140,7 +1078,6 @@ def iniciar_notificador(chat_id: int, client, interval_min: int = CHECK_INTERVAL
     save_state(state)
     return ya_activo
 
-
 def detener_notificador(chat_id: int) -> None:
     task = _active_notifiers.pop(chat_id, None)
     _notifier_interval.pop(chat_id, None)
@@ -1149,7 +1086,6 @@ def detener_notificador(chat_id: int) -> None:
     state = load_state()
     state.pop(str(chat_id), None)
     save_state(state)
-
 
 def restaurar_notificadores(client) -> None:
     global _client
@@ -1160,9 +1096,6 @@ def restaurar_notificadores(client) -> None:
         chat_id = int(chat_id_str)
         if chat_id not in _active_notifiers:
             iniciar_notificador(chat_id, client, cfg.get('intervalMin', CHECK_INTERVAL_DEFAULT))
-
-
-# ─── Registro de comandos (Pyrogram) ─────────────────────────────────────────
 
 def register(app, work_dir: Path):
     """Registra los comandos tio*/lat* en el bot. work_dir es el mismo Path que
@@ -1176,14 +1109,6 @@ def register(app, work_dir: Path):
     SEEN_FILE = db_dir / 'tioanime_seen.json'
     STATE_FILE = db_dir / 'tioanime_state.json'
 
-    # NOTA: no llamamos restaurar_notificadores() acá directamente, porque
-    # register() se ejecuta ANTES de que arranque el loop de asyncio
-    # (main.py llama app.loop.run_until_complete(...) recién al final).
-    # asyncio.create_task()/loop.create_task() en ese punto puede fallar
-    # ("no running event loop") según la versión de Python/Pyrogram.
-    # En vez de eso, restauramos los notificadores en cada update entrante
-    # (igual que el handler.before del plugin original de WhatsApp);
-    # iniciar_notificador() ya evita duplicar tasks si el chat ya está activo.
     @app.on_message(filters.all, group=-1)
     async def _tio_bootstrap(client, message: Message):
         try:
@@ -1192,8 +1117,6 @@ def register(app, work_dir: Path):
             logger.error(f"[tioanime-notify] Error restaurando notificadores: {e}")
 
     async def _guard_owner(message: Message, command: str) -> bool:
-        # En mensajes de canales Telegram puede dejar from_user en None.
-        # Si no se configuró una lista de owners, el comando sigue siendo válido.
         if command not in COMANDOS_OWNER or not OWNER_IDS:
             return True
         sender = getattr(message, "from_user", None)
@@ -1244,8 +1167,6 @@ def register(app, work_dir: Path):
             parse_mode=enums.ParseMode.HTML
         )
         try:
-            # Solo se registra una base inicial al crear el notificador. Si el
-            # usuario repite /tiostart, no se marcan episodios nuevos como vistos.
             if ya_activo:
                 return
             tio = await fetch_latest_episodes()
@@ -1276,7 +1197,6 @@ def register(app, work_dir: Path):
         pendientes_antes = sum(1 for item in _episode_queue if item['chat_id'] == message.chat.id)
         if activo:
             detener_notificador(message.chat.id)
-        # No borrar el episodio que ya esté siendo enviado; solo los pendientes.
         _episode_queue[:] = [item for item in _episode_queue if item['chat_id'] != message.chat.id]
         if not activo and pendientes_antes == 0:
             await message.reply_text("ℹ️ El notificador ya estaba detenido y no había episodios pendientes.")
