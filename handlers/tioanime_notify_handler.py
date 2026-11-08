@@ -266,10 +266,32 @@ def _shorten_title(title: str, max_length: int = 64) -> str:
     return prefix.rstrip(' ,:;.-') + '…'
 
 
-def _episode_hashtag(title: str, max_length: int = 48) -> str:
+def _strip_episode_number(title: str, ep_num=None) -> str:
+    title = ' '.join(str(title).split())
+    if ep_num is not None:
+        try:
+            episode_number = str(int(ep_num))
+        except (TypeError, ValueError):
+            episode_number = str(ep_num).strip()
+        if episode_number.isdigit():
+            number = re.escape(episode_number)
+            title = re.sub(
+                rf'(?i)\b(?:episodio|cap[ií]tulo|episode|chapter|ep\.?)\s*[-_#]*0*{number}\b',
+                ' ', title,
+            )
+            trailing_number = re.search(rf'[\s_-]+0*{number}\s*$', title)
+            if trailing_number and any(char.isalpha() for char in title[:trailing_number.start()]):
+                title = title[:trailing_number.start()]
+    return title.strip()
+
+
+def _episode_hashtag(title: str, max_length: int = 48, ep_num=None) -> str:
+    max_length = max(1, int(max_length))
+    title = _strip_episode_number(title, ep_num)
+
     words = []
     current = []
-    for char in str(title):
+    for char in title:
         if char.isalnum():
             current.append(char)
         elif current:
@@ -278,19 +300,10 @@ def _episode_hashtag(title: str, max_length: int = 48) -> str:
     if current:
         words.append(''.join(current))
 
-    selected = []
-    for word in words:
-        candidate = '_'.join(selected + [word])
-        if len(candidate) <= max_length:
-            selected.append(word)
-            continue
-        if not selected:
-            selected.append(word[:max_length])
-        break
-    hashtag = '_'.join(selected) or 'Anime'
+    hashtag = '_'.join(words) or 'Anime'
     if not hashtag[0].isalpha():
-        hashtag = f'Anime_{hashtag}'[:max_length]
-    return hashtag
+        hashtag = f'Anime_{hashtag}'
+    return hashtag[:max_length].rstrip('_') or 'Anime'[:max_length]
 
 
 def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
@@ -300,8 +313,9 @@ def _build_video_caption(titulo: str, ep_num, fuente: str, idioma: str) -> str:
         language = 'Español Latino 🇲🇽'
     else:
         language = 'Sub Español 🇯🇵'
-    title = html.escape(_shorten_title(titulo))
-    hashtag = html.escape(_episode_hashtag(titulo))
+    clean_title = _strip_episode_number(titulo, ep_num)
+    title = html.escape(_shorten_title(clean_title))
+    hashtag = html.escape(_episode_hashtag(clean_title))
     return (
         f'<b>{title} Capítulo {zero_pad(ep_num)} {language}</b>'
         f'\n\n#{hashtag}'
