@@ -328,7 +328,7 @@ def _build_episode_card(
     fuente: str,
     idioma: str,
     ep_url: str,
-    registered_at: str,
+    server_label: str,
     quality: str,
     phase: str,
     current: int = 0,
@@ -357,7 +357,7 @@ def _build_episode_card(
         f'  › <b>Fuente:</b> {source_name}',
         f'  › <b>Audio:</b> {flag} {audio}',
         f'  › <b>Calidad:</b> {html.escape(quality)}',
-        f'  › <b>Registro:</b> {registered_at}',
+        f'  › <b>Servidor:</b> {html.escape(server_label)}',
         '',
         '<b>◦ Enlace</b>',
         f'  › <a href="{safe_url}">{html.escape(str(ep_url))}</a>',
@@ -742,7 +742,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     tmp_dir.mkdir(parents=True, exist_ok=True)
     card_message = None
     started_at = time.monotonic()
-    registered_at = time.strftime('%I:%M %p')
+    server_label = 'Buscando...'
     quality = 'Detectando...'
     last_card_edit = [0.0]
 
@@ -763,7 +763,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
 
     try:
         caption = _build_episode_card(
-            titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'prepare'
+            titulo, ep_num, fuente, idioma, ep_url, server_label, quality, 'prepare'
         )
         if img_url:
             try:
@@ -785,7 +785,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             remaining = max(0, total - current) if total else 0
             eta = remaining / speed if total and speed and speed > 0 else None
             return _build_episode_card(
-                titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'download',
+                titulo, ep_num, fuente, idioma, ep_url, server_label, quality, 'download',
                 current=int(current or 0), total=int(total or 0), speed=speed, eta=eta,
             )
 
@@ -798,7 +798,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             raise RuntimeError('No se encontraron servidores')
 
         await update_card(_build_episode_card(
-            titulo, ep_num, fuente, idioma, ep_url, registered_at, quality, 'download'
+            titulo, ep_num, fuente, idioma, ep_url, server_label, quality, 'download'
         ), force=True)
         await asyncio.sleep(15)
         orden = ordenar_servidores(srvs, fuente)[:5]
@@ -810,6 +810,15 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             procesables = ('mediafire', 'mega', 'gofile') if fuente == 'latanime' else ('yourupload', 'mega')
             if srv['nombre'] not in procesables:
                 continue
+            server_label = {
+                'yourupload': 'YourUpload',
+                'mega': 'MEGA',
+                'mediafire': 'MediaFire',
+                'gofile': 'GoFile',
+            }.get(srv['nombre'], nombre_servidor)
+            await update_card(_build_episode_card(
+                titulo, ep_num, fuente, idioma, ep_url, server_label, quality, 'download'
+            ), force=True)
             try:
                 logger.info(f"[tioanime-notify] Conectando con [ {nombre_servidor} ]...")
                 if srv['nombre'] == 'mega':
@@ -848,7 +857,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                         eta = ((total - current) / speed
                                if total and speed and speed > 0 else None)
                         text = _build_episode_card(
-                            titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                            titulo, ep_num, fuente, idioma, ep_url, server_label,
                             quality, 'download', current=current, total=total,
                             speed=speed, eta=eta,
                         )
@@ -911,13 +920,13 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 eta = ((total - current) / speed
                        if total and speed and speed > 0 else None)
                 await update_card(_build_episode_card(
-                    titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                    titulo, ep_num, fuente, idioma, ep_url, server_label,
                     quality, 'upload', current=current, total=total,
                     speed=speed, eta=eta,
                 ))
 
             await update_card(_build_episode_card(
-                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                titulo, ep_num, fuente, idioma, ep_url, server_label,
                 quality, 'upload', current=0, total=size_bytes,
             ), force=True)
             final_caption = _build_video_caption(titulo, ep_num, fuente, idioma)
@@ -947,13 +956,13 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
                 eta = ((total - current) / speed
                        if total and speed and speed > 0 else None)
                 await update_card(_build_episode_card(
-                    titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                    titulo, ep_num, fuente, idioma, ep_url, server_label,
                     quality, 'upload', current=current, total=total,
                     speed=speed, eta=eta,
                 ))
 
             await update_card(_build_episode_card(
-                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                titulo, ep_num, fuente, idioma, ep_url, server_label,
                 quality, 'upload', current=0, total=size_bytes,
             ), force=True)
             final_caption = _build_video_caption(titulo, ep_num, fuente, idioma)
@@ -964,7 +973,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
             )
 
         await update_card(_build_episode_card(
-            titulo, ep_num, fuente, idioma, ep_url, registered_at,
+            titulo, ep_num, fuente, idioma, ep_url, server_label,
             quality, 'complete', current=size_bytes,
             elapsed=time.monotonic() - started_at,
         ), force=True)
@@ -973,7 +982,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     except Exception as error:
         try:
             await update_card(_build_episode_card(
-                titulo, ep_num, fuente, idioma, ep_url, registered_at,
+                titulo, ep_num, fuente, idioma, ep_url, server_label,
                 quality, 'error', error=error,
             ), force=True)
         except Exception:
