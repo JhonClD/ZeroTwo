@@ -709,22 +709,35 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     started_at = time.monotonic()
     server_label = 'Buscando...'
     quality = 'Detectando...'
+    # Telegram puede responder con ``RetryAfter`` al editar demasiado rápido.
+    # Dejamos margen sobre el límite observado de 5–6 segundos y serializamos
+    # las callbacks porque algunos descargadores reportan progreso en paralelo.
+    CARD_EDIT_INTERVAL = 6.0
     last_card_edit = [0.0]
+    last_card_text = [None]
+    card_edit_lock = asyncio.Lock()
 
     async def update_card(text: str, force: bool = False) -> None:
         if card_message is None:
             return
-        now = time.monotonic()
-        if not force and now - last_card_edit[0] < 2.5:
+        if text == last_card_text[0]:
             return
-        try:
-            if getattr(card_message, 'photo', None):
-                await card_message.edit_caption(text, parse_mode=enums.ParseMode.HTML)
-            else:
-                await card_message.edit_text(text, parse_mode=enums.ParseMode.HTML)
-            last_card_edit[0] = now
-        except Exception as error:
-            logger.debug('[tioanime-notify] No se pudo actualizar la ficha de progreso: %s', error)
+        async with card_edit_lock:
+            now = time.monotonic()
+            elapsed = now - last_card_edit[0]
+            if not force and elapsed < CARD_EDIT_INTERVAL:
+                return
+            if force and elapsed < CARD_EDIT_INTERVAL:
+                await asyncio.sleep(CARD_EDIT_INTERVAL - elapsed)
+            try:
+                if getattr(card_message, 'photo', None):
+                    await card_message.edit_caption(text, parse_mode=enums.ParseMode.HTML)
+                else:
+                    await card_message.edit_text(text, parse_mode=enums.ParseMode.HTML)
+                last_card_edit[0] = time.monotonic()
+                last_card_text[0] = text
+            except Exception as error:
+                logger.debug('[tioanime-notify] No se pudo actualizar la ficha de progreso: %s', error)
 
     try:
         caption = _build_episode_card(
