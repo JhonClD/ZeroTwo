@@ -712,7 +712,7 @@ async def enviar_episodio(chat_id: int, ep: dict, client) -> None:
     # Telegram puede responder con ``RetryAfter`` al editar demasiado rápido.
     # Dejamos margen sobre el límite observado de 5–6 segundos y serializamos
     # las callbacks porque algunos descargadores reportan progreso en paralelo.
-    CARD_EDIT_INTERVAL = 6.0
+    CARD_EDIT_INTERVAL = 15.0
     last_card_edit = [0.0]
     last_card_text = [None]
     card_edit_lock = asyncio.Lock()
